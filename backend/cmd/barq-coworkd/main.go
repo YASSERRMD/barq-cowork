@@ -16,7 +16,10 @@ import (
 	"github.com/barq-cowork/barq-cowork/internal/memory"
 	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
+	anthropicprovider "github.com/barq-cowork/barq-cowork/internal/provider/anthropic"
+	geminiprovider "github.com/barq-cowork/barq-cowork/internal/provider/gemini"
 	zaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/openai"
+	ollamaprovider "github.com/barq-cowork/barq-cowork/internal/provider/ollama"
 	oaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/zai"
 	"github.com/barq-cowork/barq-cowork/internal/server"
 	"github.com/barq-cowork/barq-cowork/internal/service"
@@ -81,8 +84,11 @@ func main() {
 
 	// ── Provider registry ──────────────────────────────────────────────
 	registry := provider.NewRegistry()
-	registry.Register(oaiprovider.New(120)) // zai
-	registry.Register(zaiprovider.New(120)) // openai
+	registry.Register(oaiprovider.New(120))        // zai
+	registry.Register(zaiprovider.New(120))        // openai
+	registry.Register(anthropicprovider.New(120))  // anthropic
+	registry.Register(geminiprovider.New(120))     // gemini
+	registry.Register(ollamaprovider.New(300))     // ollama (local, longer timeout)
 	logger.Info("providers registered", "providers", registry.List())
 
 	// ── Tool registry ──────────────────────────────────────────────────
