@@ -54,7 +54,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  const body = await res.json();
+  // 202 Accepted and 204 No Content return empty bodies — skip JSON parse
+  const isEmpty = res.status === 202 || res.status === 204;
+  const body: { data?: T; error?: string } = isEmpty ? {} : await res.json();
   if (!res.ok) {
     throw new Error(body.error ?? `HTTP ${res.status}`);
   }
