@@ -12,12 +12,11 @@ import (
 // ProviderProfileStore implements persistence for domain.ProviderProfile.
 type ProviderProfileStore struct{ db *sql.DB }
 
-// NewProviderProfileStore returns a new ProviderProfileStore.
 func NewProviderProfileStore(db *sql.DB) *ProviderProfileStore {
 	return &ProviderProfileStore{db: db}
 }
 
-const providerProfileCols = `id, name, provider_name, base_url, api_key_env,
+const providerProfileCols = `id, name, provider_name, base_url, api_key_env, api_key,
                               model, timeout_sec, is_default, created_at, updated_at`
 
 func scanProviderProfile(row interface{ Scan(...any) error }) (*domain.ProviderProfile, error) {
@@ -25,7 +24,7 @@ func scanProviderProfile(row interface{ Scan(...any) error }) (*domain.ProviderP
 	var createdAt, updatedAt string
 	var isDefault int
 	if err := row.Scan(
-		&p.ID, &p.Name, &p.ProviderName, &p.BaseURL, &p.APIKeyEnv,
+		&p.ID, &p.Name, &p.ProviderName, &p.BaseURL, &p.APIKeyEnv, &p.APIKey,
 		&p.Model, &p.TimeoutSec, &isDefault, &createdAt, &updatedAt,
 	); err != nil {
 		return nil, err
@@ -36,7 +35,6 @@ func scanProviderProfile(row interface{ Scan(...any) error }) (*domain.ProviderP
 	return &p, nil
 }
 
-// Create inserts a new provider profile.
 func (s *ProviderProfileStore) Create(ctx context.Context, p *domain.ProviderProfile) error {
 	isDefault := 0
 	if p.IsDefault {
@@ -44,9 +42,9 @@ func (s *ProviderProfileStore) Create(ctx context.Context, p *domain.ProviderPro
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO provider_profiles
-		 (id, name, provider_name, base_url, api_key_env, model, timeout_sec, is_default, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.Name, p.ProviderName, p.BaseURL, p.APIKeyEnv,
+		 (id, name, provider_name, base_url, api_key_env, api_key, model, timeout_sec, is_default, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.ProviderName, p.BaseURL, p.APIKeyEnv, p.APIKey,
 		p.Model, p.TimeoutSec, isDefault,
 		formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
 	)
@@ -56,7 +54,6 @@ func (s *ProviderProfileStore) Create(ctx context.Context, p *domain.ProviderPro
 	return nil
 }
 
-// GetByID retrieves a profile by ID.
 func (s *ProviderProfileStore) GetByID(ctx context.Context, id string) (*domain.ProviderProfile, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+providerProfileCols+` FROM provider_profiles WHERE id=?`, id)
@@ -67,7 +64,6 @@ func (s *ProviderProfileStore) GetByID(ctx context.Context, id string) (*domain.
 	return p, err
 }
 
-// List returns all provider profiles ordered by name.
 func (s *ProviderProfileStore) List(ctx context.Context) ([]*domain.ProviderProfile, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+providerProfileCols+` FROM provider_profiles ORDER BY name`)
@@ -87,7 +83,6 @@ func (s *ProviderProfileStore) List(ctx context.Context) ([]*domain.ProviderProf
 	return out, rows.Err()
 }
 
-// Update replaces all mutable fields of a provider profile.
 func (s *ProviderProfileStore) Update(ctx context.Context, p *domain.ProviderProfile) error {
 	isDefault := 0
 	if p.IsDefault {
@@ -95,10 +90,10 @@ func (s *ProviderProfileStore) Update(ctx context.Context, p *domain.ProviderPro
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE provider_profiles
-		 SET name=?, provider_name=?, base_url=?, api_key_env=?, model=?,
+		 SET name=?, provider_name=?, base_url=?, api_key_env=?, api_key=?, model=?,
 		     timeout_sec=?, is_default=?, updated_at=?
 		 WHERE id=?`,
-		p.Name, p.ProviderName, p.BaseURL, p.APIKeyEnv, p.Model,
+		p.Name, p.ProviderName, p.BaseURL, p.APIKeyEnv, p.APIKey, p.Model,
 		p.TimeoutSec, isDefault, formatTime(p.UpdatedAt), p.ID,
 	)
 	if err != nil {
@@ -111,7 +106,6 @@ func (s *ProviderProfileStore) Update(ctx context.Context, p *domain.ProviderPro
 	return nil
 }
 
-// Delete removes a profile by ID.
 func (s *ProviderProfileStore) Delete(ctx context.Context, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM provider_profiles WHERE id=?`, id)
 	if err != nil {
