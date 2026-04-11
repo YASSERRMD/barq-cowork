@@ -132,6 +132,22 @@ func (s *TaskStore) UpdateStatus(ctx context.Context, id string, status domain.T
 	}
 }
 
+// RecoverStuck resets all tasks currently in 'planning' or 'running' state
+// back to 'failed'. This is called on startup to handle tasks that were
+// interrupted by a previous crash or forced shutdown.
+func (s *TaskStore) RecoverStuck(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE tasks SET status='failed', updated_at=?
+		 WHERE status IN ('planning','running')`,
+		formatTime(time.Now().UTC()),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("task recover stuck: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 func (s *TaskStore) Delete(ctx context.Context, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id=?`, id)
 	if err != nil {

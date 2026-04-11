@@ -120,9 +120,9 @@ func (p *Planner) Plan(
 		},
 	}
 
-	ch, err := prov.Chat(ctx, cfg, req)
+	ch, err := provider.ChatWithRetry(ctx, prov, cfg, req, provider.DefaultRetryConfig(), p.logger)
 	if err != nil {
-		p.logger.Warn("planner LLM call failed, using fallback", "error", err)
+		p.logger.Warn("planner LLM call failed after retries, using fallback", "error", err)
 		return p.fallbackPlan(task, err.Error()), nil
 	}
 

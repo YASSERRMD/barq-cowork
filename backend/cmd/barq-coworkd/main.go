@@ -57,6 +57,28 @@ func main() {
 	defer db.Close()
 	logger.Info("database ready", "path", dbPath)
 
+	// ── Startup health checks ──────────────────────────────────────────
+	// Ensure data directory is writable.
+	dataDir := cfg.App.DataDir
+	if strings.HasPrefix(dataDir, "~/") {
+		home, _ := os.UserHomeDir()
+		dataDir = filepath.Join(home, dataDir[2:])
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		logger.Error("data directory not writable", "path", dataDir, "error", err)
+		os.Exit(1)
+	}
+
+	// ── Task recovery ─────────────────────────────────────────────────
+	// Reset any tasks that were stuck in planning/running from a previous
+	// crash or forced shutdown so they don't appear perpetually in-progress.
+	taskRepo := sqlite.NewTaskStore(db)
+	if recovered, err := taskRepo.RecoverStuck(context.Background()); err != nil {
+		logger.Warn("task recovery failed", "error", err)
+	} else if recovered > 0 {
+		logger.Info("task recovery: reset stuck tasks", "count", recovered)
+	}
+
 	// ── Provider registry ──────────────────────────────────────────────
 	registry := provider.NewRegistry()
 	registry.Register(oaiprovider.New(120)) // zai
@@ -70,7 +92,7 @@ func main() {
 	// ── Repositories ──────────────────────────────────────────────────
 	workspaceRepo       := sqlite.NewWorkspaceStore(db)
 	projectRepo         := sqlite.NewProjectStore(db)
-	taskRepo            := sqlite.NewTaskStore(db)
+	// taskRepo already created above for startup recovery.
 	providerProfileRepo := sqlite.NewProviderProfileStore(db)
 	approvalRepo        := sqlite.NewApprovalStore(db)
 	eventRepo           := sqlite.NewEventStore(db)
@@ -127,6 +149,11 @@ func main() {
 					ExtraHeaders: pc.ExtraHeaders,
 				}
 			},
+		},
+		Diagnostics: server.DiagnosticDeps{
+			Events:    eventRepo,
+			Artifacts: artifactStore,
+			Version:   "0.1.0",
 		},
 	}
 
