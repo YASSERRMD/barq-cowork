@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Play, FileText, Activity, Users, ChevronDown, ChevronRight, Clock, CheckCircle, XCircle, Loader, Circle } from "lucide-react";
-import clsx from "clsx";
 import {
   tasksApi,
   executionApi,

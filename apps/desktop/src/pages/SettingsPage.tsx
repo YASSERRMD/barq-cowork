@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import {
   providersApi,
-  type AvailableProvider,
   type ProviderProfile,
   type TestResult,
 } from "../lib/api";

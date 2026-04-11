@@ -6,10 +6,6 @@ import {
   projectsApi,
   contextFilesApi,
   templatesApi,
-  schedulesApi,
-  type ContextFile,
-  type TaskTemplate,
-  type Schedule,
 } from "../lib/api";
 import { TopBar } from "../components/TopBar";
 import { Breadcrumb } from "../components/Breadcrumb";

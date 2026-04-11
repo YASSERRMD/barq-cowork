@@ -169,7 +169,6 @@ export function ConnectorsPage() {
             return (
               <ConnectorGroup
                 key={providerName}
-                providerName={providerName}
                 meta={meta}
                 profiles={group}
                 testResults={testResults}
@@ -196,7 +195,6 @@ export function ConnectorsPage() {
 // ─────────────────────────────────────────────
 
 function ConnectorGroup({
-  providerName,
   meta,
   profiles,
   testResults,
@@ -204,7 +202,6 @@ function ConnectorGroup({
   testing,
   onDelete,
 }: {
-  providerName: string;
   meta: ReturnType<typeof getMeta>;
   profiles: ProviderProfile[];
   testResults: Record<string, TestResult>;
@@ -228,7 +225,6 @@ function ConnectorGroup({
         <ConnectorCard
           key={p.id}
           profile={p}
-          meta={meta}
           testResult={testResults[p.id]}
           onTest={() => onTest(p.id)}
           testing={testing(p.id)}
@@ -245,14 +241,12 @@ function ConnectorGroup({
 
 function ConnectorCard({
   profile: p,
-  meta,
   testResult,
   onTest,
   testing,
   onDelete,
 }: {
   profile: ProviderProfile;
-  meta: ReturnType<typeof getMeta>;
   testResult?: TestResult;
   onTest: () => void;
   testing: boolean;

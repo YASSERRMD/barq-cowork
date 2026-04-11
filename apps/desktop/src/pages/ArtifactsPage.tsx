@@ -90,7 +90,7 @@ export function ArtifactsPage() {
               )}
               onClick={() => setFilterType(t)}
             >
-              {TYPE_ICON[t]} {t}
+              {t}
             </button>
           ))}
         </div>
@@ -140,8 +140,8 @@ function ArtifactRow({ artifact: a }: { artifact: Artifact }) {
   const Icon = TYPE_ICON[a.type] ?? Package;
   return (
     <tr className="hover:bg-gray-900/40 transition-colors">
-      <td className="px-4 py-3 text-center">
-        <Icon size={15} strokeWidth={1.75} className="mx-auto text-text-muted" />
+      <td className="px-4 py-3 text-center text-text-muted">
+        <Icon size={15} strokeWidth={1.75} style={{ display: "inline-block" }} />
       </td>
       <td className="px-4 py-3">
         <div className="min-w-0">

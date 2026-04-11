@@ -15,7 +15,6 @@ import {
   Command,
 } from "lucide-react";
 import { projectsApi, type Project } from "../lib/api";
-import clsx from "clsx";
 
 // ─────────────────────────────────────────────
 // Types
