@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { SubAgentsPanel } from "../components/SubAgentsPanel";
 import {
   tasksApi,
   executionApi,
@@ -163,6 +164,11 @@ export function TaskRunPage() {
 
       {/* Plan / Step timeline */}
       {plan && <PlanTimeline plan={plan} />}
+
+      {/* Sub-agents panel — always shown when task is running or has agents */}
+      {task.status !== "pending" && (
+        <SubAgentsPanel taskId={task.id} workspaceRoot="" />
+      )}
 
       {/* Artifacts */}
       {artifacts.length > 0 && <ArtifactList artifacts={artifacts} />}

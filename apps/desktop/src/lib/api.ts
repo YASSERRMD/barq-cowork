@@ -307,6 +307,47 @@ export const executionApi = {
   getArtifact: (id: string): Promise<Artifact> => request(`/artifacts/${id}`),
 };
 
+// ──────────────────── Sub-agents ────────────────────
+
+export type AgentRole =
+  | "researcher" | "writer" | "coder" | "reviewer" | "analyst" | "custom";
+
+export interface SubAgent {
+  id: string;
+  parent_task_id: string;
+  role: AgentRole;
+  title: string;
+  instructions: string;
+  status: TaskStatus;
+  plan_id?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export const agentsApi = {
+  list: (taskId: string): Promise<SubAgent[]> =>
+    request(`/tasks/${taskId}/agents`),
+
+  spawn: (
+    taskId: string,
+    data: {
+      agents: { role: AgentRole; title: string; instructions: string }[];
+      workspace_root?: string;
+      max_concurrency?: number;
+      timeout_minutes?: number;
+    }
+  ): Promise<SubAgent[]> =>
+    request(`/tasks/${taskId}/agents`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  cancel: (taskId: string, agentId: string): Promise<void> =>
+    request(`/tasks/${taskId}/agents/${agentId}`, { method: "DELETE" }),
+};
+
 // ──────────────────── Memory — Context Files ────────────────────
 
 export interface ContextFile {
