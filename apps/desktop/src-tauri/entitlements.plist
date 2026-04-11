@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Allow the app to spawn the barq-coworkd sidecar process -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <false/>
+  <!-- Disable library validation to allow loading the Go sidecar binary -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Allow outbound network connections (for LLM API calls) -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <!-- Allow incoming connections (localhost API server) -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+</dict>
+</plist>

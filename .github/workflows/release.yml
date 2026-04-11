@@ -119,6 +119,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Apple code signing + notarization (set these secrets to enable)
+          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                   ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath:  apps/desktop
           tagName:      ${{ github.ref_name }}
@@ -135,10 +142,23 @@ jobs:
             | macOS (Apple Silicon) | `Barq_Cowork_*_aarch64.dmg` |
             | Windows | `Barq_Cowork_*_x64-setup.exe` |
 
+            > **macOS note:** If the app shows "damaged" or won't open, download **`mac-setup.command`** from the assets below and double-click it once after installing. This is a one-time step for unsigned builds.
+
             See [docs/building.md](https://github.com/${{ github.repository }}/blob/main/docs/building.md) to build from source.
           releaseDraft: false
           prerelease:   ${{ contains(github.ref_name, '-') }}
           args:         --target ${{ matrix.target }}
+
+      # Upload macOS setup helper as a release asset (one-time quarantine fix for unsigned builds)
+      - name: Upload macOS setup helper
+        if: runner.os == 'macOS'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: scripts/mac-setup.command
+          asset_name: mac-setup.command
+          tag: ${{ github.ref_name }}
+          overwrite: true
 
   # ─────────────────────────────────────────────────────────────────────────
   # Backend unit tests

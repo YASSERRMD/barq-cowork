@@ -36,7 +36,7 @@ export type TaskStatus =
 
 export interface Task {
   id: string;
-  project_id: string;
+  project_id: string; // may be empty for direct (project-less) tasks
   title: string;
   description: string;
   status: TaskStatus;
@@ -449,13 +449,18 @@ export const eventsApi = {
 // ──────────────────── Tasks ────────────────────
 
 export const tasksApi = {
+  /** List all tasks across all projects, newest first. */
+  listAll: (limit = 100): Promise<Task[]> =>
+    request(`/tasks?limit=${limit}`),
+
   listByProject: (projectID: string): Promise<Task[]> =>
     request(`/projects/${projectID}/tasks`),
 
   get: (id: string): Promise<Task> => request(`/tasks/${id}`),
 
+  /** Create a task — project_id is optional for direct (project-less) tasks. */
   create: (data: {
-    project_id: string;
+    project_id?: string;
     title: string;
     description?: string;
     provider_id?: string;

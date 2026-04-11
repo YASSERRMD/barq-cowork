@@ -2,6 +2,7 @@ package v1
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/service"
@@ -20,12 +21,36 @@ func NewTaskHandler(svc *service.TaskService) *TaskHandler {
 
 // Register mounts the task routes on r.
 func (h *TaskHandler) Register(r chi.Router) {
+	r.Get("/tasks", h.listAll)
 	r.Get("/projects/{projectID}/tasks", h.list)
 	r.Post("/tasks", h.create)
 	r.Get("/tasks/{id}", h.get)
 	r.Put("/tasks/{id}", h.update)
 	r.Patch("/tasks/{id}/status", h.updateStatus)
 	r.Delete("/tasks/{id}", h.delete)
+}
+
+// listAll GET /api/v1/tasks
+func (h *TaskHandler) listAll(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	tasks, err := h.svc.ListAll(r.Context(), limit)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	out := make([]*taskDTO, len(tasks))
+	for i, t := range tasks {
+		out[i] = toTaskDTO(t)
+	}
+	if out == nil {
+		out = []*taskDTO{}
+	}
+	jsonOK(w, out)
 }
 
 // list GET /api/v1/projects/{projectID}/tasks

@@ -102,8 +102,12 @@ Grab the latest installer from [Releases](https://github.com/YASSERRMD/barq-cowo
 
 ### First run
 
+**macOS only — one-time setup:** After dragging `Barq Cowork.app` to `/Applications`, download **`mac-setup.command`** from the same release page and double-click it. This removes the macOS quarantine flag placed on downloaded apps. You only need to do this once; delete the file afterwards.
+
+> This step will disappear in a future release once the app is notarized with an Apple Developer certificate.
+
 1. Launch the app — the backend starts automatically in the background.
-2. Open **Settings** and add your LLM provider. Enter the API key directly — no environment variables needed.
+2. Open **Settings** and add your LLM provider. Enter the API key and endpoint directly — no environment variables needed.
 3. Create a **Project** and write a name, description, and optional system instructions.
 4. Create a **Task** and click **Run** — watch the plan unfold live in the timeline.
 5. Browse produced **Artifacts** or check the **Logs** for the full event trail.
