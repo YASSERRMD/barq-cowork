@@ -20,11 +20,29 @@ func NewProjectHandler(svc *service.ProjectService) *ProjectHandler {
 // Register mounts the project routes on r.
 // Projects nested under workspaces for listing, flat for individual access.
 func (h *ProjectHandler) Register(r chi.Router) {
+	r.Get("/projects", h.listAll)
 	r.Get("/workspaces/{workspaceID}/projects", h.list)
 	r.Post("/projects", h.create)
 	r.Get("/projects/{id}", h.get)
 	r.Put("/projects/{id}", h.update)
 	r.Delete("/projects/{id}", h.delete)
+}
+
+// listAll GET /api/v1/projects
+func (h *ProjectHandler) listAll(w http.ResponseWriter, r *http.Request) {
+	projects, err := h.svc.ListAll(r.Context())
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	out := make([]*projectDTO, len(projects))
+	for i, p := range projects {
+		out[i] = toProjectDTO(p)
+	}
+	if out == nil {
+		out = []*projectDTO{}
+	}
+	jsonOK(w, out)
 }
 
 // list GET /api/v1/workspaces/{workspaceID}/projects

@@ -55,6 +55,11 @@ func (s *ProjectService) ListByWorkspace(ctx context.Context, workspaceID string
 	return s.projects.ListByWorkspace(ctx, workspaceID)
 }
 
+// ListAll returns all projects across all workspaces.
+func (s *ProjectService) ListAll(ctx context.Context) ([]*domain.Project, error) {
+	return s.projects.ListAll(ctx)
+}
+
 // Update replaces the mutable fields of a project.
 func (s *ProjectService) Update(ctx context.Context, id, name, description, instructions string) (*domain.Project, error) {
 	p, err := s.projects.GetByID(ctx, id)

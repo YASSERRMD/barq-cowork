@@ -205,7 +205,11 @@ func (o *Orchestrator) resolveProviderConfig(ctx context.Context, task *domain.T
 }
 
 func profileToConfig(p *domain.ProviderProfile) provider.ProviderConfig {
-	apiKey := os.Getenv(p.APIKeyEnv)
+	// Direct key takes precedence; fall back to env var for legacy profiles.
+	apiKey := p.APIKey
+	if apiKey == "" && p.APIKeyEnv != "" {
+		apiKey = os.Getenv(p.APIKeyEnv)
+	}
 	return provider.ProviderConfig{
 		ProviderName: p.ProviderName,
 		BaseURL:      p.BaseURL,

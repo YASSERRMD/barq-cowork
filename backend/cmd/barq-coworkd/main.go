@@ -94,6 +94,7 @@ func main() {
 	projectRepo         := sqlite.NewProjectStore(db)
 	// taskRepo already created above for startup recovery.
 	providerProfileRepo := sqlite.NewProviderProfileStore(db)
+	scheduleRepo        := sqlite.NewScheduleStore(db)
 	approvalRepo        := sqlite.NewApprovalStore(db)
 	eventRepo           := sqlite.NewEventStore(db)
 	planStore           := sqlite.NewPlanStore(db)
@@ -121,6 +122,7 @@ func main() {
 		Projects:   service.NewProjectService(projectRepo, workspaceRepo),
 		Tasks:      service.NewTaskService(taskRepo, projectRepo),
 		Providers:  service.NewProviderService(providerProfileRepo, registry, cfg),
+		Schedules:  service.NewScheduleService(scheduleRepo, projectRepo),
 		Tools:      service.NewToolService(toolRegistry, approvalRepo, eventRepo),
 		Execution: server.ExecutionDeps{
 			Runner:    orch,

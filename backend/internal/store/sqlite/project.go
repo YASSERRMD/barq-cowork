@@ -73,6 +73,26 @@ func (s *ProjectStore) ListByWorkspace(ctx context.Context, workspaceID string) 
 	return out, rows.Err()
 }
 
+func (s *ProjectStore) ListAll(ctx context.Context) ([]*domain.Project, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+projectCols+` FROM projects ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("project list all: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*domain.Project
+	for rows.Next() {
+		p, err := scanProject(rows)
+		if err != nil {
+			return nil, fmt.Errorf("project scan: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 func (s *ProjectStore) Update(ctx context.Context, p *domain.Project) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE projects SET name=?, description=?, instructions=?, updated_at=? WHERE id=?`,
