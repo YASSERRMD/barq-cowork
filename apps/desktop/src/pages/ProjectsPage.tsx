@@ -1,304 +1,230 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FolderOpen, Plus, ChevronRight, X } from "lucide-react";
 import { projectsApi, workspacesApi, type Project } from "../lib/api";
+import { TopBar } from "../components/TopBar";
+import { EmptyState, SkeletonCard } from "../components/ui";
 
 export function ProjectsPage() {
-  const { workspaceId } = useParams<{ workspaceId: string }>();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ name: "", description: "", instructions: "" });
 
-  const { data: workspace } = useQuery({
-    queryKey: ["workspaces", workspaceId],
-    queryFn: () => workspacesApi.get(workspaceId!),
-    enabled: !!workspaceId,
+  // Load all projects directly
+  const { data: projects = [], isLoading, error } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
   });
 
-  const { data: projects = [], isLoading, error } = useQuery({
-    queryKey: ["projects", workspaceId],
-    queryFn: () => projectsApi.listByWorkspace(workspaceId!),
-    enabled: !!workspaceId,
+  // Load workspaces to get default workspace id for creating projects
+  const { data: workspaces = [] } = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: workspacesApi.list,
   });
 
   const createMutation = useMutation({
     mutationFn: projectsApi.create,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["projects", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
       setShowForm(false);
+      setFormData({ name: "", description: "", instructions: "" });
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: projectsApi.delete,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", workspaceId] }),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Omit<Parameters<typeof projectsApi.update>[1], never> }) =>
-      projectsApi.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects", workspaceId] }),
-  });
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) return;
+    const wsId = workspaces[0]?.id;
+    if (!wsId) {
+      // Auto-create a default workspace if none exists
+      workspacesApi.create({ name: "Default", description: "Default workspace" }).then((ws) => {
+        createMutation.mutate({
+          workspace_id: ws.id,
+          name: formData.name,
+          description: formData.description,
+          instructions: formData.instructions,
+        });
+      });
+      return;
+    }
+    createMutation.mutate({
+      workspace_id: wsId,
+      name: formData.name,
+      description: formData.description,
+      instructions: formData.instructions,
+    });
+  };
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
-      {/* Breadcrumb */}
-      <nav className="text-xs text-gray-500 flex items-center gap-1">
-        <Link to="/" className="hover:text-gray-300">Workspaces</Link>
-        <span>/</span>
-        <span className="text-gray-300">{workspace?.name ?? workspaceId}</span>
-      </nav>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <TopBar
+        title="Projects"
+        subtitle={projects.length > 0 ? `${projects.length} project${projects.length === 1 ? "" : "s"}` : undefined}
+        actions={
+          <button className="btn-primary btn-sm" onClick={() => setShowForm((v) => !v)}>
+            <Plus size={13} />
+            New Project
+          </button>
+        }
+      />
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-white">Projects</h1>
-        <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "+ New Project"}
-        </button>
-      </div>
-
+      {/* Inline create form */}
       {showForm && (
-        <CreateProjectForm
-          workspaceId={workspaceId!}
-          onSubmit={(data) => createMutation.mutate(data)}
-          loading={createMutation.isPending}
-          error={createMutation.error?.message}
-        />
+        <div
+          style={{
+            background: "#16161f",
+            borderBottom: "1px solid #2a2a3a",
+            padding: "16px 20px",
+          }}
+        >
+          <form onSubmit={handleCreate}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#c4c4d0" }}>New Project</span>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setShowForm(false)}>
+                <X size={13} />
+              </button>
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <input
+                className="input"
+                placeholder="Project name *"
+                value={formData.name}
+                onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                autoFocus
+                required
+              />
+              <input
+                className="input"
+                placeholder="Short description"
+                value={formData.description}
+                onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
+              />
+              <textarea
+                className="input"
+                placeholder="System instructions (optional) — prepended to every task in this project"
+                value={formData.instructions}
+                onChange={(e) => setFormData((p) => ({ ...p, instructions: e.target.value }))}
+                style={{ minHeight: 60 }}
+              />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setShowForm(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary btn-sm"
+                  disabled={createMutation.isPending || !formData.name.trim()}
+                >
+                  {createMutation.isPending ? "Creating..." : "Create Project"}
+                </button>
+              </div>
+            </div>
+            {createMutation.isError && (
+              <p style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>
+                {(createMutation.error as Error).message}
+              </p>
+            )}
+          </form>
+        </div>
       )}
 
-      {isLoading && <p className="text-gray-400 text-sm">Loading…</p>}
-      {error && <p className="text-red-400 text-sm">Failed to load projects.</p>}
-
-      {!isLoading && !error && projects.length === 0 && (
-        <p className="text-gray-400 text-sm">No projects yet.</p>
-      )}
-
-      <ul className="space-y-2">
-        {projects.map((p) => (
-          <ProjectCard
-            key={p.id}
-            project={p}
-            onDelete={() => deleteMutation.mutate(p.id)}
-            onUpdate={(data) => updateMutation.mutate({ id: p.id, data })}
-            updateLoading={
-              updateMutation.isPending &&
-              (updateMutation.variables as { id: string } | undefined)?.id === p.id
+      {/* Project list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        {isLoading ? (
+          <div style={{ padding: "16px 20px", display: "grid", gap: 8 }}>
+            {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : error ? (
+          <div style={{ padding: 20 }}>
+            <p style={{ color: "#f87171", fontSize: 13 }}>
+              Failed to load projects. Is the backend running?
+            </p>
+          </div>
+        ) : projects.length === 0 ? (
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects yet"
+            description="Create a project to start organizing your AI tasks."
+            action={
+              <button className="btn-primary" onClick={() => setShowForm(true)}>
+                <Plus size={14} />
+                Create Project
+              </button>
             }
           />
-        ))}
-      </ul>
+        ) : (
+          <div>
+            {projects.map((project) => (
+              <ProjectRow
+                key={project.id}
+                project={project}
+                onClick={() => navigate(`/projects/${project.id}/tasks`)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// ProjectCard with inline edit
-// ─────────────────────────────────────────────
-
-type UpdateData = { name: string; description?: string; instructions?: string };
-
-function ProjectCard({
-  project: p,
-  onDelete,
-  onUpdate,
-  updateLoading,
+function ProjectRow({
+  project,
+  onClick,
 }: {
   project: Project;
-  onDelete: () => void;
-  onUpdate: (data: UpdateData) => void;
-  updateLoading: boolean;
+  onClick: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(p.name);
-  const [description, setDescription] = useState(p.description || "");
-  const [instructions, setInstructions] = useState(p.instructions || "");
-
-  const openEdit = () => {
-    // Reset to latest values when opening.
-    setName(p.name);
-    setDescription(p.description || "");
-    setInstructions(p.instructions || "");
-    setEditing(true);
-  };
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdate({ name, description, instructions });
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <li className="card p-4 space-y-3 border-barq-700/50">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-300">Edit Project</h3>
-          <button
-            className="btn-ghost text-xs text-gray-500"
-            onClick={() => setEditing(false)}
-          >
-            Cancel
-          </button>
-        </div>
-        <form className="space-y-2" onSubmit={handleSave}>
-          <input
-            className="input"
-            placeholder="Name *"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <input
-            className="input"
-            placeholder="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">
-              Project Instructions
-              <span className="text-gray-600 ml-1">
-                — prepended to every task prompt
-              </span>
-            </label>
-            <textarea
-              className="input resize-y"
-              rows={5}
-              placeholder="Describe the project context, conventions, and goals the agent should follow…"
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button type="submit" className="btn-primary text-sm" disabled={updateLoading}>
-              {updateLoading ? "Saving…" : "Save Changes"}
-            </button>
-            <button
-              type="button"
-              className="btn-ghost text-sm"
-              onClick={() => setEditing(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </li>
-    );
-  }
-
   return (
-    <li className="card p-4 space-y-2 hover:border-gray-700 transition-colors">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-0.5">
-          <Link
-            to={`/projects/${p.id}/tasks`}
-            className="text-white font-medium hover:text-barq-400 transition-colors block truncate"
-          >
-            {p.name}
-          </Link>
-          {p.description && (
-            <p className="text-gray-400 text-xs truncate">{p.description}</p>
-          )}
-          {p.instructions ? (
-            <p className="text-gray-500 text-xs mt-1 line-clamp-2 italic">
-              {p.instructions}
-            </p>
-          ) : (
-            <p className="text-gray-700 text-xs mt-1 italic">
-              No instructions — click Edit to add context for the agent.
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Link to={`/projects/${p.id}/tasks`} className="btn-ghost text-xs">
-            Tasks
-          </Link>
-          <Link to={`/projects/${p.id}/memory`} className="btn-ghost text-xs text-gray-400">
-            Memory
-          </Link>
-          <button className="btn-ghost text-xs text-barq-400 hover:text-barq-300" onClick={openEdit}>
-            Edit
-          </button>
-          <button
-            className="btn-ghost text-xs text-red-400 hover:text-red-300"
-            onClick={onDelete}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-gray-600">
-        <span>Created {new Date(p.created_at).toLocaleDateString()}</span>
-        <span>Updated {new Date(p.updated_at).toLocaleDateString()}</span>
-      </div>
-    </li>
-  );
-}
-
-// ─────────────────────────────────────────────
-// Create form
-// ─────────────────────────────────────────────
-
-function CreateProjectForm({
-  workspaceId,
-  onSubmit,
-  loading,
-  error,
-}: {
-  workspaceId: string;
-  onSubmit: (data: {
-    workspace_id: string;
-    name: string;
-    description: string;
-    instructions: string;
-  }) => void;
-  loading: boolean;
-  error?: string;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [instructions, setInstructions] = useState("");
-
-  return (
-    <form
-      className="card p-4 space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit({ workspace_id: workspaceId, name, description, instructions });
+    <div
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 20px",
+        cursor: "pointer",
+        transition: "background 120ms",
+        borderBottom: "1px solid rgba(42,42,58,0.5)",
       }}
+      onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.background = "#16161f")}
+      onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.background = "transparent")}
     >
-      <h2 className="text-sm font-semibold text-gray-300">New Project</h2>
-      <div className="space-y-2">
-        <input
-          className="input"
-          placeholder="Name *"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          className="input"
-          placeholder="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">
-            Project Instructions
-            <span className="text-gray-600 ml-1">— prepended to every task</span>
-          </label>
-          <textarea
-            className="input resize-y"
-            rows={3}
-            placeholder="Describe conventions, goals, or context the agent should keep in mind…"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
-        </div>
+      {/* Icon */}
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: "rgba(99,102,241,0.1)",
+          border: "1px solid rgba(99,102,241,0.2)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <FolderOpen size={15} color="#818cf8" strokeWidth={1.75} />
       </div>
-      {error && <p className="text-red-400 text-xs">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={loading}>
-        {loading ? "Creating…" : "Create Project"}
-      </button>
-    </form>
+
+      {/* Content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e2e8" }}>{project.name}</div>
+        {project.description && (
+          <div style={{ fontSize: 12, color: "#50505f", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {project.description}
+          </div>
+        )}
+      </div>
+
+      {/* Date */}
+      <div style={{ fontSize: 11, color: "#40404f", flexShrink: 0, whiteSpace: "nowrap" }}>
+        {new Date(project.created_at).toLocaleDateString()}
+      </div>
+
+      <ChevronRight size={14} color="#3a3a4e" />
+    </div>
   );
 }
