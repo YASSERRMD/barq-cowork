@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { workspacesApi, type Workspace } from "../lib/api";
-import clsx from "clsx";
 
 export function WorkspacesPage() {
   const qc = useQueryClient();

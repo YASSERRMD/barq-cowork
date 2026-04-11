@@ -301,7 +301,17 @@ export const executionApi = {
   listArtifactsByProject: (projectId: string): Promise<Artifact[]> =>
     request(`/projects/${projectId}/artifacts`),
 
+  listRecent: (limit = 100): Promise<Artifact[]> =>
+    request(`/artifacts?limit=${limit}`),
+
   getArtifact: (id: string): Promise<Artifact> => request(`/artifacts/${id}`),
+};
+
+// ──────────────────── Events (global) ────────────────────
+
+export const eventsApi = {
+  listRecent: (limit = 200): Promise<TaskEvent[]> =>
+    request(`/events?limit=${limit}`),
 };
 
 // ──────────────────── Tasks ────────────────────
