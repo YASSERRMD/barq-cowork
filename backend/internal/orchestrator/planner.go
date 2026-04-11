@@ -65,15 +65,22 @@ type LLMProviderGetter interface {
 	Get(name string) (provider.LLMProvider, bool)
 }
 
+// ProjectMemory is the narrow interface the Planner needs for context retrieval.
+// Passing nil disables context injection without error.
+type ProjectMemory interface {
+	Recall(projectID, query string) ([]domain.MemoryEntry, error)
+}
+
 // Planner generates a structured execution plan from a task using an LLM.
 type Planner struct {
 	registry LLMProviderGetter
+	memory   ProjectMemory // may be nil
 	logger   *slog.Logger
 }
 
-// NewPlanner creates a Planner.
-func NewPlanner(registry LLMProviderGetter, logger *slog.Logger) *Planner {
-	return &Planner{registry: registry, logger: logger}
+// NewPlanner creates a Planner. Pass nil for memory to disable context injection.
+func NewPlanner(registry LLMProviderGetter, memory ProjectMemory, logger *slog.Logger) *Planner {
+	return &Planner{registry: registry, memory: memory, logger: logger}
 }
 
 // Plan decomposes a task into a domain.Plan using the provided LLM config.
@@ -90,7 +97,17 @@ func (p *Planner) Plan(
 		return p.fallbackPlan(task, fmt.Sprintf("provider %q not registered", cfg.ProviderName)), nil
 	}
 
-	userMsg := buildPlanningPrompt(task, project)
+	// Retrieve project context files and inject them into the prompt.
+	var memEntries []domain.MemoryEntry
+	if p.memory != nil {
+		if entries, err := p.memory.Recall(task.ProjectID, task.Title); err == nil {
+			memEntries = entries
+		} else {
+			p.logger.Warn("memory recall failed, continuing without context", "error", err)
+		}
+	}
+
+	userMsg := buildPlanningPrompt(task, project, memEntries)
 
 	req := provider.ChatCompletionRequest{
 		Model:       cfg.Model,
@@ -136,7 +153,7 @@ func (p *Planner) Plan(
 // Helpers
 // ─────────────────────────────────────────────
 
-func buildPlanningPrompt(task *domain.Task, project *domain.Project) string {
+func buildPlanningPrompt(task *domain.Task, project *domain.Project, memory []domain.MemoryEntry) string {
 	var sb strings.Builder
 	sb.WriteString("Task Title: " + task.Title + "\n")
 	if task.Description != "" {
@@ -144,6 +161,13 @@ func buildPlanningPrompt(task *domain.Task, project *domain.Project) string {
 	}
 	if project != nil && project.Instructions != "" {
 		sb.WriteString("\nProject Instructions:\n" + project.Instructions + "\n")
+	}
+	// Inject context files (project memory) so the LLM has full project context.
+	if len(memory) > 0 {
+		sb.WriteString("\n── Project Context Files ──\n")
+		for _, e := range memory {
+			sb.WriteString(fmt.Sprintf("\n### %s\n%s\n", e.Label, e.Content))
+		}
 	}
 	return sb.String()
 }
