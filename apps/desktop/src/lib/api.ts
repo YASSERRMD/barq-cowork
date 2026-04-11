@@ -152,6 +152,8 @@ export const workspacesApi = {
 // ──────────────────── Projects ────────────────────
 
 export const projectsApi = {
+  list: (): Promise<Project[]> => request("/projects"),
+
   listByWorkspace: (workspaceID: string): Promise<Project[]> =>
     request(`/workspaces/${workspaceID}/projects`),
 
@@ -194,7 +196,8 @@ export interface ProviderProfile {
   name: string;
   provider_name: string;
   base_url: string;
-  api_key_env: string;
+  api_key_set: boolean;    // true if a key is stored
+  api_key_hint: string;    // masked hint like "••••abcd"
   model: string;
   timeout_sec: number;
   is_default: boolean;
@@ -213,17 +216,35 @@ export const providersApi = {
   test: (data: {
     provider_name: string;
     base_url?: string;
-    api_key_env: string;
+    api_key: string;
     model?: string;
   }): Promise<TestResult> =>
     request("/providers/test", { method: "POST", body: JSON.stringify(data) }),
 
   listProfiles: (): Promise<ProviderProfile[]> => request("/provider-profiles"),
 
-  createProfile: (data: Omit<ProviderProfile, "id" | "created_at" | "updated_at">): Promise<ProviderProfile> =>
+  createProfile: (data: {
+    name: string;
+    provider_name: string;
+    base_url?: string;
+    api_key: string;       // direct key, write-only
+    api_key_env?: string;  // legacy fallback
+    model: string;
+    timeout_sec?: number;
+    is_default?: boolean;
+  }): Promise<ProviderProfile> =>
     request("/provider-profiles", { method: "POST", body: JSON.stringify(data) }),
 
-  updateProfile: (id: string, data: Omit<ProviderProfile, "id" | "created_at" | "updated_at">): Promise<ProviderProfile> =>
+  updateProfile: (id: string, data: {
+    name: string;
+    provider_name: string;
+    base_url?: string;
+    api_key?: string;
+    api_key_env?: string;
+    model: string;
+    timeout_sec?: number;
+    is_default?: boolean;
+  }): Promise<ProviderProfile> =>
     request(`/provider-profiles/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   deleteProfile: (id: string): Promise<void> =>
@@ -471,4 +492,57 @@ export const diagnosticsApi = {
 
   /** Returns the URL to download the diagnostic ZIP bundle. */
   bundleUrl: (): string => `${BASE}/diagnostics/bundle`,
+};
+
+// ──────────────────── Schedules ────────────────────
+
+export interface Schedule {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  cron_expr: string;
+  task_title: string;
+  task_desc: string;
+  provider_id: string;
+  enabled: boolean;
+  last_run_at?: string;
+  next_run_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const schedulesApi = {
+  list: (): Promise<Schedule[]> => request("/schedules"),
+
+  listByProject: (projectId: string): Promise<Schedule[]> =>
+    request(`/projects/${projectId}/schedules`),
+
+  get: (id: string): Promise<Schedule> => request(`/schedules/${id}`),
+
+  create: (data: {
+    project_id: string;
+    name: string;
+    description?: string;
+    cron_expr: string;
+    task_title: string;
+    task_desc?: string;
+    provider_id?: string;
+    enabled?: boolean;
+  }): Promise<Schedule> =>
+    request("/schedules", { method: "POST", body: JSON.stringify(data) }),
+
+  update: (id: string, data: {
+    name: string;
+    description?: string;
+    cron_expr: string;
+    task_title: string;
+    task_desc?: string;
+    provider_id?: string;
+    enabled: boolean;
+  }): Promise<Schedule> =>
+    request(`/schedules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/schedules/${id}`, { method: "DELETE" }),
 };
