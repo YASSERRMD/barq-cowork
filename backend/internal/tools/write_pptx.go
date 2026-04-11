@@ -19,49 +19,144 @@ type WritePPTXTool struct{}
 
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
-	return "Create a professional PowerPoint presentation (.pptx) that opens in Microsoft PowerPoint, Google Slides, and Keynote. " +
+	return "Create a professional PowerPoint presentation (.pptx) powered by the Barq PPTX Engine. " +
+		"Supports 10 rich slide types: bullets, stats, steps, cards, chart, timeline, compare, table, title, blank. " +
 		"Use this for ALL presentation, slides, deck, or slideshow requests. " +
 		"Saves to slides/<filename>.pptx."
 }
 func (WritePPTXTool) InputSchema() map[string]any {
+	statItemSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"value": map[string]any{"type": "string", "description": "Large display value, e.g. '75%' or '$2.4M'"},
+			"label": map[string]any{"type": "string", "description": "Metric name"},
+			"desc":  map[string]any{"type": "string", "description": "Short description shown below label"},
+		},
+		"required": []string{"value", "label"},
+	}
+	cardItemSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"icon":  map[string]any{"type": "string", "description": "Emoji or symbol icon, e.g. '⚡'"},
+			"title": map[string]any{"type": "string", "description": "Card title (short, under 40 chars)"},
+			"desc":  map[string]any{"type": "string", "description": "One-sentence description"},
+		},
+		"required": []string{"icon", "title"},
+	}
+	timelineItemSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"date":  map[string]any{"type": "string", "description": "Date label, e.g. 'Q1 2026' or 'Phase 1'"},
+			"title": map[string]any{"type": "string", "description": "Milestone title"},
+			"desc":  map[string]any{"type": "string", "description": "Optional short description"},
+		},
+		"required": []string{"date", "title"},
+	}
+	chartSeriesSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name":   map[string]any{"type": "string", "description": "Series name shown in legend"},
+			"values": map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "description": "Numeric data values"},
+			"color":  map[string]any{"type": "string", "description": "Optional hex color override, e.g. '6366F1'"},
+		},
+		"required": []string{"name", "values"},
+	}
+	compareColumnSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"heading": map[string]any{"type": "string", "description": "Column heading text"},
+			"points":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Comparison points"},
+		},
+		"required": []string{"heading", "points"},
+	}
+	tableSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"headers": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Column header labels"},
+			"rows":    map[string]any{"type": "array", "items": map[string]any{"type": "array"}, "description": "Table data rows (arrays of strings)"},
+		},
+		"required": []string{"headers", "rows"},
+	}
+
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"filename": map[string]any{"type": "string", "description": "Output filename without extension, e.g. 'ai-trends'"},
+			"filename": map[string]any{"type": "string", "description": "Output filename without extension, e.g. 'ai-strategy-2026'"},
 			"title":    map[string]any{"type": "string", "description": "Presentation title (shown on cover slide)"},
-			"subtitle": map[string]any{"type": "string", "description": "Subtitle or date shown on cover slide"},
+			"subtitle": map[string]any{"type": "string", "description": "Subtitle or tagline shown on cover slide"},
+			"author":   map[string]any{"type": "string", "description": "Optional author name"},
 			"slides": map[string]any{
 				"type":        "array",
-				"description": "Array of content slides",
+				"description": "Slides array — first slide is auto-made the cover/title slide. Mix types for visual variety. Aim for 6-10 slides.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"heading": map[string]any{"type": "string", "description": "Slide title"},
-						"layout": map[string]any{
-							"type":        "string",
-							"enum":        []string{"bullets", "stats", "steps", "cards"},
-							"description": "Slide layout type — omit to auto-detect",
+						"heading": map[string]any{"type": "string", "description": "Slide heading (max 60 chars)"},
+						"type": map[string]any{
+							"type": "string",
+							"enum": []string{"bullets", "stats", "steps", "cards", "chart", "timeline", "compare", "table", "blank"},
+							"description": "Slide layout type. " +
+								"bullets=text list; stats=KPI metrics; steps=process flow; cards=feature grid; " +
+								"chart=data visualisation; timeline=milestone roadmap; compare=two-column; table=data table; blank=empty.",
 						},
+						"speaker_notes": map[string]any{"type": "string", "description": "Optional speaker notes for this slide"},
+
+						// bullets
 						"points": map[string]any{
-							"type":        "array",
-							"items":       map[string]any{"type": "string"},
-							"description": "Bullet points or step descriptions (3-6 recommended)",
+							"type": "array", "items": map[string]any{"type": "string"},
+							"description": "[bullets] Bullet point strings (3-6 recommended)",
 						},
+
+						// stats
 						"stats": map[string]any{
-							"type":        "array",
-							"description": "Data stats for stats layout (2-4 items)",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"value": map[string]any{"type": "string", "description": "Large display value, e.g. '75%' or '$2.4M'"},
-									"label": map[string]any{"type": "string", "description": "Metric name"},
-									"desc":  map[string]any{"type": "string", "description": "Optional short description"},
-								},
-								"required": []string{"value", "label"},
-							},
+							"type": "array", "items": statItemSchema,
+							"description": "[stats] KPI items (2-4 recommended)",
 						},
+
+						// steps
+						"steps": map[string]any{
+							"type": "array", "items": map[string]any{"type": "string"},
+							"description": "[steps] Ordered process step descriptions (3-6 recommended)",
+						},
+
+						// cards
+						"cards": map[string]any{
+							"type": "array", "items": cardItemSchema,
+							"description": "[cards] Feature/benefit cards with icon, title, desc (4-6 recommended)",
+						},
+
+						// chart
+						"chart_type": map[string]any{
+							"type": "string",
+							"enum": []string{"column", "bar", "line", "pie", "doughnut", "area", "scatter"},
+							"description": "[chart] Chart type",
+						},
+						"chart_categories": map[string]any{
+							"type": "array", "items": map[string]any{"type": "string"},
+							"description": "[chart] Category axis labels",
+						},
+						"chart_series": map[string]any{
+							"type": "array", "items": chartSeriesSchema,
+							"description": "[chart] Data series array",
+						},
+						"y_label": map[string]any{
+							"type": "string", "description": "[chart] Optional Y-axis label",
+						},
+
+						// timeline
+						"timeline": map[string]any{
+							"type": "array", "items": timelineItemSchema,
+							"description": "[timeline] Milestone items with date, title, desc (3-6 recommended)",
+						},
+
+						// compare
+						"left_column": compareColumnSchema,
+						"right_column": compareColumnSchema,
+
+						// table
+						"table": tableSchema,
 					},
-					"required": []string{"heading"},
+					"required": []string{"heading", "type"},
 				},
 			},
 		},
@@ -73,20 +168,77 @@ type pptxArgs struct {
 	Filename string      `json:"filename"`
 	Title    string      `json:"title"`
 	Subtitle string      `json:"subtitle"`
+	Author   string      `json:"author"`
 	Slides   []pptxSlide `json:"slides"`
 }
 
+// pptxStat is a KPI metric item for the stats layout.
 type pptxStat struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
 	Desc  string `json:"desc"`
 }
 
+// pptxCard is a feature/benefit card for the cards layout.
+type pptxCard struct {
+	Icon  string `json:"icon"`
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
+}
+
+// pptxTimelineItem is a milestone entry for the timeline layout.
+type pptxTimelineItem struct {
+	Date  string `json:"date"`
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
+}
+
+// pptxChartSeries is one data series for the chart layout.
+type pptxChartSeries struct {
+	Name   string    `json:"name"`
+	Values []float64 `json:"values"`
+	Color  string    `json:"color,omitempty"`
+}
+
+// pptxCompareColumn is one column for the compare layout.
+type pptxCompareColumn struct {
+	Heading string   `json:"heading"`
+	Points  []string `json:"points"`
+}
+
+// pptxTable is tabular data for the table layout.
+type pptxTableData struct {
+	Headers []string   `json:"headers"`
+	Rows    [][]string `json:"rows"`
+}
+
+// pptxSlide is the full slide definition accepted by the write_pptx tool.
+// The bridge (pptx_bridge.py) translates this into a pptx_engine Slide.
 type pptxSlide struct {
-	Heading string    `json:"heading"`
-	Layout  string    `json:"layout"`
-	Points  []string  `json:"points"`
-	Stats   []pptxStat `json:"stats"`
+	Heading      string             `json:"heading"`
+	Type         string             `json:"type"`            // primary field
+	Layout       string             `json:"layout"`          // backward-compat alias for Type
+	SpeakerNotes string             `json:"speaker_notes"`
+	// bullets
+	Points       []string           `json:"points,omitempty"`
+	// stats
+	Stats        []pptxStat         `json:"stats,omitempty"`
+	// steps
+	Steps        []string           `json:"steps,omitempty"`
+	// cards
+	Cards        []pptxCard         `json:"cards,omitempty"`
+	// chart
+	ChartType       string               `json:"chart_type,omitempty"`
+	ChartCategories []string             `json:"chart_categories,omitempty"`
+	ChartSeries     []pptxChartSeries    `json:"chart_series,omitempty"`
+	YLabel          string               `json:"y_label,omitempty"`
+	// timeline
+	Timeline    []pptxTimelineItem `json:"timeline,omitempty"`
+	// compare
+	LeftColumn  *pptxCompareColumn `json:"left_column,omitempty"`
+	RightColumn *pptxCompareColumn `json:"right_column,omitempty"`
+	// table
+	Table       *pptxTableData     `json:"table,omitempty"`
 }
 
 func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON string) Result {
@@ -113,8 +265,8 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 		return Err("create slides dir: %v", err)
 	}
 
-	// Try python-pptx first (professional quality with gradients, shadows, charts).
-	// Falls back to raw Go XML generator if Python is unavailable.
+	// Try the pptx_engine bridge first (full 10-layout professional renderer).
+	// Falls back to the raw Go XML generator if Python is unavailable.
 	accent := pickThemeAccent(args.Title, args.Subtitle)
 	data, genErr := buildPPTXviaPython(ctx, args, accent)
 	if genErr != nil {
@@ -135,26 +287,33 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	)
 }
 
-// buildPPTXviaPython calls the gen_pptx.py script as a subprocess.
-// The script path is resolved relative to the binary's executable directory,
-// then relative to the working directory (dev mode).
+// buildPPTXviaPython calls pptx_bridge.py — the pptx_engine bridge script.
+// It translates the tool's JSON payload into a full Deck schema and renders
+// using the engine's 10-layout slide registry (charts, timeline, compare, etc.).
+// Falls back to gen_pptx.py if the bridge is not found.
 func buildPPTXviaPython(ctx context.Context, args pptxArgs, accent string) ([]byte, error) {
-	// Locate the script
-	scriptPath := findScript("scripts/gen_pptx.py")
+	// Prefer the new engine bridge; fall back to legacy gen_pptx.py
+	scriptPath := findScript("scripts/pptx_bridge.py")
 	if scriptPath == "" {
-		return nil, fmt.Errorf("gen_pptx.py not found")
+		scriptPath = findScript("scripts/gen_pptx.py")
+	}
+	if scriptPath == "" {
+		return nil, fmt.Errorf("pptx_bridge.py (and gen_pptx.py fallback) not found")
 	}
 
-	// Build the JSON payload with accent color included
+	// Build the JSON payload. The bridge accepts both the old and new formats;
+	// we send the extended format so all 10 slide types are available.
 	type pyPayload struct {
 		Title    string      `json:"title"`
 		Subtitle string      `json:"subtitle"`
+		Author   string      `json:"author,omitempty"`
 		Accent   string      `json:"accent"`
 		Slides   []pptxSlide `json:"slides"`
 	}
 	payload, err := json.Marshal(pyPayload{
 		Title:    args.Title,
 		Subtitle: args.Subtitle,
+		Author:   args.Author,
 		Accent:   accent,
 		Slides:   args.Slides,
 	})
@@ -169,10 +328,11 @@ func buildPPTXviaPython(ctx context.Context, args pptxArgs, accent string) ([]by
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("python gen_pptx: %v — %s", err, stderr.String())
+		return nil, fmt.Errorf("pptx_bridge error: %v — %s", err, stderr.String())
 	}
-	if stdout.Len() == 0 {
-		return nil, fmt.Errorf("python gen_pptx produced no output")
+	if stdout.Len() < 100 {
+		return nil, fmt.Errorf("pptx_bridge produced too-small output (%d bytes); stderr: %s",
+			stdout.Len(), stderr.String())
 	}
 	return stdout.Bytes(), nil
 }
