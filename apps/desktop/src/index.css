@@ -221,6 +221,12 @@
   .badge-purple { @apply badge; background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(192,132,252,0.18); }
   .badge-accent { @apply badge; background: var(--accent-dim); color: #a5b4fc;       border: 1px solid rgba(99,102,241,0.25); }
 
+  /* ──────────────────── Surface backgrounds (used as className="surface-X") ── */
+  .surface-1 { background: var(--surface-1); }
+  .surface-2 { background: var(--surface-2); }
+  .surface-3 { background: var(--surface-3); }
+  .surface-4 { background: var(--surface-4); }
+
   /* ──────────────────── Dividers ──────────────────── */
   .divider { height: 1px; background: var(--border); border: none; margin: 0; }
 

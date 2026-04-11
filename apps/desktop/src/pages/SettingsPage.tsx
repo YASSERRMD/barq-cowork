@@ -563,7 +563,7 @@ function SecurityTab() {
         </p>
       </div>
 
-      <div className="surface-2 rounded-lg border border-surface-3 divide-y divide-surface-3">
+      <div className="surface-2 rounded-lg border border-surface-3 divide-y divide-[var(--border)]">
         {items.map((item) => (
           <div key={item.label} className="flex items-start gap-4 px-4 py-3">
             <Shield size={14} className="text-green-400 mt-0.5 shrink-0" />

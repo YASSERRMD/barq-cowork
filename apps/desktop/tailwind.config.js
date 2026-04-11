@@ -27,6 +27,13 @@ export default {
           4:  "#22222f",  // hover states, nested cards
           5:  "#2a2a3a",  // borders, dividers
         },
+        // Text scale — reference CSS vars so they update with theme
+        text: {
+          primary:   "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          muted:     "var(--text-muted)",
+          faint:     "var(--text-faint)",
+        },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
