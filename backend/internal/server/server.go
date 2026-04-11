@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1 "github.com/barq-cowork/barq-cowork/internal/api/v1"
+	"github.com/barq-cowork/barq-cowork/internal/provider"
 	"github.com/barq-cowork/barq-cowork/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,6 +22,7 @@ type Services struct {
 	Tools      *service.ToolService
 	Execution  ExecutionDeps
 	Memory     MemoryDeps
+	Agents     AgentDeps
 }
 
 // ExecutionDeps groups the ports needed by the execution HTTP handler.
@@ -35,6 +37,12 @@ type ExecutionDeps struct {
 type MemoryDeps struct {
 	ContextFiles  v1.ContextFileStore
 	TaskTemplates v1.TaskTemplateStore
+}
+
+// AgentDeps groups the ports needed by the sub-agent HTTP handler.
+type AgentDeps struct {
+	Runner          v1.SubAgentRunner
+	DefaultProvider func() provider.ProviderConfig
 }
 
 // Server wraps the HTTP router and its configuration.
@@ -100,6 +108,10 @@ func (s *Server) routes() {
 		v1.NewMemoryHandler(
 			s.services.Memory.ContextFiles,
 			s.services.Memory.TaskTemplates,
+		).Register(r)
+		v1.NewAgentsHandler(
+			s.services.Agents.Runner,
+			s.services.Agents.DefaultProvider,
 		).Register(r)
 	})
 }
