@@ -1,26 +1,28 @@
-import { useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
-import { WorkspacesPage } from "./pages/WorkspacesPage";
+import { CommandPalette } from "./components/CommandPalette";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TaskRunPage } from "./pages/TaskRunPage";
-import { ProjectDetailPage } from "./pages/ProjectDetailPage";
+import { SchedulesPage } from "./pages/SchedulesPage";
+import { ConnectorsPage } from "./pages/ConnectorsPage";
 import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { LogsPage } from "./pages/LogsPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import DiagnosticsPage from "./pages/DiagnosticsPage";
 import { useAppStore } from "./store/appStore";
 import { checkHealth, getAppVersion } from "./lib/tauri";
 
 export default function App() {
   const { setBackendStatus, setVersion } = useAppStore();
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     getAppVersion()
       .then(setVersion)
-      .catch(() => {/* running outside Tauri (browser dev) */});
+      .catch(() => {});
 
     const probe = () =>
       checkHealth()
@@ -28,35 +30,65 @@ export default function App() {
         .catch(() => setBackendStatus(false, "backend unreachable"));
 
     probe();
-    const id = setInterval(probe, 10_000);
+    const id = setInterval(probe, 15_000);
     return () => clearInterval(id);
   }, [setBackendStatus, setVersion]);
 
-  return (
-    <div className="flex h-full">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-gray-950">
-        <Routes>
-          {/* Workspace hierarchy */}
-          <Route path="/"                                  element={<WorkspacesPage />} />
-          <Route path="/workspaces/:workspaceId/projects" element={<ProjectsPage />} />
-          <Route path="/projects/:projectId/tasks"        element={<TasksPage />} />
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
-          {/* Task run / observation view */}
+  return (
+    <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <Sidebar />
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: "#111118",
+        }}
+      >
+        <Routes>
+          <Route path="/" element={<Navigate to="/projects" replace />} />
+
+          {/* Projects */}
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="/projects/:projectId/tasks" element={<TasksPage />} />
+
+          {/* Runs */}
+          <Route path="/runs" element={<TasksPage globalView />} />
           <Route path="/tasks/:taskId/run" element={<TaskRunPage />} />
 
-          {/* Project memory (context files + templates) */}
-          <Route path="/projects/:projectId/memory" element={<ProjectDetailPage />} />
+          {/* Schedules */}
+          <Route path="/schedules" element={<SchedulesPage />} />
+          <Route path="/projects/:projectId/schedules" element={<SchedulesPage />} />
 
-          {/* Top-level nav stubs */}
-          <Route path="/tasks"      element={<TasksPage />} />
-          <Route path="/artifacts"  element={<ArtifactsPage />} />
-          <Route path="/approvals"  element={<ApprovalsPage />} />
-          <Route path="/logs"       element={<LogsPage />} />
-          <Route path="/settings"     element={<SettingsPage />} />
-          <Route path="/diagnostics"  element={<DiagnosticsPage />} />
+          {/* Connectors */}
+          <Route path="/connectors" element={<ConnectorsPage />} />
+
+          {/* System */}
+          <Route path="/artifacts" element={<ArtifactsPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
+          <Route path="/logs" element={<LogsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+
+          {/* Legacy workspace routes — redirect to projects */}
+          <Route path="/workspaces" element={<Navigate to="/projects" replace />} />
+          <Route path="/workspaces/:id/projects" element={<Navigate to="/projects" replace />} />
         </Routes>
       </main>
+
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
     </div>
   );
 }

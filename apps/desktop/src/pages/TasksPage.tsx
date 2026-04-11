@@ -13,7 +13,7 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: "badge-gray",
 };
 
-export function TasksPage() {
+export function TasksPage({ globalView }: { globalView?: boolean }) {
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
