@@ -120,6 +120,61 @@ export const projectsApi = {
     request(`/projects/${id}`, { method: "DELETE" }),
 };
 
+// ──────────────────── Providers ────────────────────
+
+export interface AvailableProvider {
+  name: string;
+  enabled: boolean;
+  base_url: string;
+  model: string;
+  has_key: boolean;
+  key_env: string;
+}
+
+export interface ProviderProfile {
+  id: string;
+  name: string;
+  provider_name: string;
+  base_url: string;
+  api_key_env: string;
+  model: string;
+  timeout_sec: number;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TestResult {
+  ok: boolean;
+  message: string;
+}
+
+export const providersApi = {
+  listAvailable: (): Promise<AvailableProvider[]> => request("/providers"),
+
+  test: (data: {
+    provider_name: string;
+    base_url?: string;
+    api_key_env: string;
+    model?: string;
+  }): Promise<TestResult> =>
+    request("/providers/test", { method: "POST", body: JSON.stringify(data) }),
+
+  listProfiles: (): Promise<ProviderProfile[]> => request("/provider-profiles"),
+
+  createProfile: (data: Omit<ProviderProfile, "id" | "created_at" | "updated_at">): Promise<ProviderProfile> =>
+    request("/provider-profiles", { method: "POST", body: JSON.stringify(data) }),
+
+  updateProfile: (id: string, data: Omit<ProviderProfile, "id" | "created_at" | "updated_at">): Promise<ProviderProfile> =>
+    request(`/provider-profiles/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  deleteProfile: (id: string): Promise<void> =>
+    request(`/provider-profiles/${id}`, { method: "DELETE" }),
+
+  testProfile: (id: string): Promise<TestResult> =>
+    request(`/provider-profiles/${id}/test`, { method: "POST" }),
+};
+
 // ──────────────────── Tasks ────────────────────
 
 export const tasksApi = {
