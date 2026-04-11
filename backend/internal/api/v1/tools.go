@@ -25,8 +25,6 @@ func (h *ToolHandler) Register(r chi.Router) {
 
 	r.Get("/approvals", h.listApprovals)
 	r.Post("/approvals/{id}/resolve", h.resolve)
-
-	r.Get("/tasks/{taskID}/events", h.listEvents)
 }
 
 // listTools GET /api/v1/tools
@@ -91,23 +89,6 @@ func (h *ToolHandler) resolve(w http.ResponseWriter, r *http.Request) {
 	jsonNoContent(w)
 }
 
-// listEvents GET /api/v1/tasks/{taskID}/events
-func (h *ToolHandler) listEvents(w http.ResponseWriter, r *http.Request) {
-	events, err := h.svc.ListEvents(r.Context(), chi.URLParam(r, "taskID"))
-	if err != nil {
-		handleErr(w, err)
-		return
-	}
-	out := make([]*eventDTO, len(events))
-	for i, e := range events {
-		out[i] = toEventDTO(e)
-	}
-	if out == nil {
-		out = []*eventDTO{}
-	}
-	jsonOK(w, out)
-}
-
 // ─────────────────────────────────────────────
 // DTOs
 // ─────────────────────────────────────────────
@@ -136,20 +117,3 @@ func toApprovalDTO(a *domain.ApprovalRequest) *approvalDTO {
 	}
 }
 
-type eventDTO struct {
-	ID        string            `json:"id"`
-	TaskID    string            `json:"task_id"`
-	Type      domain.EventType  `json:"type"`
-	Payload   string            `json:"payload"`
-	CreatedAt string            `json:"created_at"`
-}
-
-func toEventDTO(e *domain.Event) *eventDTO {
-	return &eventDTO{
-		ID:        e.ID,
-		TaskID:    e.TaskID,
-		Type:      e.Type,
-		Payload:   e.Payload,
-		CreatedAt: e.CreatedAt.Format("2006-01-02T15:04:05Z"),
-	}
-}

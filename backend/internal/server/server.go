@@ -19,6 +19,15 @@ type Services struct {
 	Tasks      *service.TaskService
 	Providers  *service.ProviderService
 	Tools      *service.ToolService
+	Execution  ExecutionDeps
+}
+
+// ExecutionDeps groups the ports needed by the execution HTTP handler.
+type ExecutionDeps struct {
+	Runner    v1.TaskRunner
+	Plans     v1.PlanQuerier
+	Artifacts v1.ArtifactQuerier
+	Events    v1.EventQuerier
 }
 
 // Server wraps the HTTP router and its configuration.
@@ -75,6 +84,12 @@ func (s *Server) routes() {
 		v1.NewTaskHandler(s.services.Tasks).Register(r)
 		v1.NewProviderHandler(s.services.Providers).Register(r)
 		v1.NewToolHandler(s.services.Tools).Register(r)
+		v1.NewExecutionHandler(
+			s.services.Execution.Runner,
+			s.services.Execution.Plans,
+			s.services.Execution.Artifacts,
+			s.services.Execution.Events,
+		).Register(r)
 	})
 }
 

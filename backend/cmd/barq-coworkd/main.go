@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/barq-cowork/barq-cowork/internal/config"
+	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
 	zaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/openai"
 	oaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/zai"
@@ -72,6 +73,17 @@ func main() {
 	providerProfileRepo := sqlite.NewProviderProfileStore(db)
 	approvalRepo        := sqlite.NewApprovalStore(db)
 	eventRepo           := sqlite.NewEventStore(db)
+	planStore           := sqlite.NewPlanStore(db)
+	artifactStore       := sqlite.NewArtifactStore(db)
+
+	// ── Orchestrator ──────────────────────────────────────────────────
+	planner  := orchestrator.NewPlanner(registry, logger)
+	executor := orchestrator.NewExecutor(planStore, artifactStore, eventRepo, toolRegistry, logger)
+	orch     := orchestrator.New(
+		taskRepo, projectRepo, providerProfileRepo,
+		planner, executor, planStore,
+		cfg, logger,
+	)
 
 	// ── Services ──────────────────────────────────────────────────────
 	svcs := server.Services{
@@ -80,6 +92,12 @@ func main() {
 		Tasks:      service.NewTaskService(taskRepo, projectRepo),
 		Providers:  service.NewProviderService(providerProfileRepo, registry, cfg),
 		Tools:      service.NewToolService(toolRegistry, approvalRepo, eventRepo),
+		Execution: server.ExecutionDeps{
+			Runner:    orch,
+			Plans:     planStore,
+			Artifacts: artifactStore,
+			Events:    eventRepo,
+		},
 	}
 
 	addr := ":7331"
