@@ -127,7 +127,12 @@ function TaskCard({
     <li className="card p-4 space-y-2 hover:border-gray-700 transition-colors">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-white font-medium truncate">{t.title}</p>
+          <Link
+            to={`/tasks/${t.id}/run`}
+            className="text-white font-medium truncate hover:text-barq-300 transition-colors block"
+          >
+            {t.title}
+          </Link>
           {t.description && (
             <p className="text-gray-400 text-xs mt-0.5 truncate">{t.description}</p>
           )}
@@ -136,6 +141,12 @@ function TaskCard({
           <span className={clsx(STATUS_BADGE[t.status] ?? "badge-gray")}>
             {t.status}
           </span>
+          <Link
+            to={`/tasks/${t.id}/run`}
+            className="btn-ghost text-xs text-barq-400 hover:text-barq-300"
+          >
+            {t.status === "pending" ? "Run" : "View"}
+          </Link>
           <button
             className="btn-ghost text-xs text-red-400 hover:text-red-300"
             onClick={onDelete}
