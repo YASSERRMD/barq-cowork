@@ -33,7 +33,7 @@ const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 11,
   fontWeight: 600,
-  color: "#50505f",
+  color: "var(--text-muted)",
   marginBottom: 4,
   textTransform: "uppercase",
   letterSpacing: "0.05em",
@@ -125,10 +125,10 @@ export function SchedulesPage() {
                 display: "grid",
                 gridTemplateColumns: "1fr 140px 160px 140px 140px 72px",
                 padding: "6px 20px",
-                borderBottom: "1px solid #2a2a3a",
+                borderBottom: "1px solid var(--border)",
                 fontSize: 11,
                 fontWeight: 600,
-                color: "#40404f",
+                color: "var(--text-faint)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
               }}
@@ -173,10 +173,10 @@ export function SchedulesPage() {
             style={{ padding: 20, maxWidth: 360, width: "100%", margin: "0 20px" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p style={{ fontSize: 13, color: "#c4c4d0", marginBottom: 4 }}>
+            <p style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>
               Delete this schedule?
             </p>
-            <p style={{ fontSize: 12, color: "#50505f", marginBottom: 16 }}>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
               This cannot be undone. No future runs will be triggered.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -184,12 +184,7 @@ export function SchedulesPage() {
                 Cancel
               </button>
               <button
-                className="btn-sm"
-                style={{
-                  background: "#7f1d1d",
-                  color: "#fca5a5",
-                  border: "1px solid #991b1b",
-                }}
+                className="btn-danger btn-sm"
                 disabled={deleteMutation.isPending}
                 onClick={() => deleteMutation.mutate(deleteId)}
               >
@@ -228,12 +223,12 @@ function ScheduleRow({
         display: "grid",
         gridTemplateColumns: "1fr 140px 160px 140px 140px 72px",
         padding: "10px 20px",
-        borderBottom: "1px solid rgba(42,42,58,0.5)",
+        borderBottom: "1px solid var(--border)",
         alignItems: "center",
         transition: "background 120ms",
       }}
       onMouseEnter={(e) =>
-        ((e.currentTarget as HTMLDivElement).style.background = "#16161f")
+        ((e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)")
       }
       onMouseLeave={(e) =>
         ((e.currentTarget as HTMLDivElement).style.background = "transparent")
@@ -245,7 +240,7 @@ function ScheduleRow({
           style={{
             fontSize: 13,
             fontWeight: 600,
-            color: "#e2e2e8",
+            color: "var(--text-primary)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -256,7 +251,7 @@ function ScheduleRow({
         <div
           style={{
             fontSize: 11,
-            color: "#50505f",
+            color: "var(--text-muted)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -270,7 +265,7 @@ function ScheduleRow({
       <div
         style={{
           fontSize: 12,
-          color: "#7a7a90",
+          color: "var(--text-secondary)",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -281,11 +276,11 @@ function ScheduleRow({
 
       {/* Schedule */}
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <Clock size={11} color="#40404f" />
+        <Clock size={11} color="var(--text-faint)" />
         <span
           style={{
             fontSize: 12,
-            color: "#7a7a90",
+            color: "var(--text-secondary)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -296,7 +291,7 @@ function ScheduleRow({
       </div>
 
       {/* Last run */}
-      <span style={{ fontSize: 11, color: "#40404f" }}>
+      <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
         {formatDate(schedule.last_run_at)}
       </span>
 
@@ -304,7 +299,7 @@ function ScheduleRow({
       <span
         style={{
           fontSize: 11,
-          color: schedule.enabled ? "#818cf8" : "#40404f",
+          color: schedule.enabled ? "#a5b4fc" : "var(--text-faint)",
         }}
       >
         {schedule.enabled ? formatDate(schedule.next_run_at) : "Paused"}
@@ -323,7 +318,7 @@ function ScheduleRow({
           className="btn-ghost btn-sm"
           style={{
             padding: "2px 4px",
-            color: schedule.enabled ? "#818cf8" : "#40404f",
+            color: schedule.enabled ? "#a5b4fc" : "var(--text-faint)",
           }}
           onClick={onToggle}
           disabled={toggling}
@@ -337,7 +332,7 @@ function ScheduleRow({
         </button>
         <button
           className="btn-ghost btn-sm"
-          style={{ padding: "2px 4px", color: "#f87171" }}
+          style={{ padding: "2px 4px", color: "var(--red)" }}
           onClick={onDelete}
           title="Delete schedule"
         >
@@ -411,8 +406,8 @@ function CreateScheduleForm({
   return (
     <div
       style={{
-        background: "#16161f",
-        borderBottom: "1px solid #2a2a3a",
+        background: "var(--surface-2)",
+        borderBottom: "1px solid var(--border)",
         padding: "16px 20px",
       }}
     >
@@ -424,7 +419,7 @@ function CreateScheduleForm({
           marginBottom: 14,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#c4c4d0" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
           New Schedule
         </span>
         <button className="btn-ghost btn-sm" onClick={onCancel}>
@@ -530,7 +525,7 @@ function CreateScheduleForm({
             <label style={labelStyle}>
               Cron expression
               {!form.is_custom && (
-                <span style={{ color: "#40404f", marginLeft: 4 }}>
+                <span style={{ color: "var(--text-faint)", marginLeft: 4 }}>
                   ({activeCron})
                 </span>
               )}
@@ -592,7 +587,7 @@ function CreateScheduleForm({
         </div>
 
         {error && (
-          <p style={{ color: "#f87171", fontSize: 12, marginTop: 10 }}>
+          <p style={{ color: "var(--red)", fontSize: 12, marginTop: 10 }}>
             {error}
           </p>
         )}
