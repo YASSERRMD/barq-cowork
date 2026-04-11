@@ -1,20 +1,29 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Edit3, Check, X, FileText, Layout, Calendar, Activity, Plus, Trash2 } from "lucide-react";
 import {
   projectsApi,
   contextFilesApi,
   templatesApi,
+  schedulesApi,
   type ContextFile,
   type TaskTemplate,
+  type Schedule,
 } from "../lib/api";
-import clsx from "clsx";
+import { TopBar } from "../components/TopBar";
+import { Breadcrumb } from "../components/Breadcrumb";
+import { EmptyState, Skeleton } from "../components/ui";
 
-type Tab = "context" | "templates";
+type Tab = "overview" | "context" | "templates" | "schedules";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const [tab, setTab] = useState<Tab>("context");
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("overview");
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", description: "", instructions: "" });
 
   const { data: project, isLoading } = useQuery({
     queryKey: ["projects", projectId],
@@ -22,86 +31,214 @@ export function ProjectDetailPage() {
     enabled: !!projectId,
   });
 
-  if (isLoading) return <div className="p-6 text-gray-400 text-sm">Loading…</div>;
-  if (!project) return <div className="p-6 text-red-400 text-sm">Project not found.</div>;
+  const updateMutation = useMutation({
+    mutationFn: () => projectsApi.update(projectId!, editForm),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects", projectId] });
+      setEditing(false);
+    },
+  });
+
+  const startEdit = () => {
+    if (!project) return;
+    setEditForm({ name: project.name, description: project.description, instructions: project.instructions });
+    setEditing(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: 24, display: "grid", gap: 12 }}>
+        <Skeleton style={{ height: 20, width: "30%" }} />
+        <Skeleton style={{ height: 14, width: "60%" }} />
+      </div>
+    );
+  }
+
+  if (!project) {
+    return <div style={{ padding: 24, color: "#f87171", fontSize: 13 }}>Project not found.</div>;
+  }
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
-      {/* Breadcrumb */}
-      <nav className="text-xs text-gray-500 flex items-center gap-1">
-        <Link to="/" className="hover:text-gray-300">Workspaces</Link>
-        <span>/</span>
-        <Link
-          to={`/workspaces/${project.workspace_id}/projects`}
-          className="hover:text-gray-300"
-        >
-          Projects
-        </Link>
-        <span>/</span>
-        <span className="text-gray-300 truncate max-w-[200px]">{project.name}</span>
-      </nav>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <TopBar
+        title={project.name}
+        actions={
+          !editing && (
+            <button className="btn-ghost btn-sm" onClick={startEdit}>
+              <Edit3 size={13} />
+              Edit
+            </button>
+          )
+        }
+      />
 
-      {/* Project header */}
-      <div className="card p-5 space-y-2">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-white">{project.name}</h1>
+      <div style={{ padding: "8px 20px", borderBottom: "1px solid #2a2a3a" }}>
+        <Breadcrumb items={[{ label: "Projects", to: "/projects" }, { label: project.name }]} />
+      </div>
+
+      {/* Project header / edit form */}
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid #2a2a3a" }}>
+        {editing ? (
+          <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(); }}>
+            <div style={{ display: "grid", gap: 10, maxWidth: 600 }}>
+              <input
+                className="input"
+                value={editForm.name}
+                onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                placeholder="Project name"
+                required
+                autoFocus
+              />
+              <input
+                className="input"
+                value={editForm.description}
+                onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder="Description"
+              />
+              <textarea
+                className="input"
+                value={editForm.instructions}
+                onChange={(e) => setEditForm((p) => ({ ...p, instructions: e.target.value }))}
+                placeholder="System instructions"
+                style={{ minHeight: 80 }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="submit" className="btn-primary btn-sm" disabled={updateMutation.isPending}>
+                  <Check size={12} /> Save
+                </button>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setEditing(false)}>
+                  <X size={12} /> Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : (
+          <div>
             {project.description && (
-              <p className="text-gray-400 text-sm mt-0.5">{project.description}</p>
+              <p style={{ fontSize: 13, color: "#7a7a90", marginBottom: 4 }}>{project.description}</p>
             )}
-          </div>
-          <Link
-            to={`/projects/${projectId}/tasks`}
-            className="btn-primary text-sm shrink-0"
-          >
-            ▶ Tasks
-          </Link>
-        </div>
-        {project.instructions && (
-          <div className="pt-2 border-t border-gray-800">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-              Agent Instructions
-            </p>
-            <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">
-              {project.instructions}
-            </p>
+            {project.instructions && (
+              <div style={{ marginTop: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#40404f" }}>
+                  System instructions
+                </span>
+                <p style={{ fontSize: 12, color: "#50505f", marginTop: 3, lineHeight: 1.5 }}>
+                  {project.instructions.length > 200 ? project.instructions.slice(0, 200) + "..." : project.instructions}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-800 pb-0">
-        {(["context", "templates"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            className={clsx(
-              "px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px",
-              tab === t
-                ? "border-barq-500 text-white"
-                : "border-transparent text-gray-400 hover:text-gray-200"
-            )}
-            onClick={() => setTab(t)}
-          >
-            {t === "context" ? "Context Files" : "Task Templates"}
-          </button>
-        ))}
+      <div style={{ display: "flex", borderBottom: "1px solid #2a2a3a", padding: "0 20px" }}>
+        {(["overview", "context", "templates", "schedules"] as Tab[]).map((t) => {
+          const icons = { overview: Activity, context: FileText, templates: Layout, schedules: Calendar };
+          const Icon = icons[t];
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "10px 12px",
+                fontSize: 12,
+                fontWeight: 500,
+                background: "transparent",
+                border: "none",
+                borderBottom: `2px solid ${tab === t ? "#6366f1" : "transparent"}`,
+                color: tab === t ? "#a5b4fc" : "#50505f",
+                cursor: "pointer",
+                transition: "all 150ms",
+              }}
+            >
+              <Icon size={13} />
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
-      {tab === "context" && <ContextFilesPanel projectId={projectId!} />}
-      {tab === "templates" && <TaskTemplatesPanel projectId={projectId!} />}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {tab === "overview" && <OverviewTab projectId={projectId!} />}
+        {tab === "context" && <ContextFilesTab projectId={projectId!} />}
+        {tab === "templates" && <TemplatesTab projectId={projectId!} />}
+        {tab === "schedules" && (
+          <div style={{ padding: "16px 20px" }}>
+            <button
+              className="btn-primary btn-sm"
+              onClick={() => navigate(`/schedules`)}
+            >
+              Manage Schedules
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// Context Files Panel
-// ─────────────────────────────────────────────
+function OverviewTab({ projectId }: { projectId: string }) {
+  const navigate = useNavigate();
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["tasks", projectId],
+    queryFn: () => import("../lib/api").then(m => m.tasksApi.listByProject(projectId)),
+    refetchInterval: 10000,
+  });
 
-function ContextFilesPanel({ projectId }: { projectId: string }) {
+  const recent = tasks.slice(0, 5);
+
+  return (
+    <div style={{ padding: "16px 20px" }}>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#7a7a90" }}>Recent Tasks</span>
+        <button
+          className="btn-ghost btn-sm"
+          onClick={() => navigate(`/projects/${projectId}/tasks`)}
+        >
+          View all
+        </button>
+      </div>
+      {recent.length === 0 ? (
+        <EmptyState
+          icon={Activity}
+          title="No tasks yet"
+          description="Create a task to start an AI agent run."
+          action={
+            <button className="btn-primary btn-sm" onClick={() => navigate(`/projects/${projectId}/tasks`)}>
+              <Plus size={13} /> New Task
+            </button>
+          }
+        />
+      ) : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {recent.map((t) => (
+            <div
+              key={t.id}
+              className="card-hover"
+              style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}
+              onClick={() => navigate(`/tasks/${t.id}/run`)}
+            >
+              <span style={{ fontSize: 13, color: "#c4c4d0", flex: 1 }}>{t.title}</span>
+              <span className={`badge-${t.status === "completed" ? "green" : t.status === "failed" ? "red" : t.status === "running" ? "yellow" : "gray"}`}>
+                {t.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContextFilesTab({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", content: "", description: "" });
 
   const { data: files = [], isLoading } = useQuery({
     queryKey: ["context-files", projectId],
@@ -109,11 +246,11 @@ function ContextFilesPanel({ projectId }: { projectId: string }) {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof contextFilesApi.create>[1]) =>
-      contextFilesApi.create(projectId, data),
+    mutationFn: () => contextFilesApi.create(projectId, form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["context-files", projectId] });
       setShowForm(false);
+      setForm({ name: "", content: "", description: "" });
     },
   });
 
@@ -122,195 +259,58 @@ function ContextFilesPanel({ projectId }: { projectId: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["context-files", projectId] }),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof contextFilesApi.update>[1] }) =>
-      contextFilesApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["context-files", projectId] });
-      setEditingId(null);
-    },
-  });
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          Context files are injected into every task planning prompt automatically.
-        </p>
-        <button className="btn-primary text-xs" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "+ Add Context File"}
+    <div style={{ padding: "16px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#7a7a90" }}>Context Files</span>
+        <button className="btn-ghost btn-sm" onClick={() => setShowForm((v) => !v)}>
+          <Plus size={13} /> Add File
         </button>
       </div>
-
       {showForm && (
-        <ContextFileForm
-          onSubmit={(data) => createMutation.mutate(data)}
-          loading={createMutation.isPending}
-          error={createMutation.error?.message}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
-
-      {isLoading && <p className="text-gray-400 text-sm">Loading…</p>}
-
-      {!isLoading && files.length === 0 && !showForm && (
-        <div className="card p-6 text-center text-gray-500 text-sm space-y-1">
-          <p className="text-xl">📎</p>
-          <p>No context files yet.</p>
-          <p className="text-xs text-gray-600">
-            Add coding conventions, API docs, schema files, or any reference text
-            you want the agent to always consider.
-          </p>
+        <div className="card" style={{ padding: "12px", marginBottom: 12 }}>
+          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <input className="input" placeholder="File name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required autoFocus />
+              <textarea className="input" placeholder="Content" value={form.content} onChange={(e) => setForm((p) => ({ ...p, content: e.target.value }))} style={{ minHeight: 80 }} />
+              <input className="input" placeholder="Description (optional)" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" className="btn-primary btn-sm" disabled={createMutation.isPending}>Save</button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
-
-      <ul className="space-y-2">
-        {files.map((cf) =>
-          editingId === cf.id ? (
-            <li key={cf.id} className="card p-4">
-              <ContextFileForm
-                initial={cf}
-                onSubmit={(data) => updateMutation.mutate({ id: cf.id, data })}
-                loading={updateMutation.isPending}
-                error={updateMutation.error?.message}
-                onCancel={() => setEditingId(null)}
-              />
-            </li>
-          ) : (
-            <ContextFileCard
-              key={cf.id}
-              file={cf}
-              onEdit={() => setEditingId(cf.id)}
-              onDelete={() => deleteMutation.mutate(cf.id)}
-            />
-          )
-        )}
-      </ul>
+      {isLoading ? (
+        <Skeleton style={{ height: 60 }} />
+      ) : files.length === 0 ? (
+        <EmptyState icon={FileText} title="No context files" description="Add files to provide context to your AI agent." />
+      ) : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {files.map((f) => (
+            <div key={f.id} className="card" style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <FileText size={13} color="#818cf8" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: "#c4c4d0" }}>{f.name}</div>
+                {f.description && <div style={{ fontSize: 11, color: "#50505f" }}>{f.description}</div>}
+              </div>
+              <button className="btn-ghost btn-sm" style={{ color: "#f87171", padding: "2px 4px" }} onClick={() => deleteMutation.mutate(f.id)}>
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function ContextFileCard({
-  file: cf,
-  onEdit,
-  onDelete,
-}: {
-  file: ContextFile;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <li className="card p-4 space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-white font-medium text-sm">{cf.name}</p>
-          {cf.description && (
-            <p className="text-gray-400 text-xs">{cf.description}</p>
-          )}
-          {cf.file_path && (
-            <p className="text-gray-600 text-xs font-mono">{cf.file_path}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {cf.content && (
-            <button
-              className="btn-ghost text-xs text-gray-500"
-              onClick={() => setExpanded((v) => !v)}
-            >
-              {expanded ? "Hide" : "Preview"}
-            </button>
-          )}
-          <button className="btn-ghost text-xs text-barq-400" onClick={onEdit}>Edit</button>
-          <button className="btn-ghost text-xs text-red-400" onClick={onDelete}>Delete</button>
-        </div>
-      </div>
-      {expanded && cf.content && (
-        <pre className="text-xs text-gray-400 bg-gray-950 rounded p-3 max-h-48 overflow-y-auto font-mono whitespace-pre-wrap break-all">
-          {cf.content}
-        </pre>
-      )}
-    </li>
-  );
-}
-
-function ContextFileForm({
-  initial,
-  onSubmit,
-  loading,
-  error,
-  onCancel,
-}: {
-  initial?: ContextFile;
-  onSubmit: (data: { name: string; file_path: string; content: string; description: string }) => void;
-  loading: boolean;
-  error?: string;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [filePath, setFilePath] = useState(initial?.file_path ?? "");
-  const [content, setContent] = useState(initial?.content ?? "");
-
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit({ name, file_path: filePath, content, description });
-      }}
-    >
-      <div className="grid grid-cols-2 gap-2">
-        <div className="col-span-2">
-          <input
-            className="input"
-            placeholder="Name * (e.g. Coding Conventions)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-        <input
-          className="input"
-          placeholder="Description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <input
-          className="input font-mono text-xs"
-          placeholder="File path (optional, relative to workspace)"
-          value={filePath}
-          onChange={(e) => setFilePath(e.target.value)}
-        />
-      </div>
-      <textarea
-        className="input resize-y font-mono text-xs"
-        rows={6}
-        placeholder="Paste inline content here — this is injected directly into the planning prompt…"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-      />
-      {error && <p className="text-red-400 text-xs">{error}</p>}
-      <div className="flex gap-2">
-        <button type="submit" className="btn-primary text-sm" disabled={loading}>
-          {loading ? "Saving…" : initial ? "Save Changes" : "Add Context File"}
-        </button>
-        <button type="button" className="btn-ghost text-sm" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
-// ─────────────────────────────────────────────
-// Task Templates Panel
-// ─────────────────────────────────────────────
-
-function TaskTemplatesPanel({ projectId }: { projectId: string }) {
+function TemplatesTab({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", title: "", description: "" });
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["templates", projectId],
@@ -318,11 +318,11 @@ function TaskTemplatesPanel({ projectId }: { projectId: string }) {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof templatesApi.create>[1]) =>
-      templatesApi.create(projectId, data),
+    mutationFn: () => templatesApi.create(projectId, form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["templates", projectId] });
       setShowForm(false);
+      setForm({ name: "", title: "", description: "" });
     },
   });
 
@@ -331,175 +331,56 @@ function TaskTemplatesPanel({ projectId }: { projectId: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["templates", projectId] }),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof templatesApi.update>[1] }) =>
-      templatesApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["templates", projectId] });
-      setEditingId(null);
-    },
-  });
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          Templates pre-fill the task form so you don't repeat common task structures.
-        </p>
-        <button className="btn-primary text-xs" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "+ New Template"}
+    <div style={{ padding: "16px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#7a7a90" }}>Task Templates</span>
+        <button className="btn-ghost btn-sm" onClick={() => setShowForm((v) => !v)}>
+          <Plus size={13} /> Add Template
         </button>
       </div>
-
       {showForm && (
-        <TemplateForm
-          onSubmit={(data) => createMutation.mutate(data)}
-          loading={createMutation.isPending}
-          error={createMutation.error?.message}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
-
-      {isLoading && <p className="text-gray-400 text-sm">Loading…</p>}
-
-      {!isLoading && templates.length === 0 && !showForm && (
-        <div className="card p-6 text-center text-gray-500 text-sm space-y-1">
-          <p className="text-xl">📋</p>
-          <p>No templates yet.</p>
-          <p className="text-xs text-gray-600">
-            Save common task structures like "Weekly report", "Code review",
-            or "Data export" to load them instantly.
-          </p>
+        <div className="card" style={{ padding: "12px", marginBottom: 12 }}>
+          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <input className="input" placeholder="Template name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required autoFocus />
+              <input className="input" placeholder="Default task title" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} required />
+              <textarea className="input" placeholder="Default task description" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" className="btn-primary btn-sm" disabled={createMutation.isPending}>Save</button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
-
-      <ul className="space-y-2">
-        {templates.map((t) =>
-          editingId === t.id ? (
-            <li key={t.id} className="card p-4">
-              <TemplateForm
-                initial={t}
-                onSubmit={(data) => updateMutation.mutate({ id: t.id, data })}
-                loading={updateMutation.isPending}
-                error={updateMutation.error?.message}
-                onCancel={() => setEditingId(null)}
-              />
-            </li>
-          ) : (
-            <TemplateCard
-              key={t.id}
-              template={t}
-              onEdit={() => setEditingId(t.id)}
-              onDelete={() => deleteMutation.mutate(t.id)}
-              projectId={projectId}
-            />
-          )
-        )}
-      </ul>
+      {isLoading ? (
+        <Skeleton style={{ height: 60 }} />
+      ) : templates.length === 0 ? (
+        <EmptyState icon={Layout} title="No templates" description="Create task templates for common workflows." />
+      ) : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {templates.map((t) => (
+            <div key={t.id} className="card" style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <Layout size={13} color="#818cf8" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: "#c4c4d0" }}>{t.name}</div>
+                {t.description && <div style={{ fontSize: 11, color: "#50505f" }}>{t.description}</div>}
+              </div>
+              <button
+                className="btn-ghost btn-sm"
+                style={{ fontSize: 11 }}
+                onClick={() => navigate(`/projects/${projectId}/tasks?template=${t.id}`)}
+              >
+                Use
+              </button>
+              <button className="btn-ghost btn-sm" style={{ color: "#f87171", padding: "2px 4px" }} onClick={() => deleteMutation.mutate(t.id)}>
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  );
-}
-
-function TemplateCard({
-  template: t,
-  onEdit,
-  onDelete,
-  projectId,
-}: {
-  template: TaskTemplate;
-  onEdit: () => void;
-  onDelete: () => void;
-  projectId: string;
-}) {
-  return (
-    <li className="card p-4 space-y-1.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-white font-medium text-sm">{t.name}</p>
-          <p className="text-barq-300 text-xs truncate">
-            "{t.title}"
-          </p>
-          {t.description && (
-            <p className="text-gray-400 text-xs truncate">{t.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            to={`/projects/${projectId}/tasks?template=${t.id}`}
-            className="btn-primary text-xs"
-          >
-            Use
-          </Link>
-          <button className="btn-ghost text-xs text-barq-400" onClick={onEdit}>Edit</button>
-          <button className="btn-ghost text-xs text-red-400" onClick={onDelete}>Delete</button>
-        </div>
-      </div>
-    </li>
-  );
-}
-
-function TemplateForm({
-  initial,
-  onSubmit,
-  loading,
-  error,
-  onCancel,
-}: {
-  initial?: TaskTemplate;
-  onSubmit: (data: { name: string; title: string; description: string; provider_id: string }) => void;
-  loading: boolean;
-  error?: string;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [title, setTitle] = useState(initial?.title ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [providerId, setProviderId] = useState(initial?.provider_id ?? "");
-
-  return (
-    <form
-      className="space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit({ name, title, description, provider_id: providerId });
-      }}
-    >
-      <input
-        className="input"
-        placeholder="Template name * (e.g. Weekly Summary)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-      />
-      <input
-        className="input"
-        placeholder="Task title * (pre-fills the title field)"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        required
-      />
-      <textarea
-        className="input resize-y"
-        rows={3}
-        placeholder="Task description (optional pre-fill)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
-      <input
-        className="input text-xs font-mono"
-        placeholder="Provider profile ID (optional override)"
-        value={providerId}
-        onChange={(e) => setProviderId(e.target.value)}
-      />
-      {error && <p className="text-red-400 text-xs">{error}</p>}
-      <div className="flex gap-2">
-        <button type="submit" className="btn-primary text-sm" disabled={loading}>
-          {loading ? "Saving…" : initial ? "Save Changes" : "Create Template"}
-        </button>
-        <button type="button" className="btn-ghost text-sm" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
   );
 }
