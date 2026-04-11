@@ -61,11 +61,17 @@ func main() {
 	registry.Register(zaiprovider.New(120)) // openai
 	logger.Info("providers registered", "providers", registry.List())
 
+	// ── Tool registry ──────────────────────────────────────────────────
+	toolRegistry := service.BuildRegistry()
+	logger.Info("tools registered", "tools", toolRegistry.List())
+
 	// ── Repositories ──────────────────────────────────────────────────
 	workspaceRepo       := sqlite.NewWorkspaceStore(db)
 	projectRepo         := sqlite.NewProjectStore(db)
 	taskRepo            := sqlite.NewTaskStore(db)
 	providerProfileRepo := sqlite.NewProviderProfileStore(db)
+	approvalRepo        := sqlite.NewApprovalStore(db)
+	eventRepo           := sqlite.NewEventStore(db)
 
 	// ── Services ──────────────────────────────────────────────────────
 	svcs := server.Services{
@@ -73,6 +79,7 @@ func main() {
 		Projects:   service.NewProjectService(projectRepo, workspaceRepo),
 		Tasks:      service.NewTaskService(taskRepo, projectRepo),
 		Providers:  service.NewProviderService(providerProfileRepo, registry, cfg),
+		Tools:      service.NewToolService(toolRegistry, approvalRepo, eventRepo),
 	}
 
 	addr := ":7331"
