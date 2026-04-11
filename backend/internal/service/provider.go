@@ -29,7 +29,6 @@ type ProviderService struct {
 	cfg      *config.Config
 }
 
-// NewProviderService creates a ProviderService.
 func NewProviderService(
 	repo ProviderProfileRepository,
 	registry *provider.Registry,
@@ -38,13 +37,20 @@ func NewProviderService(
 	return &ProviderService{repo: repo, registry: registry, cfg: cfg}
 }
 
-// ─────────────────────────────────────────────
-// Provider profile CRUD
-// ─────────────────────────────────────────────
+// resolveKey returns the API key for a profile. Direct key takes precedence over env var.
+func resolveKey(p *domain.ProviderProfile) string {
+	if p.APIKey != "" {
+		return p.APIKey
+	}
+	if p.APIKeyEnv != "" {
+		return os.Getenv(p.APIKeyEnv)
+	}
+	return ""
+}
 
-// Create saves a new provider profile. The API key must be referenced by env var name.
+// Create saves a new provider profile.
 func (s *ProviderService) Create(ctx context.Context,
-	name, providerName, baseURL, apiKeyEnv, model string,
+	name, providerName, baseURL, apiKeyEnv, apiKey, model string,
 	timeoutSec int, isDefault bool,
 ) (*domain.ProviderProfile, error) {
 	if name == "" {
@@ -67,6 +73,7 @@ func (s *ProviderService) Create(ctx context.Context,
 		ProviderName: providerName,
 		BaseURL:      baseURL,
 		APIKeyEnv:    apiKeyEnv,
+		APIKey:       apiKey,
 		Model:        model,
 		TimeoutSec:   timeoutSec,
 		IsDefault:    isDefault,
@@ -79,19 +86,16 @@ func (s *ProviderService) Create(ctx context.Context,
 	return p, nil
 }
 
-// Get retrieves a provider profile by ID.
 func (s *ProviderService) Get(ctx context.Context, id string) (*domain.ProviderProfile, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
-// List returns all saved provider profiles.
 func (s *ProviderService) List(ctx context.Context) ([]*domain.ProviderProfile, error) {
 	return s.repo.List(ctx)
 }
 
-// Update replaces the mutable fields of a provider profile.
 func (s *ProviderService) Update(ctx context.Context,
-	id, name, providerName, baseURL, apiKeyEnv, model string,
+	id, name, providerName, baseURL, apiKeyEnv, apiKey, model string,
 	timeoutSec int, isDefault bool,
 ) (*domain.ProviderProfile, error) {
 	p, err := s.repo.GetByID(ctx, id)
@@ -102,6 +106,10 @@ func (s *ProviderService) Update(ctx context.Context,
 	p.ProviderName = providerName
 	p.BaseURL = baseURL
 	p.APIKeyEnv = apiKeyEnv
+	// Only overwrite key if a new one was provided (empty string = keep existing).
+	if apiKey != "" {
+		p.APIKey = apiKey
+	}
 	p.Model = model
 	p.TimeoutSec = timeoutSec
 	p.IsDefault = isDefault
@@ -112,26 +120,20 @@ func (s *ProviderService) Update(ctx context.Context,
 	return p, nil
 }
 
-// Delete removes a provider profile.
 func (s *ProviderService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-// ─────────────────────────────────────────────
-// Available provider listing (from registry + config)
-// ─────────────────────────────────────────────
-
 // AvailableProvider describes a provider known to the registry.
 type AvailableProvider struct {
-	Name     string `json:"name"`
-	Enabled  bool   `json:"enabled"`
-	BaseURL  string `json:"base_url"`
-	Model    string `json:"model"`
-	HasKey   bool   `json:"has_key"` // true if the env var is set (non-empty)
-	KeyEnv   string `json:"key_env"` // env var name — never the value
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	BaseURL string `json:"base_url"`
+	Model   string `json:"model"`
+	HasKey  bool   `json:"has_key"`
+	KeyEnv  string `json:"key_env"`
 }
 
-// ListAvailable returns all registered providers with their config status.
 func (s *ProviderService) ListAvailable() []AvailableProvider {
 	names := s.registry.List()
 	out := make([]AvailableProvider, 0, len(names))
@@ -150,30 +152,21 @@ func (s *ProviderService) ListAvailable() []AvailableProvider {
 	return out
 }
 
-// ─────────────────────────────────────────────
-// Test connection
-// ─────────────────────────────────────────────
-
 // TestResult is returned from TestConnection.
 type TestResult struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
 }
 
-// TestConnection sends a tiny probe request to verify a provider config works.
-// The API key is resolved here from the env var — it is NEVER returned or logged.
-func (s *ProviderService) TestConnection(ctx context.Context, providerName, baseURL, apiKeyEnv, model string) TestResult {
+// TestConnection verifies a provider config using a direct API key or env var.
+func (s *ProviderService) TestConnection(ctx context.Context, providerName, baseURL, apiKey, model string) TestResult {
 	p, ok := s.registry.Get(providerName)
 	if !ok {
 		return TestResult{OK: false, Message: fmt.Sprintf("unknown provider: %s", providerName)}
 	}
 
-	apiKey := os.Getenv(apiKeyEnv)
 	if apiKey == "" {
-		return TestResult{
-			OK:      false,
-			Message: fmt.Sprintf("env var %s is not set", apiKeyEnv),
-		}
+		return TestResult{OK: false, Message: "API key is required to test connection"}
 	}
 
 	if baseURL == "" {
@@ -190,9 +183,9 @@ func (s *ProviderService) TestConnection(ctx context.Context, providerName, base
 	cfg := provider.ProviderConfig{
 		ProviderName: providerName,
 		BaseURL:      baseURL,
-		APIKey:       apiKey, // resolved here, never forwarded
+		APIKey:       apiKey,
 		Model:        model,
-		TimeoutSec:   15, // short timeout for probe
+		TimeoutSec:   15,
 		ExtraHeaders: map[string]string{"Accept-Language": "en-US,en"},
 	}
 
@@ -214,7 +207,6 @@ func (s *ProviderService) TestConnection(ctx context.Context, providerName, base
 		return TestResult{OK: false, Message: sanitizeError(err)}
 	}
 
-	// Drain the channel to avoid goroutine leak.
 	var got string
 	for chunk := range ch {
 		if chunk.Done {
@@ -229,12 +221,18 @@ func (s *ProviderService) TestConnection(ctx context.Context, providerName, base
 	return TestResult{OK: true, Message: fmt.Sprintf("Connected. Response: %s", strings.TrimSpace(got))}
 }
 
-// sanitizeError removes any accidental secret leakage from error strings.
-// Practical safety net — keys should never appear in errors from our code,
-// but third-party HTTP libraries may include request headers in errors.
+// TestProfile tests the connection for a saved profile using its stored key.
+func (s *ProviderService) TestProfile(ctx context.Context, profileID string) TestResult {
+	p, err := s.repo.GetByID(ctx, profileID)
+	if err != nil {
+		return TestResult{OK: false, Message: "profile not found"}
+	}
+	key := resolveKey(p)
+	return s.TestConnection(ctx, p.ProviderName, p.BaseURL, key, p.Model)
+}
+
 func sanitizeError(err error) string {
 	msg := err.Error()
-	// Remove Bearer tokens if somehow present
 	if idx := strings.Index(msg, "Bearer "); idx >= 0 {
 		msg = msg[:idx] + "Bearer [REDACTED]"
 	}
