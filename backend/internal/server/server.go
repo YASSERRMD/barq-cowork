@@ -18,6 +18,7 @@ type Services struct {
 	Projects   *service.ProjectService
 	Tasks      *service.TaskService
 	Providers  *service.ProviderService
+	Tools      *service.ToolService
 }
 
 // Server wraps the HTTP router and its configuration.
@@ -73,6 +74,7 @@ func (s *Server) routes() {
 		v1.NewProjectHandler(s.services.Projects).Register(r)
 		v1.NewTaskHandler(s.services.Tasks).Register(r)
 		v1.NewProviderHandler(s.services.Providers).Register(r)
+		v1.NewToolHandler(s.services.Tools).Register(r)
 	})
 }
 

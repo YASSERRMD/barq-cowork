@@ -61,6 +61,64 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body.data as T;
 }
 
+// ──────────────────── Tools + Approvals + Events ────────────────────
+
+export interface ToolInfo {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+export interface ToolResult {
+  status: "ok" | "error" | "denied" | "pending";
+  content: string;
+  data?: unknown;
+  error?: string;
+}
+
+export interface Approval {
+  id: string;
+  task_id: string;
+  tool_name: string;
+  action: string;
+  payload: string;
+  status: "pending" | "approved" | "rejected";
+  resolution?: string;
+  created_at: string;
+}
+
+export interface TaskEvent {
+  id: string;
+  task_id: string;
+  type: string;
+  payload: string;
+  created_at: string;
+}
+
+export const toolsApi = {
+  list: (): Promise<ToolInfo[]> => request("/tools"),
+
+  invoke: (data: {
+    task_id?: string;
+    workspace_root: string;
+    tool_name: string;
+    args_json: string;
+    require_approval?: boolean;
+  }): Promise<ToolResult> =>
+    request("/tools/invoke", { method: "POST", body: JSON.stringify(data) }),
+
+  listApprovals: (): Promise<Approval[]> => request("/approvals"),
+
+  resolveApproval: (id: string, resolution: "approved" | "rejected"): Promise<void> =>
+    request(`/approvals/${id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ resolution }),
+    }),
+
+  listEvents: (taskId: string): Promise<TaskEvent[]> =>
+    request(`/tasks/${taskId}/events`),
+};
+
 // ──────────────────── Workspaces ────────────────────
 
 export const workspacesApi = {
