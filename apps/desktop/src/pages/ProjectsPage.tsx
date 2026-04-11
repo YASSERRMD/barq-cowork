@@ -74,14 +74,14 @@ export function ProjectsPage() {
       {showForm && (
         <div
           style={{
-            background: "#16161f",
-            borderBottom: "1px solid #2a2a3a",
+            background: "var(--surface-2)",
+            borderBottom: "1px solid var(--border)",
             padding: "16px 20px",
           }}
         >
           <form onSubmit={handleCreate}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#c4c4d0" }}>New Project</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>New Project</span>
               <button type="button" className="btn-ghost btn-sm" onClick={() => setShowForm(false)}>
                 <X size={13} />
               </button>
@@ -187,9 +187,9 @@ function ProjectRow({
         padding: "10px 20px",
         cursor: "pointer",
         transition: "background 120ms",
-        borderBottom: "1px solid rgba(42,42,58,0.5)",
+        borderBottom: "1px solid var(--border)",
       }}
-      onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.background = "#16161f")}
+      onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)")}
       onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.background = "transparent")}
     >
       {/* Icon */}
@@ -211,20 +211,20 @@ function ProjectRow({
 
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e2e8" }}>{project.name}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{project.name}</div>
         {project.description && (
-          <div style={{ fontSize: 12, color: "#50505f", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {project.description}
           </div>
         )}
       </div>
 
       {/* Date */}
-      <div style={{ fontSize: 11, color: "#40404f", flexShrink: 0, whiteSpace: "nowrap" }}>
+      <div style={{ fontSize: 11, color: "var(--text-faint)", flexShrink: 0, whiteSpace: "nowrap" }}>
         {new Date(project.created_at).toLocaleDateString()}
       </div>
 
-      <ChevronRight size={14} color="#3a3a4e" />
+      <ChevronRight size={14} color="var(--text-faint)" />
     </div>
   );
 }
