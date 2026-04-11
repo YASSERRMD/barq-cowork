@@ -63,8 +63,8 @@
       },
       "nsis": {
         "installerIcon": "icons/icon.ico",
-        "headerImage": "icons/128x128.png",
-        "sidebarImage": "icons/128x128@2x.png",
+        "headerImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp",
         "installMode": "perMachine",
         "languages": ["English"],
         "displayLanguageSelector": false
