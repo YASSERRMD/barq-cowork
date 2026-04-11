@@ -129,21 +129,28 @@ export function TaskRunPage() {
       <TopBar title={task.title} />
 
       {/* Breadcrumb */}
-      <div style={{ padding: "8px 20px", borderBottom: "1px solid #2a2a3a" }}>
-        <Breadcrumb items={[
-          { label: "Projects", to: "/projects" },
-          { label: "Tasks", to: `/projects/${task.project_id}/tasks` },
-          { label: task.title },
-        ]} />
+      <div style={{ padding: "8px 20px", borderBottom: "1px solid var(--border)" }}>
+        <Breadcrumb items={
+          task.project_id
+            ? [
+                { label: "Projects", to: "/projects" },
+                { label: "Tasks", to: `/projects/${task.project_id}/tasks` },
+                { label: task.title },
+              ]
+            : [
+                { label: "Runs", to: "/runs" },
+                { label: task.title },
+              ]
+        } />
       </div>
 
       {/* Approval banner */}
       {pendingApprovals.length > 0 && (
-        <div style={{ background: "rgba(245,158,11,0.08)", borderBottom: "1px solid rgba(245,158,11,0.2)", padding: "10px 20px" }}>
+        <div style={{ background: "var(--yellow-dim)", borderBottom: "1px solid rgba(251,191,36,0.2)", padding: "10px 20px" }}>
           {pendingApprovals.map((approval) => (
             <div key={approval.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 12, color: "#fbbf24", fontWeight: 600 }}>Approval Required:</span>
-              <span style={{ fontSize: 12, color: "#c4c4d0", flex: 1 }}>
+              <span style={{ fontSize: 12, color: "var(--yellow)", fontWeight: 600 }}>Approval Required:</span>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)", flex: 1 }}>
                 Tool <strong>{approval.tool_name}</strong> — {approval.action}
               </span>
               <button
@@ -329,11 +336,11 @@ function StepItem({ step, expanded, onToggle }: { step: PlanStep; expanded: bool
             cursor: hasOutput ? "pointer" : "default",
             padding: "4px 8px",
             borderRadius: 4,
-            background: step.status === "running" ? "rgba(245,158,11,0.05)" : "transparent",
+            background: step.status === "running" ? "var(--yellow-dim)" : "transparent",
             transition: "background 120ms",
           }}
         >
-          <span style={{ fontSize: 13, color: step.status === "running" ? "#e2e2e8" : "#c4c4d0", flex: 1, fontWeight: step.status === "running" ? 600 : 400 }}>
+          <span style={{ fontSize: 13, color: step.status === "running" ? "var(--text-primary)" : "var(--text-secondary)", flex: 1, fontWeight: step.status === "running" ? 600 : 400 }}>
             {step.title}
           </span>
           {step.tool_name && (
