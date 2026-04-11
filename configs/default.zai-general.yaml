@@ -1,0 +1,32 @@
+# Alternative preset: Z.AI general chat API (non-coding endpoint)
+app:
+  name: Barq Cowork
+  env: development
+  data_dir: ~/.barq-cowork
+
+llm:
+  default_provider: zai
+  providers:
+    zai:
+      enabled: true
+      base_url: https://api.z.ai/api/paas/v4
+      api_key_env: ZAI_API_KEY
+      model: glm-5.1
+      timeout_sec: 120
+      extra_headers:
+        Accept-Language: en-US,en
+    openai:
+      enabled: true
+      base_url: https://api.openai.com/v1
+      api_key_env: OPENAI_API_KEY
+      model: gpt-4.1
+      timeout_sec: 120
+      extra_headers: {}
+
+storage:
+  driver: sqlite
+  sqlite_path: ~/.barq-cowork/barq-cowork.db
+
+security:
+  require_approval_for_destructive_actions: true
+  allowed_workspace_roots: []
