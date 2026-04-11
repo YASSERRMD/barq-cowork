@@ -17,6 +17,7 @@ type Services struct {
 	Workspaces *service.WorkspaceService
 	Projects   *service.ProjectService
 	Tasks      *service.TaskService
+	Providers  *service.ProviderService
 }
 
 // Server wraps the HTTP router and its configuration.
@@ -71,6 +72,7 @@ func (s *Server) routes() {
 		v1.NewWorkspaceHandler(s.services.Workspaces).Register(r)
 		v1.NewProjectHandler(s.services.Projects).Register(r)
 		v1.NewTaskHandler(s.services.Tasks).Register(r)
+		v1.NewProviderHandler(s.services.Providers).Register(r)
 	})
 }
 

@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/barq-cowork/barq-cowork/internal/config"
+	"github.com/barq-cowork/barq-cowork/internal/provider"
+	zaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/openai"
+	oaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/zai"
 	"github.com/barq-cowork/barq-cowork/internal/server"
 	"github.com/barq-cowork/barq-cowork/internal/service"
 	"github.com/barq-cowork/barq-cowork/internal/store/sqlite"
@@ -46,21 +49,30 @@ func main() {
 	// Open SQLite database (runs migrations automatically).
 	db, err := sqlite.Open(dbPath)
 	if err != nil {
-		logger.Error("failed to open database", "error", err, "path", dbPath)
+		logger.Error("failed to open database", "path", dbPath, "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 	logger.Info("database ready", "path", dbPath)
 
-	// Wire repositories and services.
-	workspaceRepo := sqlite.NewWorkspaceStore(db)
-	projectRepo := sqlite.NewProjectStore(db)
-	taskRepo := sqlite.NewTaskStore(db)
+	// ── Provider registry ──────────────────────────────────────────────
+	registry := provider.NewRegistry()
+	registry.Register(oaiprovider.New(120)) // zai
+	registry.Register(zaiprovider.New(120)) // openai
+	logger.Info("providers registered", "providers", registry.List())
 
+	// ── Repositories ──────────────────────────────────────────────────
+	workspaceRepo       := sqlite.NewWorkspaceStore(db)
+	projectRepo         := sqlite.NewProjectStore(db)
+	taskRepo            := sqlite.NewTaskStore(db)
+	providerProfileRepo := sqlite.NewProviderProfileStore(db)
+
+	// ── Services ──────────────────────────────────────────────────────
 	svcs := server.Services{
 		Workspaces: service.NewWorkspaceService(workspaceRepo),
 		Projects:   service.NewProjectService(projectRepo, workspaceRepo),
 		Tasks:      service.NewTaskService(taskRepo, projectRepo),
+		Providers:  service.NewProviderService(providerProfileRepo, registry, cfg),
 	}
 
 	addr := ":7331"
