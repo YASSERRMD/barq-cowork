@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi, projectsApi, templatesApi, type Task, type TaskTemplate } from "../lib/api";
+import { Play, Plus, X, Trash2, ArrowRight } from "lucide-react";
 import clsx from "clsx";
+import { tasksApi, projectsApi, templatesApi, projectsApi as pa, type Task, type TaskTemplate } from "../lib/api";
+import { TopBar } from "../components/TopBar";
+import { EmptyState, SkeletonCard } from "../components/ui";
+import { Breadcrumb } from "../components/Breadcrumb";
 
 const STATUS_BADGE: Record<string, string> = {
   pending:   "badge-gray",
@@ -13,13 +17,17 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: "badge-gray",
 };
 
+const STATUS_FILTERS = ["all", "pending", "planning", "running", "completed", "failed"] as const;
+type StatusFilter = typeof STATUS_FILTERS[number];
+
 export function TasksPage({ globalView }: { globalView?: boolean }) {
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  // Auto-open form when a ?template= param is present
   const templateId = searchParams.get("template") ?? undefined;
   useEffect(() => {
     if (templateId) setShowForm(true);
@@ -32,146 +40,201 @@ export function TasksPage({ globalView }: { globalView?: boolean }) {
   });
 
   const { data: tasks = [], isLoading, error } = useQuery({
-    queryKey: ["tasks", projectId],
-    queryFn: () => tasksApi.listByProject(projectId!),
-    enabled: !!projectId,
-    refetchInterval: 5000, // poll every 5s while tasks may be running
+    queryKey: ["tasks", projectId ?? "global"],
+    queryFn: () => (projectId ? tasksApi.listByProject(projectId) : Promise.resolve<Task[]>([])),
+    enabled: !!projectId || globalView,
+    refetchInterval: 5000,
   });
 
   const createMutation = useMutation({
     mutationFn: tasksApi.create,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+    onSuccess: (task) => {
+      qc.invalidateQueries({ queryKey: ["tasks", projectId ?? "global"] });
       setShowForm(false);
+      navigate(`/tasks/${task.id}/run`);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: tasksApi.delete,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId ?? "global"] }),
   });
 
-  // Show general tasks page if no projectId (top-level nav)
-  if (!projectId) {
-    return (
-      <div className="p-6">
-        <h1 className="text-xl font-semibold text-white mb-4">Tasks</h1>
-        <p className="text-gray-400 text-sm">
-          Select a project from{" "}
-          <Link to="/" className="text-barq-400 hover:underline">
-            Workspaces
-          </Link>{" "}
-          to view its tasks.
-        </p>
-      </div>
-    );
-  }
+  const filtered = statusFilter === "all" ? tasks : tasks.filter((t) => t.status === statusFilter);
+
+  const title = globalView ? "All Runs" : (project?.name ?? "Tasks");
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <TopBar
+        title={title}
+        subtitle={tasks.length > 0 ? `${tasks.length} task${tasks.length === 1 ? "" : "s"}` : undefined}
+        actions={
+          projectId && (
+            <button className="btn-primary btn-sm" onClick={() => setShowForm((v) => !v)}>
+              <Plus size={13} />
+              New Task
+            </button>
+          )
+        }
+      />
+
       {/* Breadcrumb */}
-      <nav className="text-xs text-gray-500 flex items-center gap-1">
-        <Link to="/" className="hover:text-gray-300">Workspaces</Link>
-        <span>/</span>
-        {project && (
-          <>
-            <Link
-              to={`/workspaces/${project.workspace_id}/projects`}
-              className="hover:text-gray-300"
-            >
-              Projects
-            </Link>
-            <span>/</span>
-          </>
-        )}
-        <span className="text-gray-300">{project?.name ?? projectId}</span>
-      </nav>
-
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-white">Tasks</h1>
-        <div className="flex items-center gap-2">
-          <Link to={`/projects/${projectId}/memory`} className="btn-ghost text-xs text-gray-400">
-            Memory
-          </Link>
-          <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "Cancel" : "+ New Task"}
-          </button>
+      {projectId && project && (
+        <div style={{ padding: "8px 20px", borderBottom: "1px solid #2a2a3a" }}>
+          <Breadcrumb items={[
+            { label: "Projects", to: "/projects" },
+            { label: project.name },
+          ]} />
         </div>
-      </div>
+      )}
 
-      {showForm && (
+      {/* Create form */}
+      {showForm && projectId && (
         <CreateTaskForm
           projectId={projectId}
           templateId={templateId}
           onSubmit={(data) => createMutation.mutate(data)}
+          onCancel={() => setShowForm(false)}
           loading={createMutation.isPending}
           error={createMutation.error?.message}
         />
       )}
 
-      {isLoading && <p className="text-gray-400 text-sm">Loading…</p>}
-      {error && <p className="text-red-400 text-sm">Failed to load tasks.</p>}
-
-      {!isLoading && !error && tasks.length === 0 && (
-        <p className="text-gray-400 text-sm">No tasks yet. Submit one to get started.</p>
+      {/* Status filter */}
+      {tasks.length > 0 && (
+        <div style={{ padding: "8px 20px", display: "flex", gap: 6, borderBottom: "1px solid #2a2a3a" }}>
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              style={{
+                padding: "3px 10px",
+                borderRadius: 4,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                border: "1px solid",
+                transition: "all 120ms",
+                background: statusFilter === s ? "#22222f" : "transparent",
+                borderColor: statusFilter === s ? "#3a3a4e" : "transparent",
+                color: statusFilter === s ? "#c4c4d0" : "#50505f",
+              }}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
       )}
 
-      <ul className="space-y-2">
-        {tasks.map((t) => (
-          <TaskCard
-            key={t.id}
-            task={t}
-            onDelete={() => deleteMutation.mutate(t.id)}
+      {/* Task list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        {!projectId && !globalView ? (
+          <EmptyState
+            icon={Play}
+            title="Select a project"
+            description="Choose a project from the sidebar to view and manage its tasks."
+            action={
+              <Link to="/projects" className="btn-primary">
+                Go to Projects
+              </Link>
+            }
           />
-        ))}
-      </ul>
+        ) : isLoading ? (
+          <div style={{ padding: "16px 20px", display: "grid", gap: 8 }}>
+            {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : error ? (
+          <div style={{ padding: 20 }}>
+            <p style={{ color: "#f87171", fontSize: 13 }}>Failed to load tasks.</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={Play}
+            title={statusFilter === "all" ? "No tasks yet" : `No ${statusFilter} tasks`}
+            description={statusFilter === "all" ? "Create a task to start an AI agent run." : "Try a different filter."}
+            action={
+              statusFilter === "all" && projectId ? (
+                <button className="btn-primary" onClick={() => setShowForm(true)}>
+                  <Plus size={14} />
+                  Create Task
+                </button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <div>
+            {filtered.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                onDelete={() => deleteMutation.mutate(task.id)}
+                onClick={() => navigate(`/tasks/${task.id}/run`)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function TaskCard({
-  task: t,
+function TaskRow({
+  task,
   onDelete,
+  onClick,
 }: {
   task: Task;
   onDelete: () => void;
+  onClick: () => void;
 }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <li className="card p-4 space-y-2 hover:border-gray-700 transition-colors">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            to={`/tasks/${t.id}/run`}
-            className="text-white font-medium truncate hover:text-barq-300 transition-colors block"
-          >
-            {t.title}
-          </Link>
-          {t.description && (
-            <p className="text-gray-400 text-xs mt-0.5 truncate">{t.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={clsx(STATUS_BADGE[t.status] ?? "badge-gray")}>
-            {t.status}
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 20px",
+        cursor: "pointer",
+        background: hovered ? "#16161f" : "transparent",
+        borderBottom: "1px solid rgba(42,42,58,0.5)",
+        transition: "background 120ms",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e2e8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {task.title}
           </span>
-          <Link
-            to={`/tasks/${t.id}/run`}
-            className="btn-ghost text-xs text-barq-400 hover:text-barq-300"
-          >
-            {t.status === "pending" ? "Run" : "View"}
-          </Link>
-          <button
-            className="btn-ghost text-xs text-red-400 hover:text-red-300"
-            onClick={onDelete}
-          >
-            Delete
-          </button>
+          <span className={STATUS_BADGE[task.status] ?? "badge-gray"}>{task.status}</span>
         </div>
+        {task.description && (
+          <div style={{ fontSize: 12, color: "#50505f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {task.description}
+          </div>
+        )}
       </div>
-      <p className="text-gray-600 text-xs font-mono">
-        {new Date(t.created_at).toLocaleString()}
-      </p>
-    </li>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: "#40404f" }}>
+          {new Date(task.created_at).toLocaleDateString()}
+        </span>
+        {hovered && (
+          <button
+            className="btn-ghost btn-sm"
+            style={{ color: "#f87171", padding: "3px 6px" }}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
+        <ArrowRight size={14} color={hovered ? "#818cf8" : "#3a3a4e"} />
+      </div>
+    </div>
   );
 }
 
@@ -179,17 +242,14 @@ function CreateTaskForm({
   projectId,
   templateId,
   onSubmit,
+  onCancel,
   loading,
   error,
 }: {
   projectId: string;
   templateId?: string;
-  onSubmit: (data: {
-    project_id: string;
-    title: string;
-    description: string;
-    provider_id?: string;
-  }) => void;
+  onSubmit: (data: { project_id: string; title: string; description: string; provider_id?: string }) => void;
+  onCancel: () => void;
   loading: boolean;
   error?: string;
 }) {
@@ -197,78 +257,82 @@ function CreateTaskForm({
   const [description, setDescription] = useState("");
   const [providerId, setProviderId] = useState("");
 
-  // Load templates for this project so user can pick one.
   const { data: templates = [] } = useQuery({
     queryKey: ["templates", projectId],
     queryFn: () => templatesApi.list(projectId),
     enabled: !!projectId,
   });
 
-  // Apply a template (including the one from URL params on mount).
   const applyTemplate = (t: TaskTemplate) => {
     setTitle(t.title);
     setDescription(t.description);
     setProviderId(t.provider_id);
   };
 
-  // Auto-apply template from URL on first render.
   useEffect(() => {
     if (templateId && templates.length > 0) {
       const t = templates.find((tmpl) => tmpl.id === templateId);
       if (t) applyTemplate(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, templates.length]);
 
   return (
-    <form
-      className="card p-4 space-y-3"
-      onSubmit={(e) => {
+    <div style={{ background: "#16161f", borderBottom: "1px solid #2a2a3a", padding: "16px 20px" }}>
+      <form onSubmit={(e) => {
         e.preventDefault();
         onSubmit({ project_id: projectId, title, description, provider_id: providerId || undefined });
-      }}
-    >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-300">New Task</h2>
-        {templates.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Load template:</span>
-            <select
-              className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-barq-500"
-              defaultValue=""
-              onChange={(e) => {
-                const t = templates.find((tmpl) => tmpl.id === e.target.value);
-                if (t) applyTemplate(t);
-              }}
-            >
-              <option value="" disabled>Select…</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#c4c4d0" }}>New Task</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {templates.length > 0 && (
+              <select
+                style={{
+                  background: "#1c1c27", border: "1px solid #2a2a3a", borderRadius: 4,
+                  fontSize: 12, color: "#c4c4d0", padding: "3px 8px", outline: "none",
+                }}
+                defaultValue=""
+                onChange={(e) => {
+                  const t = templates.find((tmpl) => tmpl.id === e.target.value);
+                  if (t) applyTemplate(t);
+                }}
+              >
+                <option value="" disabled>Load template...</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
+            <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>
+              <X size={13} />
+            </button>
           </div>
-        )}
-      </div>
-      <div className="space-y-2">
-        <input
-          className="input"
-          placeholder="Task title *"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-        />
-        <textarea
-          className="input resize-none"
-          rows={4}
-          placeholder="Describe what you want the agent to accomplish…"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-      {error && <p className="text-red-400 text-xs">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={loading}>
-        {loading ? "Submitting…" : "Submit Task"}
-      </button>
-    </form>
+        </div>
+        <div style={{ display: "grid", gap: 10 }}>
+          <input
+            className="input"
+            placeholder="Task title *"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+            required
+          />
+          <textarea
+            className="input"
+            placeholder="Describe what you want the agent to accomplish..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            style={{ minHeight: 80 }}
+          />
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" className="btn-secondary btn-sm" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="btn-primary btn-sm" disabled={loading || !title.trim()}>
+              {loading ? "Creating..." : "Create & Run"}
+            </button>
+          </div>
+        </div>
+        {error && <p style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>{error}</p>}
+      </form>
+    </div>
   );
 }
