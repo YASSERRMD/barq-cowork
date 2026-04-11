@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { WorkspacesPage } from "./pages/WorkspacesPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { TasksPage } from "./pages/TasksPage";
+import { TaskRunPage } from "./pages/TaskRunPage";
 import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { LogsPage } from "./pages/LogsPage";
@@ -38,6 +39,9 @@ export default function App() {
           <Route path="/"                                  element={<WorkspacesPage />} />
           <Route path="/workspaces/:workspaceId/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId/tasks"        element={<TasksPage />} />
+
+          {/* Task run / observation view */}
+          <Route path="/tasks/:taskId/run" element={<TaskRunPage />} />
 
           {/* Top-level nav stubs */}
           <Route path="/tasks"      element={<TasksPage />} />

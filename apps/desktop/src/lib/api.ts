@@ -233,6 +233,77 @@ export const providersApi = {
     request(`/provider-profiles/${id}/test`, { method: "POST" }),
 };
 
+// ──────────────────── Execution types ────────────────────
+
+export type StepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface PlanStep {
+  id: string;
+  plan_id: string;
+  order: number;
+  title: string;
+  description: string;
+  status: StepStatus;
+  tool_name: string;
+  tool_input: string;
+  tool_output: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface Plan {
+  id: string;
+  task_id: string;
+  steps: PlanStep[];
+  created_at: string;
+}
+
+export type ArtifactType = "markdown" | "json" | "file" | "log";
+
+export interface Artifact {
+  id: string;
+  task_id: string;
+  project_id: string;
+  name: string;
+  type: ArtifactType;
+  content_path: string;
+  content_inline?: string;
+  size: number;
+  created_at: string;
+}
+
+// ──────────────────── Execution API ────────────────────
+
+export const executionApi = {
+  runTask: (
+    taskId: string,
+    opts?: { workspace_root?: string; require_approval?: boolean }
+  ): Promise<void> =>
+    request(`/tasks/${taskId}/run`, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }),
+
+  getPlan: (taskId: string): Promise<Plan> =>
+    request(`/tasks/${taskId}/plan`),
+
+  listEvents: (taskId: string): Promise<TaskEvent[]> =>
+    request(`/tasks/${taskId}/events`),
+
+  listArtifactsByTask: (taskId: string): Promise<Artifact[]> =>
+    request(`/tasks/${taskId}/artifacts`),
+
+  listArtifactsByProject: (projectId: string): Promise<Artifact[]> =>
+    request(`/projects/${projectId}/artifacts`),
+
+  getArtifact: (id: string): Promise<Artifact> => request(`/artifacts/${id}`),
+};
+
 // ──────────────────── Tasks ────────────────────
 
 export const tasksApi = {
