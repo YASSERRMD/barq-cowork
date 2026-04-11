@@ -1,25 +1,26 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, ArrowDown } from "lucide-react";
 import { eventsApi, type TaskEvent } from "../lib/api";
-import clsx from "clsx";
+import { TopBar } from "../components/TopBar";
+
+// ── Event colour/label maps ─────────────────────────────────────
 
 const EVENT_COLOR: Record<string, string> = {
-  "task.created":    "text-gray-400",
-  "task.started":    "text-blue-400",
-  "task.completed":  "text-green-400",
-  "task.failed":     "text-red-400",
-  "step.started":    "text-yellow-300",
-  "step.completed":  "text-green-300",
-  "tool.called":     "text-barq-300",
-  "tool.result":     "text-barq-200",
-  "approval.needed": "text-orange-400",
-  "artifact.ready":  "text-purple-400",
-  "log.line":        "text-gray-400",
+  "task.created":    "var(--text-muted)",
+  "task.started":    "var(--blue)",
+  "task.completed":  "var(--green)",
+  "task.failed":     "var(--red)",
+  "step.started":    "var(--yellow)",
+  "step.completed":  "#86efac",
+  "tool.called":     "#a5b4fc",
+  "tool.result":     "#c7d2fe",
+  "approval.needed": "#fb923c",
+  "artifact.ready":  "var(--purple)",
+  "log.line":        "var(--text-muted)",
 };
 
-// Derive a short label for the event type so the log reads naturally.
 const EVENT_LABEL: Record<string, string> = {
   "task.created":    "TASK CREATED",
   "task.started":    "TASK STARTED",
@@ -34,6 +35,17 @@ const EVENT_LABEL: Record<string, string> = {
   "log.line":        "LOG         ",
 };
 
+const EVENT_CATEGORIES = [
+  { label: "All",      value: "" },
+  { label: "Tasks",    value: "task." },
+  { label: "Steps",    value: "step." },
+  { label: "Tools",    value: "tool." },
+  { label: "Approval", value: "approval." },
+  { label: "Artifact", value: "artifact." },
+];
+
+// ── Page ─────────────────────────────────────────────────────────
+
 export function LogsPage() {
   const [autoScroll, setAutoScroll] = useState(true);
   const [filterType, setFilterType] = useState("");
@@ -43,21 +55,19 @@ export function LogsPage() {
   const { data: events = [], isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ["events", "recent"],
     queryFn: () => eventsApi.listRecent(500),
-    refetchInterval: paused ? false : 3000,
+    refetchInterval: paused ? false : 3_000,
   });
 
   const displayed = filterType
     ? events.filter((e) => e.type.startsWith(filterType))
     : events;
 
-  // Auto-scroll to bottom when new events arrive.
   useEffect(() => {
     if (autoScroll && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [displayed.length, autoScroll]);
 
-  // Detect manual scroll up to pause auto-scroll.
   const handleScroll = () => {
     const el = logRef.current;
     if (!el) return;
@@ -65,114 +75,105 @@ export function LogsPage() {
     setAutoScroll(atBottom);
   };
 
-  const EVENT_CATEGORIES = [
-    { label: "All",      value: "" },
-    { label: "Tasks",    value: "task." },
-    { label: "Steps",    value: "step." },
-    { label: "Tools",    value: "tool." },
-    { label: "Approval", value: "approval." },
-    { label: "Artifact", value: "artifact." },
-  ];
+  const scrollToBottom = () => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+      setAutoScroll(true);
+    }
+  };
 
   return (
-    <div className="p-6 h-full flex flex-col gap-4" style={{ maxHeight: "calc(100vh - 1rem)" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Event Log</h1>
-          {dataUpdatedAt > 0 && (
-            <p className="text-xs text-gray-500 mt-0.5">
-              {displayed.length} events · refreshes every 3s
-              {paused && " (paused)"}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <TopBar
+        title="Event Log"
+        subtitle={dataUpdatedAt > 0 ? `${displayed.length} events` : undefined}
+        actions={
           <button
-            className={clsx(
-              "px-3 py-1.5 rounded text-xs font-medium transition-colors",
-              paused
-                ? "bg-green-700 hover:bg-green-600 text-white"
-                : "bg-gray-800 hover:bg-gray-700 text-gray-300"
-            )}
+            className={paused ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
+            style={{ gap: 5 }}
             onClick={() => setPaused((v) => !v)}
           >
-            {paused ? (
-              <><Play size={12} strokeWidth={2} /> Resume</>
-            ) : (
-              <><Pause size={12} strokeWidth={2} /> Pause</>
-            )}
+            {paused ? <><Play size={12} /> Resume</> : <><Pause size={12} /> Pause</>}
           </button>
-          <button
-            className="btn-ghost text-xs"
-            onClick={() => {
-              if (logRef.current) {
-                logRef.current.scrollTop = logRef.current.scrollHeight;
-                setAutoScroll(true);
-              }
-            }}
-          >
-            ↓ Bottom
-          </button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-1 flex-wrap shrink-0">
+      {/* Filter bar */}
+      <div style={{
+        padding: "8px 20px",
+        borderBottom: "1px solid var(--border)",
+        display: "flex", gap: 3, alignItems: "center", flexShrink: 0,
+      }}>
         {EVENT_CATEGORIES.map((cat) => (
           <button
             key={cat.value}
-            className={clsx(
-              "px-2.5 py-1 rounded text-xs transition-colors",
-              filterType === cat.value
-                ? "bg-barq-700 text-white"
-                : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
-            )}
             onClick={() => setFilterType(cat.value)}
+            style={{
+              padding: "3px 10px", borderRadius: 5, fontSize: 12, fontWeight: 500,
+              cursor: "pointer", border: "1px solid",
+              background: filterType === cat.value ? "var(--accent-dim)" : "transparent",
+              borderColor: filterType === cat.value ? "rgba(99,102,241,0.3)" : "transparent",
+              color: filterType === cat.value ? "#a5b4fc" : "var(--text-faint)",
+              transition: "all 120ms",
+            }}
           >
             {cat.label}
           </button>
         ))}
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-faint)" }}>
+          {paused ? "Paused" : "Live · 3s"}
+        </span>
       </div>
 
       {/* Log terminal */}
       <div
         ref={logRef}
         onScroll={handleScroll}
-        className="flex-1 card bg-gray-950 rounded-lg overflow-y-auto font-mono text-xs min-h-0"
+        style={{
+          flex: 1, overflowY: "auto",
+          background: "var(--bg)",
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 12, lineHeight: 1.7,
+          minHeight: 0,
+        }}
       >
         {isLoading && (
-          <p className="p-4 text-gray-500">[barq-cowork] Loading events…</p>
-        )}
-        {error && (
-          <p className="p-4 text-red-500">[barq-cowork] Failed to load events.</p>
-        )}
-        {!isLoading && !error && displayed.length === 0 && (
-          <p className="p-4 text-gray-600">
-            [barq-cowork] No events yet. Run a task to see live execution logs.
+          <p style={{ padding: "16px 20px", color: "var(--text-faint)" }}>
+            Loading events…
           </p>
         )}
-
-        {/* Events rendered oldest-first (backend returns newest-first, so reverse) */}
+        {error && (
+          <p style={{ padding: "16px 20px", color: "var(--red)" }}>
+            Failed to load events.
+          </p>
+        )}
+        {!isLoading && !error && displayed.length === 0 && (
+          <p style={{ padding: "16px 20px", color: "var(--text-faint)" }}>
+            No events yet. Run a task to see live execution logs.
+          </p>
+        )}
         {[...displayed].reverse().map((ev) => (
           <EventLine key={ev.id} event={ev} />
         ))}
       </div>
 
-      {/* Auto-scroll indicator */}
+      {/* Scroll-to-bottom nudge */}
       {!autoScroll && (
-        <div
-          className="shrink-0 text-center text-xs text-gray-500 cursor-pointer hover:text-gray-300"
-          onClick={() => {
-            if (logRef.current) {
-              logRef.current.scrollTop = logRef.current.scrollHeight;
-              setAutoScroll(true);
-            }
+        <button
+          onClick={scrollToBottom}
+          style={{
+            flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+            padding: "6px 20px",
+            background: "var(--surface-3)", borderTop: "1px solid var(--border)",
+            color: "var(--text-muted)", fontSize: 12, cursor: "pointer",
+            border: "none", transition: "color 120ms",
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
         >
-          ↓ New events below — click to scroll
-        </div>
+          <ArrowDown size={12} /> New events below
+        </button>
       )}
     </div>
   );
@@ -187,26 +188,39 @@ function EventLine({ event: ev }: { event: TaskEvent }) {
     payload = ev.payload || "{}";
   }
 
-  const color = EVENT_COLOR[ev.type] ?? "text-gray-400";
+  const color = EVENT_COLOR[ev.type] ?? "var(--text-muted)";
   const label = (EVENT_LABEL[ev.type] ?? ev.type.padEnd(12)).slice(0, 12);
   const time = new Date(ev.created_at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 
   return (
-    <div className="flex items-start gap-3 px-4 py-1 hover:bg-gray-900/40 transition-colors group">
-      <span className="text-gray-600 shrink-0 w-20">{time}</span>
-      <span className={clsx("shrink-0 w-28", color)}>{label}</span>
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 16,
+      padding: "1px 20px",
+      transition: "background 80ms",
+    }}
+    onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.background = "var(--surface-1)")}
+    onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.background = "transparent")}
+    >
+      <span style={{ color: "var(--text-faint)", flexShrink: 0, width: 72 }}>{time}</span>
+      <span style={{ color, flexShrink: 0, width: 100 }}>{label}</span>
       <Link
         to={`/tasks/${ev.task_id}/run`}
-        className="text-gray-600 hover:text-barq-400 font-mono shrink-0 w-20 truncate"
+        style={{
+          color: "var(--text-faint)", flexShrink: 0, width: 72,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          textDecoration: "none", transition: "color 100ms",
+        }}
         title={ev.task_id}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "#a5b4fc")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-faint)")}
       >
         {ev.task_id.slice(0, 8)}
       </Link>
-      <span className="text-gray-500 break-all">{payload}</span>
+      <span style={{ color: "var(--text-muted)", wordBreak: "break-all", flex: 1 }}>
+        {payload}
+      </span>
     </div>
   );
 }
