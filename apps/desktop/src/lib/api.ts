@@ -307,6 +307,76 @@ export const executionApi = {
   getArtifact: (id: string): Promise<Artifact> => request(`/artifacts/${id}`),
 };
 
+// ──────────────────── Memory — Context Files ────────────────────
+
+export interface ContextFile {
+  id: string;
+  project_id: string;
+  name: string;
+  file_path: string;
+  content: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskTemplate {
+  id: string;
+  project_id: string;
+  name: string;
+  title: string;
+  description: string;
+  provider_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const contextFilesApi = {
+  list: (projectId: string): Promise<ContextFile[]> =>
+    request(`/projects/${projectId}/context-files`),
+
+  create: (
+    projectId: string,
+    data: { name: string; file_path?: string; content?: string; description?: string }
+  ): Promise<ContextFile> =>
+    request(`/projects/${projectId}/context-files`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (
+    id: string,
+    data: { name: string; file_path?: string; content?: string; description?: string }
+  ): Promise<ContextFile> =>
+    request(`/context-files/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/context-files/${id}`, { method: "DELETE" }),
+};
+
+export const templatesApi = {
+  list: (projectId: string): Promise<TaskTemplate[]> =>
+    request(`/projects/${projectId}/templates`),
+
+  create: (
+    projectId: string,
+    data: { name: string; title: string; description?: string; provider_id?: string }
+  ): Promise<TaskTemplate> =>
+    request(`/projects/${projectId}/templates`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (
+    id: string,
+    data: { name: string; title: string; description?: string; provider_id?: string }
+  ): Promise<TaskTemplate> =>
+    request(`/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/templates/${id}`, { method: "DELETE" }),
+};
+
 // ──────────────────── Events (global) ────────────────────
 
 export const eventsApi = {
