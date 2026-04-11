@@ -20,6 +20,7 @@ type Services struct {
 	Providers  *service.ProviderService
 	Tools      *service.ToolService
 	Execution  ExecutionDeps
+	Memory     MemoryDeps
 }
 
 // ExecutionDeps groups the ports needed by the execution HTTP handler.
@@ -28,6 +29,12 @@ type ExecutionDeps struct {
 	Plans     v1.PlanQuerier
 	Artifacts v1.ArtifactQuerier
 	Events    v1.EventQuerier
+}
+
+// MemoryDeps groups the ports needed by the memory HTTP handler.
+type MemoryDeps struct {
+	ContextFiles  v1.ContextFileStore
+	TaskTemplates v1.TaskTemplateStore
 }
 
 // Server wraps the HTTP router and its configuration.
@@ -89,6 +96,10 @@ func (s *Server) routes() {
 			s.services.Execution.Plans,
 			s.services.Execution.Artifacts,
 			s.services.Execution.Events,
+		).Register(r)
+		v1.NewMemoryHandler(
+			s.services.Memory.ContextFiles,
+			s.services.Memory.TaskTemplates,
 		).Register(r)
 	})
 }

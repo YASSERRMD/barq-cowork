@@ -75,6 +75,8 @@ func main() {
 	eventRepo           := sqlite.NewEventStore(db)
 	planStore           := sqlite.NewPlanStore(db)
 	artifactStore       := sqlite.NewArtifactStore(db)
+	contextFileStore    := sqlite.NewContextFileStore(db)
+	taskTemplateStore   := sqlite.NewTaskTemplateStore(db)
 
 	// ── Orchestrator ──────────────────────────────────────────────────
 	planner  := orchestrator.NewPlanner(registry, logger)
@@ -97,6 +99,10 @@ func main() {
 			Plans:     planStore,
 			Artifacts: artifactStore,
 			Events:    eventRepo,
+		},
+		Memory: server.MemoryDeps{
+			ContextFiles:  contextFileStore,
+			TaskTemplates: taskTemplateStore,
 		},
 	}
 

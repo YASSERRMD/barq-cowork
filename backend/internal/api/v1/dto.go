@@ -223,3 +223,55 @@ func toEventDTO(e *domain.Event) *eventDTO {
 		CreatedAt: e.CreatedAt,
 	}
 }
+
+// ─────────────────────────────────────────────
+// Memory DTOs
+// ─────────────────────────────────────────────
+
+type contextFileDTO struct {
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id"`
+	Name        string    `json:"name"`
+	FilePath    string    `json:"file_path"`
+	Content     string    `json:"content"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func toContextFileDTO(cf *domain.ContextFile) *contextFileDTO {
+	return &contextFileDTO{
+		ID:          cf.ID,
+		ProjectID:   cf.ProjectID,
+		Name:        cf.Name,
+		FilePath:    cf.FilePath,
+		Content:     cf.Content,
+		Description: cf.Description,
+		CreatedAt:   cf.CreatedAt,
+		UpdatedAt:   cf.UpdatedAt,
+	}
+}
+
+type taskTemplateDTO struct {
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id"`
+	Name        string    `json:"name"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	ProviderID  string    `json:"provider_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func toTaskTemplateDTO(t *domain.TaskTemplate) *taskTemplateDTO {
+	return &taskTemplateDTO{
+		ID:          t.ID,
+		ProjectID:   t.ProjectID,
+		Name:        t.Name,
+		Title:       t.Title,
+		Description: t.Description,
+		ProviderID:  t.ProviderID,
+		CreatedAt:   t.CreatedAt,
+		UpdatedAt:   t.UpdatedAt,
+	}
+}
