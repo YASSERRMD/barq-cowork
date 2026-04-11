@@ -418,6 +418,22 @@ function CreateProfileForm({
           </p>
         </div>
 
+        {/* Endpoint */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">
+            API Endpoint
+          </label>
+          <input
+            className="input font-mono text-xs"
+            value={baseURL}
+            onChange={(e) => setBaseURL(e.target.value)}
+            placeholder="https://api.openai.com/v1"
+          />
+          <p className="text-[11px] text-text-muted">
+            Change this to use a proxy, custom deployment, or compatible endpoint.
+          </p>
+        </div>
+
         {/* Model */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">Model</label>
@@ -444,14 +460,6 @@ function CreateProfileForm({
 
         {advanced && (
           <div className="space-y-3 pl-0">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-text-secondary">Base URL</label>
-              <input
-                className="input font-mono text-xs"
-                value={baseURL}
-                onChange={(e) => setBaseURL(e.target.value)}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-secondary">Timeout (sec)</label>
