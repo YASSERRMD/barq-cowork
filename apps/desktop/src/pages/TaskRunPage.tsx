@@ -1,373 +1,189 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, FileText, Activity, Users, ChevronDown, ChevronRight, Clock, CheckCircle, XCircle, Loader, Circle } from "lucide-react";
 import {
-  tasksApi,
-  executionApi,
-  toolsApi,
-  type Task,
-  type PlanStep,
-  type TaskEvent,
-  type Artifact,
-  type StepStatus,
-  type TaskStatus,
+  Play, FileText, Activity, Users, ChevronDown, ChevronRight,
+  Clock, CheckCircle, XCircle, Loader, Circle, ArrowLeft,
+  AlertTriangle, Download, Copy, Zap, Terminal,
+} from "lucide-react";
+import {
+  tasksApi, executionApi, toolsApi, agentsApi,
+  type Task, type PlanStep, type TaskEvent, type Artifact,
+  type StepStatus, type TaskStatus, type SubAgent,
 } from "../lib/api";
-import { TopBar } from "../components/TopBar";
-import { Breadcrumb } from "../components/Breadcrumb";
-import { SkeletonText } from "../components/ui";
+
+// ── Helpers ───────────────────────────────────────────────────────
 
 const TASK_BADGE: Record<TaskStatus, string> = {
   pending:   "badge-gray",
-  planning:  "badge-blue",
+  planning:  "badge-accent",
   running:   "badge-yellow",
   completed: "badge-green",
   failed:    "badge-red",
   cancelled: "badge-gray",
 };
 
-const ACTIVE_STATUSES: TaskStatus[] = ["planning", "running"];
+const ACTIVE: TaskStatus[] = ["planning", "running"];
+
+function formatDuration(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start) return "—";
+  const s = new Date(start).getTime();
+  const e = end ? new Date(end).getTime() : Date.now();
+  const sec = Math.floor((e - s) / 1000);
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function formatBytes(b: number) {
+  if (b <= 0) return "—";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 ** 2).toFixed(1)} MB`;
+}
+
+// ── Step icon ─────────────────────────────────────────────────────
 
 function StepIcon({ status }: { status: StepStatus }) {
   switch (status) {
-    case "running":   return <Loader size={14} color="#fbbf24" className="animate-spin" />;
-    case "completed": return <CheckCircle size={14} color="#34d399" />;
-    case "failed":    return <XCircle size={14} color="#f87171" />;
-    case "skipped":   return <Circle size={14} color="#50505f" />;
-    default:          return <Circle size={14} color="#3a3a4e" />;
+    case "running":   return <Loader size={14} color="var(--yellow)" className="animate-spin" />;
+    case "completed": return <CheckCircle size={14} color="var(--green)" />;
+    case "failed":    return <XCircle size={14} color="var(--red)" />;
+    case "skipped":   return <Circle size={14} color="var(--text-faint)" />;
+    default:          return <Circle size={14} color="var(--surface-4)" style={{ opacity: 0.5 }} />;
   }
 }
 
-type RightPanelTab = "artifacts" | "events" | "agents";
+// ── Step timeline item ────────────────────────────────────────────
 
-export function TaskRunPage() {
-  const { taskId } = useParams<{ taskId: string }>();
-  const qc = useQueryClient();
-  const [rightTab, setRightTab] = useState<RightPanelTab>("artifacts");
-  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
-
-  const { data: task, isLoading: taskLoading } = useQuery({
-    queryKey: ["tasks", taskId],
-    queryFn: () => tasksApi.get(taskId!),
-    enabled: !!taskId,
-    refetchInterval: (query) => {
-      const t = query.state.data as Task | undefined;
-      return t && ACTIVE_STATUSES.includes(t.status) ? 2000 : false;
-    },
-  });
-
-  const isActive = task ? ACTIVE_STATUSES.includes(task.status) : false;
-
-  const { data: plan } = useQuery({
-    queryKey: ["tasks", taskId, "plan"],
-    queryFn: () => executionApi.getPlan(taskId!),
-    enabled: !!taskId && task?.status !== "pending",
-    refetchInterval: isActive ? 2000 : false,
-  });
-
-  const { data: events = [] } = useQuery({
-    queryKey: ["tasks", taskId, "events"],
-    queryFn: () => executionApi.listEvents(taskId!),
-    enabled: !!taskId && task?.status !== "pending",
-    refetchInterval: isActive ? 2000 : false,
-  });
-
-  const { data: artifacts = [] } = useQuery({
-    queryKey: ["tasks", taskId, "artifacts"],
-    queryFn: () => executionApi.listArtifactsByTask(taskId!),
-    enabled: !!taskId,
-    refetchInterval: isActive ? 3000 : false,
-  });
-
-  const { data: approvals = [] } = useQuery({
-    queryKey: ["approvals"],
-    queryFn: toolsApi.listApprovals,
-    refetchInterval: isActive ? 2000 : false,
-    enabled: isActive,
-  });
-
-  const runMutation = useMutation({
-    mutationFn: () => executionApi.runTask(taskId!, { require_approval: false }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks", taskId] }); },
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: ({ id, res }: { id: string; res: "approved" | "rejected" }) =>
-      toolsApi.resolveApproval(id, res),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["approvals"] }); },
-  });
-
-  const toggleStep = (id: string) => {
-    setExpandedSteps((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const pendingApprovals = approvals.filter((a) => a.task_id === taskId && a.status === "pending");
-
-  if (taskLoading) {
-    return (
-      <div style={{ padding: 24 }}>
-        <SkeletonText lines={4} />
-      </div>
-    );
-  }
-
-  if (!task) {
-    return (
-      <div style={{ padding: 24 }}>
-        <p style={{ color: "#f87171", fontSize: 13 }}>Task not found.</p>
-      </div>
-    );
-  }
+function StepItem({
+  step, expanded, onToggle, isLast,
+}: {
+  step: PlanStep; expanded: boolean; onToggle: () => void; isLast: boolean;
+}) {
+  const hasDetail = !!(step.tool_output || step.tool_input);
+  const isRunning = step.status === "running";
+  const isCompleted = step.status === "completed";
+  const isFailed = step.status === "failed";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <TopBar title={task.title} />
-
-      {/* Breadcrumb */}
-      <div style={{ padding: "8px 20px", borderBottom: "1px solid var(--border)" }}>
-        <Breadcrumb items={
-          task.project_id
-            ? [
-                { label: "Projects", to: "/projects" },
-                { label: "Tasks", to: `/projects/${task.project_id}/tasks` },
-                { label: task.title },
-              ]
-            : [
-                { label: "Runs", to: "/runs" },
-                { label: task.title },
-              ]
-        } />
-      </div>
-
-      {/* Approval banner */}
-      {pendingApprovals.length > 0 && (
-        <div style={{ background: "var(--yellow-dim)", borderBottom: "1px solid rgba(251,191,36,0.2)", padding: "10px 20px" }}>
-          {pendingApprovals.map((approval) => (
-            <div key={approval.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 12, color: "var(--yellow)", fontWeight: 600 }}>Approval Required:</span>
-              <span style={{ fontSize: 12, color: "var(--text-secondary)", flex: 1 }}>
-                Tool <strong>{approval.tool_name}</strong> — {approval.action}
-              </span>
-              <button
-                className="btn-primary btn-sm"
-                onClick={() => approveMutation.mutate({ id: approval.id, res: "approved" })}
-              >
-                Approve
-              </button>
-              <button
-                className="btn-danger btn-sm"
-                onClick={() => approveMutation.mutate({ id: approval.id, res: "rejected" })}
-              >
-                Reject
-              </button>
-            </div>
-          ))}
+    <div style={{ display: "flex", gap: 0, position: "relative" }}>
+      {/* Connector + dot column */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 28, flexShrink: 0 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+          background: isRunning ? "rgba(251,191,36,0.12)" : isCompleted ? "rgba(52,211,153,0.10)" : isFailed ? "rgba(248,113,113,0.10)" : "var(--surface-3)",
+          border: `1px solid ${isRunning ? "rgba(251,191,36,0.3)" : isCompleted ? "rgba(52,211,153,0.25)" : isFailed ? "rgba(248,113,113,0.25)" : "var(--border)"}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all 200ms",
+        }}>
+          <StepIcon status={step.status} />
         </div>
-      )}
-
-      {/* Main layout */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* Left: timeline */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
-          {/* Task header */}
-          <div className="card" style={{ padding: "16px 20px", marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: task.description ? 4 : 0 }}>
-                  <span className={TASK_BADGE[task.status] ?? "badge-gray"}>{task.status}</span>
-                  {isActive && (
-                    <span style={{ fontSize: 11, color: "#fbbf24", display: "flex", alignItems: "center", gap: 4 }}>
-                      <Loader size={11} className="animate-spin" />
-                      Working...
-                    </span>
-                  )}
-                </div>
-                {task.description && (
-                  <p style={{ fontSize: 13, color: "#7a7a90", marginTop: 4 }}>{task.description}</p>
-                )}
-                <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 8, fontSize: 11, color: "#40404f" }}>
-                  {task.started_at && (
-                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Clock size={11} />
-                      Started {new Date(task.started_at).toLocaleTimeString()}
-                    </span>
-                  )}
-                  {task.completed_at && (
-                    <span>Completed {new Date(task.completed_at).toLocaleTimeString()}</span>
-                  )}
-                </div>
-              </div>
-              {task.status === "pending" && (
-                <button
-                  className="btn-primary"
-                  style={{ flexShrink: 0 }}
-                  disabled={runMutation.isPending}
-                  onClick={() => runMutation.mutate()}
-                >
-                  <Play size={13} />
-                  {runMutation.isPending ? "Starting..." : "Run Task"}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Timeline */}
-          {plan && plan.steps.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#50505f", marginBottom: 12 }}>
-                Execution Plan — {plan.steps.length} steps
-              </div>
-              <div style={{ position: "relative" }}>
-                {/* Connector line */}
-                <div style={{
-                  position: "absolute",
-                  left: 11,
-                  top: 20,
-                  bottom: 20,
-                  width: 1,
-                  background: "#2a2a3a",
-                }} />
-                {plan.steps.map((step) => (
-                  <StepItem
-                    key={step.id}
-                    step={step}
-                    expanded={expandedSteps.has(step.id)}
-                    onToggle={() => toggleStep(step.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {task.status === "pending" && !plan && (
-            <div style={{ textAlign: "center", padding: "32px 0", color: "#40404f", fontSize: 13 }}>
-              Click "Run Task" to begin execution.
-            </div>
-          )}
-
-          {isActive && !plan && (
-            <div style={{ textAlign: "center", padding: "32px 0", color: "#fbbf24", fontSize: 13 }}>
-              <Loader size={20} className="animate-spin" style={{ margin: "0 auto 8px" }} />
-              Planning...
-            </div>
-          )}
-        </div>
-
-        {/* Right panel */}
-        <div className="right-panel">
-          {/* Tabs */}
-          <div style={{ display: "flex", borderBottom: "1px solid #2a2a3a" }}>
-            {(["artifacts", "events", "agents"] as RightPanelTab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setRightTab(tab)}
-                style={{
-                  flex: 1,
-                  padding: "10px 4px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  color: rightTab === tab ? "#a5b4fc" : "#50505f",
-                  borderBottom: `2px solid ${rightTab === tab ? "#6366f1" : "transparent"}`,
-                  transition: "all 150ms",
-                }}
-              >
-                {tab === "artifacts" ? <FileText size={13} style={{ margin: "0 auto" }} /> :
-                 tab === "events" ? <Activity size={13} style={{ margin: "0 auto" }} /> :
-                 <Users size={13} style={{ margin: "0 auto" }} />}
-                <span style={{ display: "block", marginTop: 2 }}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Panel content */}
-          <div style={{ padding: "12px" }}>
-            {rightTab === "artifacts" && (
-              <ArtifactsPanel artifacts={artifacts} />
-            )}
-            {rightTab === "events" && (
-              <EventsPanel events={events} />
-            )}
-            {rightTab === "agents" && (
-              <AgentsPanel taskId={taskId!} />
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StepItem({ step, expanded, onToggle }: { step: PlanStep; expanded: boolean; onToggle: () => void }) {
-  const hasOutput = !!(step.tool_output || step.tool_input);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 12,
-        paddingBottom: 12,
-        position: "relative",
-        zIndex: 1,
-      }}
-    >
-      {/* Status dot */}
-      <div style={{ flexShrink: 0, marginTop: 2 }}>
-        <StepIcon status={step.status} />
+        {!isLast && (
+          <div style={{ width: 1, flex: 1, minHeight: 12, background: isCompleted ? "rgba(52,211,153,0.2)" : "var(--border)", marginTop: 2 }} />
+        )}
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, paddingLeft: 12, paddingBottom: isLast ? 0 : 16 }}>
         <div
-          onClick={hasOutput ? onToggle : undefined}
+          onClick={hasDetail ? onToggle : undefined}
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            cursor: hasOutput ? "pointer" : "default",
-            padding: "4px 8px",
-            borderRadius: 4,
-            background: step.status === "running" ? "var(--yellow-dim)" : "transparent",
+            display: "flex", alignItems: "flex-start", gap: 8,
+            cursor: hasDetail ? "pointer" : "default",
+            padding: "4px 8px", borderRadius: 6, marginLeft: -8,
+            background: isRunning ? "rgba(251,191,36,0.04)" : "transparent",
             transition: "background 120ms",
           }}
         >
-          <span style={{ fontSize: 13, color: step.status === "running" ? "var(--text-primary)" : "var(--text-secondary)", flex: 1, fontWeight: step.status === "running" ? 600 : 400 }}>
-            {step.title}
-          </span>
-          {step.tool_name && (
-            <span className="badge-gray" style={{ fontSize: 10, padding: "1px 5px" }}>{step.tool_name}</span>
-          )}
-          {hasOutput && (
-            expanded ? <ChevronDown size={12} color="#50505f" /> : <ChevronRight size={12} color="#50505f" />
+          <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{
+                fontSize: 13, fontWeight: isRunning ? 600 : 500,
+                color: isRunning ? "var(--text-primary)" : "var(--text-secondary)",
+                letterSpacing: "-0.005em",
+              }}>
+                {step.title}
+              </span>
+              {step.tool_name && (
+                <span style={{
+                  fontSize: 10.5, color: "var(--text-faint)",
+                  background: "var(--surface-3)", border: "1px solid var(--border)",
+                  borderRadius: 4, padding: "1px 6px", fontFamily: "monospace",
+                }}>
+                  {step.tool_name}
+                </span>
+              )}
+              {step.started_at && (
+                <span style={{ fontSize: 11, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 3 }}>
+                  <Clock size={10} />
+                  {formatDuration(step.started_at, step.completed_at)}
+                </span>
+              )}
+            </div>
+            {step.description && !expanded && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "2px 0 0", lineHeight: 1.4 }}>
+                {step.description}
+              </p>
+            )}
+          </div>
+          {hasDetail && (
+            <div style={{ flexShrink: 0, marginTop: 4 }}>
+              {expanded
+                ? <ChevronDown size={13} color="var(--text-faint)" />
+                : <ChevronRight size={13} color="var(--text-faint)" />}
+            </div>
           )}
         </div>
-        {step.description && (
-          <p style={{ fontSize: 12, color: "#50505f", paddingLeft: 8, marginTop: 2 }}>{step.description}</p>
-        )}
-        {expanded && hasOutput && (
-          <div style={{ marginTop: 6, padding: "8px 10px", background: "#16161f", borderRadius: 4, border: "1px solid #2a2a3a" }}>
+
+        {/* Expanded detail */}
+        {expanded && hasDetail && (
+          <div style={{
+            marginTop: 8, marginLeft: 0,
+            background: "var(--surface-1)", border: "1px solid var(--border)",
+            borderRadius: 8, overflow: "hidden",
+          }}>
             {step.tool_input && (
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 10, color: "#40404f", fontWeight: 600, marginBottom: 3, textTransform: "uppercase" }}>Input</div>
-                <pre style={{ fontSize: 11, color: "#7a7a90", fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap", wordBreak: "break-all", margin: 0 }}>
+              <div style={{ borderBottom: step.tool_output ? "1px solid var(--border)" : "none" }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 12px", borderBottom: "1px solid var(--border)",
+                  background: "var(--surface-2)",
+                }}>
+                  <Terminal size={11} color="var(--text-faint)" />
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-faint)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Input</span>
+                </div>
+                <pre style={{
+                  fontSize: 11.5, color: "var(--text-secondary)", margin: 0,
+                  padding: "10px 12px", fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                  whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6,
+                  maxHeight: 120, overflowY: "auto",
+                }}>
                   {step.tool_input}
                 </pre>
               </div>
             )}
             {step.tool_output && (
               <div>
-                <div style={{ fontSize: 10, color: "#40404f", fontWeight: 600, marginBottom: 3, textTransform: "uppercase" }}>Output</div>
-                <pre style={{ fontSize: 11, color: "#c4c4d0", fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap", wordBreak: "break-all", margin: 0 }}>
-                  {step.tool_output.length > 500 ? step.tool_output.slice(0, 500) + "..." : step.tool_output}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 12px", borderBottom: "1px solid var(--border)",
+                  background: "var(--surface-2)",
+                }}>
+                  <Zap size={11} color="var(--green)" />
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-faint)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Output</span>
+                </div>
+                <pre style={{
+                  fontSize: 11.5, color: "var(--text-primary)", margin: 0,
+                  padding: "10px 12px", fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                  whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6,
+                  maxHeight: 180, overflowY: "auto",
+                }}>
+                  {step.tool_output.length > 800 ? step.tool_output.slice(0, 800) + "\n…" : step.tool_output}
                 </pre>
               </div>
             )}
@@ -378,40 +194,62 @@ function StepItem({ step, expanded, onToggle }: { step: PlanStep; expanded: bool
   );
 }
 
+// ── Right panel tabs ──────────────────────────────────────────────
+
+type RightTab = "artifacts" | "events" | "agents";
+
 function ArtifactsPanel({ artifacts }: { artifacts: Artifact[] }) {
-  if (artifacts.length === 0) {
-    return <p style={{ fontSize: 12, color: "#50505f", textAlign: "center", paddingTop: 16 }}>No artifacts yet</p>;
-  }
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      {artifacts.map((a) => (
-        <div key={a.id} className="card" style={{ padding: "8px 10px" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#c4c4d0", marginBottom: 2 }}>{a.name}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span className="badge-gray">{a.type}</span>
-            <span style={{ fontSize: 11, color: "#40404f" }}>{a.size > 0 ? `${(a.size / 1024).toFixed(1)} KB` : "0 B"}</span>
-          </div>
-        </div>
-      ))}
+  if (!artifacts.length) return (
+    <div className="empty-state" style={{ padding: "32px 16px" }}>
+      <div className="empty-state-icon"><FileText size={16} color="var(--text-faint)" /></div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No artifacts yet</p>
     </div>
   );
-}
-
-function EventsPanel({ events }: { events: TaskEvent[] }) {
-  if (events.length === 0) {
-    return <p style={{ fontSize: 12, color: "#50505f", textAlign: "center", paddingTop: 16 }}>No events yet</p>;
-  }
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      {[...events].reverse().slice(0, 50).map((e) => (
-        <div key={e.id} style={{ fontSize: 11, borderBottom: "1px solid rgba(42,42,58,0.5)", paddingBottom: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-            <span className="badge-blue" style={{ fontSize: 10 }}>{e.type}</span>
-            <span style={{ color: "#40404f" }}>{new Date(e.created_at).toLocaleTimeString()}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {artifacts.map((a) => (
+        <div key={a.id} style={{
+          padding: "10px 12px", background: "var(--surface-2)",
+          border: "1px solid var(--border)", borderRadius: 8,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <FileText size={13} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                letterSpacing: "-0.005em",
+              }}>
+                {a.name.split("/").pop() || a.name}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <span className="badge-gray" style={{ fontSize: 10 }}>{a.type}</span>
+                <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{formatBytes(a.size)}</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              <button
+                className="btn-ghost btn-xs"
+                title="Copy path"
+                onClick={() => navigator.clipboard.writeText(a.content_path || a.name)}
+              >
+                <Copy size={11} />
+              </button>
+              {a.content_path && (
+                <button className="btn-ghost btn-xs" title="Open location">
+                  <Download size={11} />
+                </button>
+              )}
+            </div>
           </div>
-          {e.payload && (
-            <pre style={{ fontSize: 10, color: "#50505f", fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap", wordBreak: "break-all", margin: 0, maxHeight: 60, overflow: "hidden" }}>
-              {e.payload.length > 120 ? e.payload.slice(0, 120) + "..." : e.payload}
+          {a.content_inline && (
+            <pre style={{
+              fontSize: 11, color: "var(--text-muted)", margin: "8px 0 0",
+              fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap",
+              wordBreak: "break-all", maxHeight: 60, overflow: "hidden",
+              lineHeight: 1.5,
+            }}>
+              {a.content_inline.slice(0, 140)}{a.content_inline.length > 140 ? "…" : ""}
             </pre>
           )}
         </div>
@@ -420,29 +258,386 @@ function EventsPanel({ events }: { events: TaskEvent[] }) {
   );
 }
 
-function AgentsPanel({ taskId }: { taskId: string }) {
-  const { data: agents = [] } = useQuery({
-    queryKey: ["agents", taskId],
-    queryFn: () => import("../lib/api").then(m => m.agentsApi.list(taskId)),
-    refetchInterval: 3000,
-  });
-
-  if (agents.length === 0) {
-    return <p style={{ fontSize: 12, color: "#50505f", textAlign: "center", paddingTop: 16 }}>No sub-agents</p>;
-  }
+function EventsPanel({ events }: { events: TaskEvent[] }) {
+  if (!events.length) return (
+    <div className="empty-state" style={{ padding: "32px 16px" }}>
+      <div className="empty-state-icon"><Activity size={16} color="var(--text-faint)" /></div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No events yet</p>
+    </div>
+  );
   return (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {[...events].reverse().slice(0, 60).map((e) => (
+        <div key={e.id} style={{
+          padding: "7px 10px", background: "var(--surface-2)",
+          border: "1px solid var(--border)", borderRadius: 7,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+            <span className="badge-accent" style={{ fontSize: 10 }}>{e.type}</span>
+            <span style={{ fontSize: 10, color: "var(--text-faint)" }}>{formatTime(e.created_at)}</span>
+          </div>
+          {e.payload && (
+            <pre style={{
+              fontSize: 10.5, color: "var(--text-muted)", margin: 0,
+              fontFamily: "JetBrains Mono, monospace",
+              whiteSpace: "pre-wrap", wordBreak: "break-all",
+              maxHeight: 48, overflow: "hidden", lineHeight: 1.5,
+            }}>
+              {e.payload.length > 100 ? e.payload.slice(0, 100) + "…" : e.payload}
+            </pre>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgentsPanel({ agents }: { agents: SubAgent[] }) {
+  if (!agents.length) return (
+    <div className="empty-state" style={{ padding: "32px 16px" }}>
+      <div className="empty-state-icon"><Users size={16} color="var(--text-faint)" /></div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No sub-agents spawned</p>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {agents.map((a) => (
-        <div key={a.id} className="card" style={{ padding: "8px 10px" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#c4c4d0", marginBottom: 2 }}>{a.title}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span className="badge-purple">{a.role}</span>
-            <span className={a.status === "completed" ? "badge-green" : a.status === "failed" ? "badge-red" : "badge-yellow"}>
-              {a.status}
-            </span>
+        <div key={a.id} style={{
+          padding: "10px 12px", background: "var(--surface-2)",
+          border: "1px solid var(--border)", borderRadius: 8,
+        }}>
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)", marginBottom: 5, letterSpacing: "-0.005em" }}>
+            {a.title}
+          </div>
+          <div style={{ display: "flex", gap: 5 }}>
+            <span className="badge-purple" style={{ fontSize: 10 }}>{a.role}</span>
+            <span className={
+              a.status === "completed" ? "badge-green" :
+              a.status === "failed" ? "badge-red" :
+              a.status === "running" ? "badge-yellow" : "badge-gray"
+            } style={{ fontSize: 10 }}>{a.status}</span>
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────
+
+export function TaskRunPage() {
+  const { taskId } = useParams<{ taskId: string }>();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [rightTab, setRightTab] = useState<RightTab>("artifacts");
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+
+  const { data: task, isLoading: taskLoading } = useQuery({
+    queryKey: ["tasks", taskId],
+    queryFn: () => tasksApi.get(taskId!),
+    enabled: !!taskId,
+    refetchInterval: (q) => {
+      const t = q.state.data as Task | undefined;
+      return t && ACTIVE.includes(t.status) ? 1500 : false;
+    },
+  });
+
+  const isActive = task ? ACTIVE.includes(task.status) : false;
+
+  const { data: plan } = useQuery({
+    queryKey: ["tasks", taskId, "plan"],
+    queryFn: () => executionApi.getPlan(taskId!),
+    enabled: !!taskId && task?.status !== "pending",
+    refetchInterval: isActive ? 1500 : false,
+  });
+
+  const { data: events = [] } = useQuery({
+    queryKey: ["tasks", taskId, "events"],
+    queryFn: () => executionApi.listEvents(taskId!),
+    enabled: !!taskId && task?.status !== "pending",
+    refetchInterval: isActive ? 1500 : false,
+  });
+
+  const { data: artifacts = [] } = useQuery({
+    queryKey: ["tasks", taskId, "artifacts"],
+    queryFn: () => executionApi.listArtifactsByTask(taskId!),
+    enabled: !!taskId,
+    refetchInterval: isActive ? 2000 : false,
+  });
+
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents", taskId],
+    queryFn: () => agentsApi.list(taskId!),
+    enabled: !!taskId,
+    refetchInterval: isActive ? 2000 : false,
+  });
+
+  const { data: approvals = [] } = useQuery({
+    queryKey: ["approvals"],
+    queryFn: toolsApi.listApprovals,
+    refetchInterval: isActive ? 1500 : 10000,
+  });
+
+  const runMutation = useMutation({
+    mutationFn: () => executionApi.runTask(taskId!, { require_approval: false }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", taskId] }),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: ({ id, res }: { id: string; res: "approved" | "rejected" }) =>
+      toolsApi.resolveApproval(id, res),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["approvals"] }),
+  });
+
+  const toggleStep = (id: string) =>
+    setExpandedSteps((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const pendingApprovals = approvals.filter(
+    (a) => a.task_id === taskId && a.status === "pending"
+  );
+
+  const completedSteps = plan?.steps.filter((s) => s.status === "completed").length ?? 0;
+  const totalSteps = plan?.steps.length ?? 0;
+  const progress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+
+  if (taskLoading) return (
+    <div style={{ padding: 24 }}>
+      {[1,2,3].map(i => (
+        <div key={i} className="skeleton" style={{ height: 20, marginBottom: 10, borderRadius: 6 }} />
+      ))}
+    </div>
+  );
+
+  if (!task) return (
+    <div style={{ padding: 24 }}>
+      <p style={{ color: "var(--red)", fontSize: 13 }}>Run not found.</p>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+
+      {/* ── Top bar ── */}
+      <div style={{
+        height: "var(--topbar-h)", borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", padding: "0 16px", gap: 10,
+        flexShrink: 0, background: "var(--surface-1)",
+      }}>
+        <button
+          className="btn-ghost btn-sm"
+          style={{ padding: "4px 6px" }}
+          onClick={() => navigate(task.project_id ? `/projects/${task.project_id}/tasks` : "/runs")}
+        >
+          <ArrowLeft size={14} />
+        </button>
+        <div style={{ width: 1, height: 18, background: "var(--border)" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              letterSpacing: "-0.015em",
+            }}>
+              {task.title}
+            </span>
+            <span className={TASK_BADGE[task.status] ?? "badge-gray"}>{task.status}</span>
+            {isActive && (
+              <span style={{ fontSize: 11, color: "var(--yellow)", display: "flex", alignItems: "center", gap: 4 }}>
+                <Loader size={11} className="animate-spin" /> Working…
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          {totalSteps > 0 && (
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {completedSteps}/{totalSteps} steps
+            </span>
+          )}
+          {task.started_at && (
+            <span style={{ fontSize: 11, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 4 }}>
+              <Clock size={11} />
+              {formatDuration(task.started_at, task.completed_at)}
+            </span>
+          )}
+          {task.status === "pending" && (
+            <button
+              className="btn-primary btn-sm"
+              disabled={runMutation.isPending}
+              onClick={() => runMutation.mutate()}
+            >
+              {runMutation.isPending ? <><Loader size={12} className="animate-spin" />Starting…</> : <><Play size={12} />Run</>}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Progress bar ── */}
+      {totalSteps > 0 && (
+        <div style={{ height: 2, background: "var(--surface-3)", flexShrink: 0 }}>
+          <div style={{
+            height: "100%",
+            width: `${progress}%`,
+            background: task.status === "completed"
+              ? "var(--green)"
+              : task.status === "failed"
+              ? "var(--red)"
+              : "var(--accent)",
+            transition: "width 400ms ease",
+          }} />
+        </div>
+      )}
+
+      {/* ── Approval banner ── */}
+      {pendingApprovals.length > 0 && (
+        <div style={{
+          background: "rgba(251,191,36,0.06)", borderBottom: "1px solid rgba(251,191,36,0.18)",
+          padding: "10px 20px", flexShrink: 0, display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          {pendingApprovals.map((ap) => (
+            <div key={ap.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <AlertTriangle size={14} color="var(--yellow)" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--yellow)" }}>Approval needed:</span>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)", flex: 1 }}>
+                <code style={{ fontFamily: "monospace", background: "var(--surface-3)", padding: "1px 5px", borderRadius: 3, fontSize: 11 }}>{ap.tool_name}</code>
+                {" "}— {ap.action}
+              </span>
+              <button className="btn-primary btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "approved" })}>Approve</button>
+              <button className="btn-danger btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "rejected" })}>Reject</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Body ── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+
+        {/* Left: timeline */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px 32px" }}>
+
+          {/* Description */}
+          {task.description && task.description !== task.title && (
+            <div style={{
+              padding: "10px 14px", background: "var(--surface-2)",
+              border: "1px solid var(--border)", borderRadius: 9,
+              marginBottom: 24, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6,
+            }}>
+              {task.description}
+            </div>
+          )}
+
+          {/* Timeline */}
+          {plan && plan.steps.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: 16 }}>
+                Execution Plan — {plan.steps.length} step{plan.steps.length !== 1 ? "s" : ""}
+              </div>
+              <div style={{ paddingLeft: 4 }}>
+                {plan.steps.map((step, idx) => (
+                  <StepItem
+                    key={step.id}
+                    step={step}
+                    expanded={expandedSteps.has(step.id)}
+                    onToggle={() => toggleStep(step.id)}
+                    isLast={idx === plan.steps.length - 1}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* States */}
+          {task.status === "pending" && !plan && (
+            <div style={{ textAlign: "center", padding: "48px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 16 }}>
+                Ready to execute. Click Run to start the agent.
+              </div>
+              <button className="btn-primary" disabled={runMutation.isPending} onClick={() => runMutation.mutate()}>
+                <Play size={14} /> {runMutation.isPending ? "Starting…" : "Run Task"}
+              </button>
+            </div>
+          )}
+
+          {isActive && !plan && (
+            <div style={{ textAlign: "center", padding: "48px 0" }}>
+              <Loader size={24} className="animate-spin" style={{ color: "var(--accent)", margin: "0 auto 12px" }} />
+              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>Planning execution…</div>
+            </div>
+          )}
+
+          {task.status === "completed" && (
+            <div style={{
+              marginTop: plan?.steps.length ? 24 : 0,
+              padding: "12px 16px",
+              background: "rgba(52,211,153,0.06)",
+              border: "1px solid rgba(52,211,153,0.18)",
+              borderRadius: 9,
+              display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <CheckCircle size={16} color="var(--green)" />
+              <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 500 }}>
+                Completed in {formatDuration(task.started_at, task.completed_at)}
+              </span>
+              {artifacts.length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 4 }}>
+                  · {artifacts.length} artifact{artifacts.length !== 1 ? "s" : ""} produced
+                </span>
+              )}
+            </div>
+          )}
+
+          {task.status === "failed" && (
+            <div style={{
+              marginTop: 16, padding: "12px 16px",
+              background: "rgba(248,113,113,0.06)",
+              border: "1px solid rgba(248,113,113,0.2)",
+              borderRadius: 9, display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <XCircle size={16} color="var(--red)" />
+              <span style={{ fontSize: 13, color: "var(--red)", fontWeight: 500 }}>Run failed</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right panel */}
+        <div className="right-panel" style={{ display: "flex", flexDirection: "column" }}>
+          {/* Tabs */}
+          <div style={{
+            display: "flex", borderBottom: "1px solid var(--border)", flexShrink: 0,
+          }}>
+            {([
+              { id: "artifacts", icon: FileText, label: "Artifacts", count: artifacts.length },
+              { id: "events",    icon: Activity, label: "Events",    count: events.length },
+              { id: "agents",    icon: Users,    label: "Agents",    count: agents.length },
+            ] as { id: RightTab; icon: React.ElementType; label: string; count: number }[]).map(({ id, icon: Icon, label, count }) => (
+              <button
+                key={id}
+                onClick={() => setRightTab(id)}
+                style={{
+                  flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+                  gap: 3, padding: "9px 4px",
+                  background: "transparent", border: "none", cursor: "pointer",
+                  borderBottom: `2px solid ${rightTab === id ? "var(--accent)" : "transparent"}`,
+                  color: rightTab === id ? "#a5b4fc" : "var(--text-faint)",
+                  transition: "all 120ms", marginBottom: -1,
+                }}
+              >
+                <Icon size={13} />
+                <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em" }}>
+                  {label}{count > 0 ? ` (${count})` : ""}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Panel content */}
+          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+            {rightTab === "artifacts" && <ArtifactsPanel artifacts={artifacts} />}
+            {rightTab === "events"    && <EventsPanel events={events} />}
+            {rightTab === "agents"    && <AgentsPanel agents={agents} />}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
