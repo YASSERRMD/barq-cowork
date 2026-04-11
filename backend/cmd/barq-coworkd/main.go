@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/barq-cowork/barq-cowork/internal/config"
+	"github.com/barq-cowork/barq-cowork/internal/memory"
 	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
 	zaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/openai"
@@ -75,9 +76,12 @@ func main() {
 	eventRepo           := sqlite.NewEventStore(db)
 	planStore           := sqlite.NewPlanStore(db)
 	artifactStore       := sqlite.NewArtifactStore(db)
+	contextFileStore    := sqlite.NewContextFileStore(db)
+	taskTemplateStore   := sqlite.NewTaskTemplateStore(db)
 
 	// ── Orchestrator ──────────────────────────────────────────────────
-	planner  := orchestrator.NewPlanner(registry, logger)
+	wsMemory := memory.New(contextFileStore)
+	planner  := orchestrator.NewPlanner(registry, wsMemory, logger)
 	executor := orchestrator.NewExecutor(planStore, artifactStore, eventRepo, toolRegistry, logger)
 	orch     := orchestrator.New(
 		taskRepo, projectRepo, providerProfileRepo,
@@ -97,6 +101,10 @@ func main() {
 			Plans:     planStore,
 			Artifacts: artifactStore,
 			Events:    eventRepo,
+		},
+		Memory: server.MemoryDeps{
+			ContextFiles:  contextFileStore,
+			TaskTemplates: taskTemplateStore,
 		},
 	}
 

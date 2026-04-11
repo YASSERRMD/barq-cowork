@@ -5,6 +5,7 @@ import { WorkspacesPage } from "./pages/WorkspacesPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TaskRunPage } from "./pages/TaskRunPage";
+import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { LogsPage } from "./pages/LogsPage";
@@ -42,6 +43,9 @@ export default function App() {
 
           {/* Task run / observation view */}
           <Route path="/tasks/:taskId/run" element={<TaskRunPage />} />
+
+          {/* Project memory (context files + templates) */}
+          <Route path="/projects/:projectId/memory" element={<ProjectDetailPage />} />
 
           {/* Top-level nav stubs */}
           <Route path="/tasks"      element={<TasksPage />} />

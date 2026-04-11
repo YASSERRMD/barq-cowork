@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi, projectsApi, type Task } from "../lib/api";
+import { tasksApi, projectsApi, templatesApi, type Task, type TaskTemplate } from "../lib/api";
 import clsx from "clsx";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -15,8 +15,15 @@ const STATUS_BADGE: Record<string, string> = {
 
 export function TasksPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+
+  // Auto-open form when a ?template= param is present
+  const templateId = searchParams.get("template") ?? undefined;
+  useEffect(() => {
+    if (templateId) setShowForm(true);
+  }, [templateId]);
 
   const { data: project } = useQuery({
     queryKey: ["projects", projectId],
@@ -82,14 +89,20 @@ export function TasksPage() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-white">Tasks</h1>
-        <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "+ New Task"}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link to={`/projects/${projectId}/memory`} className="btn-ghost text-xs text-gray-400">
+            Memory
+          </Link>
+          <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? "Cancel" : "+ New Task"}
+          </button>
+        </div>
       </div>
 
       {showForm && (
         <CreateTaskForm
           projectId={projectId}
+          templateId={templateId}
           onSubmit={(data) => createMutation.mutate(data)}
           loading={createMutation.isPending}
           error={createMutation.error?.message}
@@ -164,31 +177,78 @@ function TaskCard({
 
 function CreateTaskForm({
   projectId,
+  templateId,
   onSubmit,
   loading,
   error,
 }: {
   projectId: string;
+  templateId?: string;
   onSubmit: (data: {
     project_id: string;
     title: string;
     description: string;
+    provider_id?: string;
   }) => void;
   loading: boolean;
   error?: string;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [providerId, setProviderId] = useState("");
+
+  // Load templates for this project so user can pick one.
+  const { data: templates = [] } = useQuery({
+    queryKey: ["templates", projectId],
+    queryFn: () => templatesApi.list(projectId),
+    enabled: !!projectId,
+  });
+
+  // Apply a template (including the one from URL params on mount).
+  const applyTemplate = (t: TaskTemplate) => {
+    setTitle(t.title);
+    setDescription(t.description);
+    setProviderId(t.provider_id);
+  };
+
+  // Auto-apply template from URL on first render.
+  useEffect(() => {
+    if (templateId && templates.length > 0) {
+      const t = templates.find((tmpl) => tmpl.id === templateId);
+      if (t) applyTemplate(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, templates.length]);
 
   return (
     <form
       className="card p-4 space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ project_id: projectId, title, description });
+        onSubmit({ project_id: projectId, title, description, provider_id: providerId || undefined });
       }}
     >
-      <h2 className="text-sm font-semibold text-gray-300">New Task</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-300">New Task</h2>
+        {templates.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Load template:</span>
+            <select
+              className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-barq-500"
+              defaultValue=""
+              onChange={(e) => {
+                const t = templates.find((tmpl) => tmpl.id === e.target.value);
+                if (t) applyTemplate(t);
+              }}
+            >
+              <option value="" disabled>Select…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
       <div className="space-y-2">
         <input
           className="input"

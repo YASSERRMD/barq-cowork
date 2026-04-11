@@ -211,6 +211,9 @@ function ProjectCard({
           <Link to={`/projects/${p.id}/tasks`} className="btn-ghost text-xs">
             Tasks
           </Link>
+          <Link to={`/projects/${p.id}/memory`} className="btn-ghost text-xs text-gray-400">
+            Memory
+          </Link>
           <button className="btn-ghost text-xs text-barq-400 hover:text-barq-300" onClick={openEdit}>
             Edit
           </button>
