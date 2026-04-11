@@ -9,7 +9,9 @@
 [![Tauri](https://img.shields.io/badge/Tauri-v2-FFC131?style=flat-square&logo=tauri&logoColor=black)](https://tauri.app/)
 [![License](https://img.shields.io/badge/License-MIT-6366f1?style=flat-square)](LICENSE)
 
-**A cross-platform desktop AI agent workspace for outcome-based tasks**
+**Your AI team, on your machine**
+
+*A cross-platform desktop AI agent workspace for outcome-based tasks*
 
 [Features](#features) · [Architecture](#architecture) · [Getting Started](#getting-started) · [Building](#building) · [API Reference](#api-reference) · [Contributing](#contributing)
 
@@ -33,7 +35,7 @@ Everything runs on your machine. The backend is a single self-contained Go binar
 | Live plan timeline | Watch every step execute in real-time with tool calls, output, and status badges |
 | Project memory | Attach context files and reusable task templates to any project |
 | Tool system | File operations, shell commands, web search, and a human-approval gate |
-| Provider flexibility | Works with any OpenAI-compatible endpoint — OpenAI, Together AI, Zai, Ollama, and more |
+| Provider flexibility | Built-in support for OpenAI, Anthropic, Gemini, Z.AI, Ollama, and any OpenAI-compatible endpoint — API keys stored locally, no env vars needed |
 | Artifact management | Automatic capture, storage, and browsing of files produced by agents |
 | Diagnostics | Runtime stats, goroutine counts, and one-click log-bundle download |
 | Cross-platform | macOS (Apple Silicon + Intel) and Windows 10/11 |
@@ -101,39 +103,27 @@ Grab the latest installer from [Releases](https://github.com/YASSERRMD/barq-cowo
 ### First run
 
 1. Launch the app — the backend starts automatically in the background.
-2. Open **Settings** and add your LLM provider (base URL, API key, model name).
-3. Create a **Workspace** pointing at a local directory.
-4. Add a **Project** and write a description of what you want to build.
-5. Create a **Task** and click **Run** — watch the plan unfold live.
+2. Open **Settings** and add your LLM provider. Enter the API key directly — no environment variables needed.
+3. Create a **Project** and write a name, description, and optional system instructions.
+4. Create a **Task** and click **Run** — watch the plan unfold live in the timeline.
+5. Browse produced **Artifacts** or check the **Logs** for the full event trail.
 
 ### Configuration
 
-Barq reads environment variables and an optional `barq.yaml` placed in:
+API keys and provider settings are configured entirely inside the app under **Settings > Providers**. No environment variables or config files are required for normal use.
+
+For advanced overrides, an optional `barq.yaml` can be placed in:
 
 | OS | Path |
 |----|------|
 | macOS / Linux | `~/.local/share/barq-cowork/` |
 | Windows | `%APPDATA%\barq-cowork\` |
 
-```yaml
-# barq.yaml (optional overrides)
-llm:
-  default_provider: openai
-  providers:
-    openai:
-      base_url: https://api.openai.com/v1
-      api_key_env: OPENAI_API_KEY
-      model: gpt-4o
-      timeout_sec: 120
-```
-
-Key environment variables:
+The only environment variable you may need:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BARQ_LISTEN_ADDR` | `127.0.0.1:7331` | Backend listen address |
-| `OPENAI_API_KEY` | — | OpenAI / compatible provider key |
-| `ZAI_API_KEY` | — | Zai provider key |
+| `BARQ_LISTEN_ADDR` | `127.0.0.1:7331` | Override the backend listen address |
 
 ---
 
@@ -265,12 +255,16 @@ barq-cowork/
 
 ## Roadmap
 
+- [x] In-app API key storage — no environment variables required
+- [x] Built-in Anthropic, Gemini, Ollama, OpenAI, and Z.AI providers
+- [x] Schedules — recurring tasks with cron expressions
+- [x] Connectors view — browse and test all configured providers
+- [x] Command palette — keyboard-first navigation
 - [ ] Vector-based workspace memory (semantic search over context files)
 - [ ] Real-time WebSocket event stream (replace polling)
 - [ ] Agent-to-agent communication protocol
 - [ ] Plugin system for custom tools
-- [ ] Multi-workspace sync
-- [ ] Local model support (Ollama integration)
+- [ ] Apple code signing (remove Gatekeeper prompt on macOS)
 
 ---
 
