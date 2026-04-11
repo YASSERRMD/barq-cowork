@@ -439,6 +439,50 @@ export const templatesApi = {
     request(`/templates/${id}`, { method: "DELETE" }),
 };
 
+// ──────────────────── Skills ────────────────────
+
+export type SkillKind = "doc" | "sheet" | "deck" | "pdf" | "text";
+
+export interface Skill {
+  id: string;
+  name: string;
+  kind: SkillKind;
+  description: string;
+  output_mime_type: string;
+  output_file_ext: string;
+  built_in: boolean;
+  enabled: boolean;
+  tags: string[];
+  input_mime_types: string[];
+}
+
+export const skillsApi = {
+  list: (): Promise<Skill[]> => request("/skills"),
+
+  get: (id: string): Promise<Skill> => request(`/skills/${id}`),
+
+  create: (data: {
+    name: string;
+    kind: SkillKind;
+    description?: string;
+    output_mime_type?: string;
+    output_file_ext?: string;
+    prompt_template?: string;
+    tags?: string[];
+    input_mime_types?: string[];
+  }): Promise<Skill> =>
+    request("/skills", { method: "POST", body: JSON.stringify(data) }),
+
+  updateEnabled: (id: string, enabled: boolean): Promise<Skill> =>
+    request(`/skills/${id}/enabled`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/skills/${id}`, { method: "DELETE" }),
+};
+
 // ──────────────────── Events (global) ────────────────────
 
 export const eventsApi = {
