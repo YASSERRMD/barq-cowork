@@ -13,6 +13,8 @@ go.work.sum
 # Rust / Tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+# Sidecar binaries are built locally / in CI — do not commit
+apps/desktop/src-tauri/binaries/barq-coworkd-*
 
 # Node / Frontend
 apps/desktop/node_modules/
