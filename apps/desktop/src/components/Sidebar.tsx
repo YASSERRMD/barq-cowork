@@ -1,13 +1,14 @@
 import { NavLink } from "react-router-dom";
 import clsx from "clsx";
+import { useAppStore } from "../store/appStore";
 
 const NAV_ITEMS = [
-  { to: "/",            label: "Workspaces",  icon: "⬡" },
-  { to: "/tasks",       label: "Tasks",        icon: "▶" },
-  { to: "/artifacts",   label: "Artifacts",    icon: "⊞" },
-  { to: "/approvals",   label: "Approvals",    icon: "✓" },
-  { to: "/logs",        label: "Logs",         icon: "≡" },
-  { to: "/settings",   label: "Settings",      icon: "⚙" },
+  { to: "/",          label: "Workspaces", icon: "⬡" },
+  { to: "/tasks",     label: "Tasks",      icon: "▶" },
+  { to: "/artifacts", label: "Artifacts",  icon: "⊞" },
+  { to: "/approvals", label: "Approvals",  icon: "✓" },
+  { to: "/logs",      label: "Logs",       icon: "≡" },
+  { to: "/settings",  label: "Settings",   icon: "⚙" },
 ];
 
 export function Sidebar() {
@@ -18,7 +19,7 @@ export function Sidebar() {
     >
       {/* Logo / brand */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800">
-        <div className="w-7 h-7 rounded-md bg-barq-600 flex items-center justify-center text-white font-bold text-sm">
+        <div className="w-7 h-7 rounded-md bg-barq-600 flex items-center justify-center text-white font-bold text-sm select-none">
           B
         </div>
         <span className="font-semibold text-white tracking-wide text-sm">
@@ -50,17 +51,13 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer: backend status */}
       <BackendStatusFooter />
     </aside>
   );
 }
 
 function BackendStatusFooter() {
-  // Imported here to avoid circular deps; store is tiny.
-  const { backendReachable, backendMessage, version } =
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require("../store/appStore").useAppStore();
+  const { backendReachable, backendMessage, version } = useAppStore();
 
   return (
     <div className="px-3 py-2 border-t border-gray-800 text-xs text-gray-500 space-y-0.5">

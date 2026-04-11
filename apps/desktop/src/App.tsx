@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { WorkspacesPage } from "./pages/WorkspacesPage";
+import { ProjectsPage } from "./pages/ProjectsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
@@ -13,7 +14,6 @@ import { checkHealth, getAppVersion } from "./lib/tauri";
 export default function App() {
   const { setBackendStatus, setVersion } = useAppStore();
 
-  // On mount: read app version and probe the Go backend.
   useEffect(() => {
     getAppVersion()
       .then(setVersion)
@@ -34,7 +34,12 @@ export default function App() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto bg-gray-950">
         <Routes>
-          <Route path="/"           element={<WorkspacesPage />} />
+          {/* Workspace hierarchy */}
+          <Route path="/"                                  element={<WorkspacesPage />} />
+          <Route path="/workspaces/:workspaceId/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:projectId/tasks"        element={<TasksPage />} />
+
+          {/* Top-level nav stubs */}
           <Route path="/tasks"      element={<TasksPage />} />
           <Route path="/artifacts"  element={<ArtifactsPage />} />
           <Route path="/approvals"  element={<ApprovalsPage />} />

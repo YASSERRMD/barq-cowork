@@ -1,0 +1,147 @@
+/**
+ * Typed REST API client for the barq-coworkd backend.
+ * The frontend calls the Go backend directly over HTTP (CORS is configured).
+ */
+
+const BASE = "http://localhost:7331/api/v1";
+
+// ──────────────────── Types ────────────────────
+
+export interface Workspace {
+  id: string;
+  name: string;
+  description: string;
+  root_path: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TaskStatus =
+  | "pending"
+  | "planning"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface Task {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  provider_id: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+// ──────────────────── HTTP helpers ────────────────────
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(body.error ?? `HTTP ${res.status}`);
+  }
+  return body.data as T;
+}
+
+// ──────────────────── Workspaces ────────────────────
+
+export const workspacesApi = {
+  list: (): Promise<Workspace[]> => request("/workspaces"),
+
+  get: (id: string): Promise<Workspace> => request(`/workspaces/${id}`),
+
+  create: (data: {
+    name: string;
+    description?: string;
+    root_path?: string;
+  }): Promise<Workspace> =>
+    request("/workspaces", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (
+    id: string,
+    data: { name: string; description?: string; root_path?: string }
+  ): Promise<Workspace> =>
+    request(`/workspaces/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/workspaces/${id}`, { method: "DELETE" }),
+};
+
+// ──────────────────── Projects ────────────────────
+
+export const projectsApi = {
+  listByWorkspace: (workspaceID: string): Promise<Project[]> =>
+    request(`/workspaces/${workspaceID}/projects`),
+
+  get: (id: string): Promise<Project> => request(`/projects/${id}`),
+
+  create: (data: {
+    workspace_id: string;
+    name: string;
+    description?: string;
+    instructions?: string;
+  }): Promise<Project> =>
+    request("/projects", { method: "POST", body: JSON.stringify(data) }),
+
+  update: (
+    id: string,
+    data: { name: string; description?: string; instructions?: string }
+  ): Promise<Project> =>
+    request(`/projects/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/projects/${id}`, { method: "DELETE" }),
+};
+
+// ──────────────────── Tasks ────────────────────
+
+export const tasksApi = {
+  listByProject: (projectID: string): Promise<Task[]> =>
+    request(`/projects/${projectID}/tasks`),
+
+  get: (id: string): Promise<Task> => request(`/tasks/${id}`),
+
+  create: (data: {
+    project_id: string;
+    title: string;
+    description?: string;
+    provider_id?: string;
+  }): Promise<Task> =>
+    request("/tasks", { method: "POST", body: JSON.stringify(data) }),
+
+  updateStatus: (id: string, status: TaskStatus): Promise<Task> =>
+    request(`/tasks/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    request(`/tasks/${id}`, { method: "DELETE" }),
+};

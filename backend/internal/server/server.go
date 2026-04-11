@@ -6,23 +6,34 @@ import (
 	"net/http"
 	"time"
 
+	v1 "github.com/barq-cowork/barq-cowork/internal/api/v1"
+	"github.com/barq-cowork/barq-cowork/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// Server wraps the HTTP router and its configuration.
-type Server struct {
-	addr   string
-	router *chi.Mux
-	logger *slog.Logger
+// Services bundles all application services the server depends on.
+type Services struct {
+	Workspaces *service.WorkspaceService
+	Projects   *service.ProjectService
+	Tasks      *service.TaskService
 }
 
-// New creates a new Server bound to addr.
-func New(addr string, logger *slog.Logger) *Server {
+// Server wraps the HTTP router and its configuration.
+type Server struct {
+	addr     string
+	router   *chi.Mux
+	logger   *slog.Logger
+	services Services
+}
+
+// New creates a new Server bound to addr, wired with the given services.
+func New(addr string, logger *slog.Logger, svcs Services) *Server {
 	s := &Server{
-		addr:   addr,
-		router: chi.NewRouter(),
-		logger: logger,
+		addr:     addr,
+		router:   chi.NewRouter(),
+		logger:   logger,
+		services: svcs,
 	}
 	s.routes()
 	return s
@@ -35,11 +46,14 @@ func (s *Server) routes() {
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Timeout(60 * time.Second))
 
-	// Allow frontend / Tauri to call backend from localhost.
+	// CORS: allow Tauri webview and dev frontend.
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "http://localhost:1420")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			origin := r.Header.Get("Origin")
+			if origin == "http://localhost:1420" || origin == "tauri://localhost" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -49,10 +63,17 @@ func (s *Server) routes() {
 		})
 	})
 
+	// Core endpoints
 	s.router.Get("/health", s.handleHealth)
+
+	// API v1
+	s.router.Route("/api/v1", func(r chi.Router) {
+		v1.NewWorkspaceHandler(s.services.Workspaces).Register(r)
+		v1.NewProjectHandler(s.services.Projects).Register(r)
+		v1.NewTaskHandler(s.services.Tasks).Register(r)
+	})
 }
 
-// handleHealth returns a simple alive JSON response.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
