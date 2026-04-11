@@ -38,6 +38,29 @@ func (s *EventStore) Create(ctx context.Context, e *domain.Event) error {
 	return nil
 }
 
+// ListRecent returns the most recent events across all tasks, newest first.
+// limit <= 0 defaults to 200.
+func (s *EventStore) ListRecent(ctx context.Context, limit int) ([]*domain.Event, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+eventCols+` FROM events ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("event list recent: %w", err)
+	}
+	defer rows.Close()
+	var out []*domain.Event
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("event scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // ListByTask returns all events for a task ordered by creation time.
 func (s *EventStore) ListByTask(ctx context.Context, taskID string) ([]*domain.Event, error) {
 	rows, err := s.db.QueryContext(ctx,

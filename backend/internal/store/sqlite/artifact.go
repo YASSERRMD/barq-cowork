@@ -66,6 +66,29 @@ func (s *ArtifactStore) ListByProject(ctx context.Context, projectID string) ([]
 	return s.list(ctx, `project_id=?`, projectID)
 }
 
+// ListRecent returns the most recent artifacts across all tasks/projects.
+// limit <= 0 defaults to 100.
+func (s *ArtifactStore) ListRecent(ctx context.Context, limit int) ([]*domain.Artifact, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+artifactCols+` FROM artifacts ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("artifact list recent: %w", err)
+	}
+	defer rows.Close()
+	var out []*domain.Artifact
+	for rows.Next() {
+		a, err := scanArtifact(rows)
+		if err != nil {
+			return nil, fmt.Errorf("artifact scan: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 func (s *ArtifactStore) list(ctx context.Context, where, arg string) ([]*domain.Artifact, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+artifactCols+` FROM artifacts WHERE `+where+` ORDER BY created_at DESC`, arg)

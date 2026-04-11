@@ -3,11 +3,20 @@ package v1
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
 	"github.com/go-chi/chi/v5"
 )
+
+func parsePositiveInt(s string) (int, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0, strconv.ErrSyntax
+	}
+	return n, nil
+}
 
 // ─────────────────────────────────────────────
 // Port interfaces (narrow, owned by this layer)
@@ -28,11 +37,13 @@ type ArtifactQuerier interface {
 	GetByID(ctx context.Context, id string) (*domain.Artifact, error)
 	ListByTask(ctx context.Context, taskID string) ([]*domain.Artifact, error)
 	ListByProject(ctx context.Context, projectID string) ([]*domain.Artifact, error)
+	ListRecent(ctx context.Context, limit int) ([]*domain.Artifact, error)
 }
 
-// EventQuerier fetches events for a task.
+// EventQuerier fetches events for a task or globally.
 type EventQuerier interface {
 	ListByTask(ctx context.Context, taskID string) ([]*domain.Event, error)
+	ListRecent(ctx context.Context, limit int) ([]*domain.Event, error)
 }
 
 // ─────────────────────────────────────────────
@@ -75,8 +86,12 @@ func (h *ExecutionHandler) Register(r chi.Router) {
 	// Project-level artifact listing
 	r.Get("/projects/{projectID}/artifacts", h.listArtifactsByProject)
 
-	// Single artifact
+	// Global artifact listing + single artifact
+	r.Get("/artifacts", h.listArtifactsRecent)
 	r.Get("/artifacts/{id}", h.getArtifact)
+
+	// Global event log
+	r.Get("/events", h.listEventsRecent)
 }
 
 // ─────────────────────────────────────────────
@@ -158,6 +173,22 @@ func (h *ExecutionHandler) listArtifactsByProject(w http.ResponseWriter, r *http
 	h.respondArtifacts(w, artifacts)
 }
 
+// listArtifactsRecent GET /api/v1/artifacts[?limit=N]
+func (h *ExecutionHandler) listArtifactsRecent(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := parsePositiveInt(v); err == nil {
+			limit = n
+		}
+	}
+	artifacts, err := h.artifacts.ListRecent(r.Context(), limit)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	h.respondArtifacts(w, artifacts)
+}
+
 // getArtifact GET /api/v1/artifacts/{id}
 func (h *ExecutionHandler) getArtifact(w http.ResponseWriter, r *http.Request) {
 	a, err := h.artifacts.GetByID(r.Context(), chi.URLParam(r, "id"))
@@ -166,6 +197,29 @@ func (h *ExecutionHandler) getArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, toArtifactDTO(a))
+}
+
+// listEventsRecent GET /api/v1/events[?limit=N]
+func (h *ExecutionHandler) listEventsRecent(w http.ResponseWriter, r *http.Request) {
+	limit := 200
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := parsePositiveInt(v); err == nil {
+			limit = n
+		}
+	}
+	events, err := h.events.ListRecent(r.Context(), limit)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	out := make([]*eventDTO, len(events))
+	for i, e := range events {
+		out[i] = toEventDTO(e)
+	}
+	if out == nil {
+		out = []*eventDTO{}
+	}
+	jsonOK(w, out)
 }
 
 func (h *ExecutionHandler) respondArtifacts(w http.ResponseWriter, artifacts []*domain.Artifact) {
