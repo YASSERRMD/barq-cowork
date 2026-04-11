@@ -286,7 +286,7 @@ export interface Plan {
   created_at: string;
 }
 
-export type ArtifactType = "markdown" | "json" | "file" | "log";
+export type ArtifactType = "markdown" | "json" | "file" | "log" | "html";
 
 export interface Artifact {
   id: string;
@@ -328,6 +328,18 @@ export const executionApi = {
     request(`/artifacts?limit=${limit}`),
 
   getArtifact: (id: string): Promise<Artifact> => request(`/artifacts/${id}`),
+
+  /** Returns the direct URL to download/open the artifact file. */
+  artifactDownloadUrl: (id: string): string => `${BASE}/artifacts/${id}/download`,
+
+  uploadFiles: async (files: File[]): Promise<{ paths: string[] }> => {
+    const form = new FormData();
+    files.forEach(f => form.append("files", f));
+    const res = await fetch(`${BASE}/workspace/upload`, { method: "POST", body: form });
+    if (!res.ok) throw new Error(`upload failed: ${res.status}`);
+    const body = await res.json();
+    return body.data as { paths: string[] };
+  },
 };
 
 // ──────────────────── Sub-agents ────────────────────

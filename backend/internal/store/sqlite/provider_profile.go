@@ -106,6 +106,26 @@ func (s *ProviderProfileStore) Update(ctx context.Context, p *domain.ProviderPro
 	return nil
 }
 
+// GetDefault returns the profile marked is_default=1, or the first profile
+// if none is explicitly marked, so tasks always have a provider to use.
+func (s *ProviderProfileStore) GetDefault(ctx context.Context) (*domain.ProviderProfile, error) {
+	// Try explicit default first
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+providerProfileCols+` FROM provider_profiles WHERE is_default=1 LIMIT 1`)
+	p, err := scanProviderProfile(row)
+	if err == nil {
+		return p, nil
+	}
+	// Fall back to whichever profile was created first
+	row = s.db.QueryRowContext(ctx,
+		`SELECT `+providerProfileCols+` FROM provider_profiles ORDER BY created_at ASC LIMIT 1`)
+	p, err = scanProviderProfile(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	return p, err
+}
+
 func (s *ProviderProfileStore) Delete(ctx context.Context, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM provider_profiles WHERE id=?`, id)
 	if err != nil {

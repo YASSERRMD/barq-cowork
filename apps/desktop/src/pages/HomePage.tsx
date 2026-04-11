@@ -70,8 +70,14 @@ function TaskComposer({
   profiles: ProviderProfile[];
 }) {
   const [text, setText] = useState("");
-  const [selectedProfile, setSelectedProfile] = useState<string>("");
+  const [selectedProfile, setSelectedProfile] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [uploadedPaths, setUploadedPaths] = useState<string[]>([]);
+  const [folderPath, setFolderPath] = useState("");
+  const [showFolderInput, setShowFolderInput] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
   // Auto-focus on mount
@@ -87,22 +93,50 @@ function TaskComposer({
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Upload files if any
+      let filePaths: string[] = uploadedPaths;
+      if (attachedFiles.length > 0) {
+        setUploading(true);
+        try {
+          const result = await executionApi.uploadFiles(attachedFiles);
+          filePaths = result.paths;
+        } finally {
+          setUploading(false);
+        }
+      }
+
+      // Build description
+      let desc = text.trim();
+      if (filePaths.length > 0) {
+        desc += `\n\nAttached files for you to work on: ${filePaths.join(", ")}`;
+      }
+      if (folderPath.trim()) {
+        desc += `\n\nWork on files in this folder: ${folderPath.trim()}`;
+      }
+
       const task = await tasksApi.create({
         title: text.trim().slice(0, 120),
-        description: text.trim(),
+        description: desc,
         provider_id: selectedProfile || undefined,
       });
-      await executionApi.runTask(task.id, { require_approval: false });
+      await executionApi.runTask(task.id, {
+        require_approval: false,
+        workspace_root: folderPath.trim() || undefined,
+      });
       return task;
     },
     onSuccess: (task) => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       setText("");
+      setAttachedFiles([]);
+      setUploadedPaths([]);
+      setFolderPath("");
+      setShowFolderInput(false);
       onRunCreated(task.id);
     },
   });
 
-  const canSubmit = text.trim().length > 0 && !createMutation.isPending;
+  const canSubmit = text.trim().length > 0 && !createMutation.isPending && !uploading;
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canSubmit) {
@@ -120,6 +154,19 @@ function TaskComposer({
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Composer box */}
       <div className="composer-wrap">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            setAttachedFiles(prev => [...prev, ...files]);
+            e.target.value = "";
+          }}
+        />
+
         <textarea
           ref={textareaRef}
           className="composer-textarea selectable"
@@ -128,7 +175,59 @@ function TaskComposer({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
           rows={3}
+          disabled={false}
         />
+
+        {/* Attached files chips */}
+        {attachedFiles.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 12px", borderTop: "1px solid var(--border)" }}>
+            {attachedFiles.map((f, i) => (
+              <span key={i} style={{
+                display: "flex", alignItems: "center", gap: 4,
+                background: "var(--surface-3)", border: "1px solid var(--border)",
+                borderRadius: 5, padding: "2px 8px", fontSize: 11, color: "var(--text-secondary)",
+              }}>
+                <Paperclip size={10} />
+                {f.name}
+                <button
+                  onClick={() => setAttachedFiles(p => p.filter((_, j) => j !== i))}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", padding: 0, lineHeight: 1 }}
+                >✕</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Folder path chip */}
+        {folderPath && (
+          <div style={{ padding: "4px 12px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6 }}>
+            <FolderOpen size={11} color="var(--accent)" />
+            <span style={{ fontSize: 11, color: "var(--accent)", fontFamily: "monospace" }}>{folderPath}</span>
+            <button
+              onClick={() => setFolderPath("")}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", fontSize: 11 }}
+            >✕</button>
+          </div>
+        )}
+
+        {/* Folder path input */}
+        {showFolderInput && (
+          <div style={{ padding: "8px 12px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+            <FolderOpen size={13} color="var(--accent)" />
+            <input
+              style={{
+                flex: 1, background: "transparent", border: "none", outline: "none",
+                fontSize: 12, color: "var(--text-secondary)",
+              }}
+              placeholder="Paste folder path, e.g. /Users/you/Documents/Reports"
+              value={folderPath}
+              onChange={e => setFolderPath(e.target.value)}
+            />
+            {folderPath && (
+              <button className="btn-ghost btn-xs" onClick={() => { setFolderPath(""); setShowFolderInput(false); }}>✕</button>
+            )}
+          </div>
+        )}
 
         {/* Composer toolbar */}
         <div
@@ -140,14 +239,21 @@ function TaskComposer({
             borderTop: "1px solid var(--border)",
           }}
         >
-          {/* Attach actions (cosmetic for now) */}
-          <button className="btn-ghost btn-sm" title="Attach file">
+          {/* File attach button */}
+          <button className="btn-ghost btn-sm" title="Attach file" onClick={() => fileInputRef.current?.click()}>
             <Paperclip size={13} />
-            <span>File</span>
+            <span>{attachedFiles.length > 0 ? `${attachedFiles.length} file${attachedFiles.length > 1 ? "s" : ""}` : "File"}</span>
           </button>
-          <button className="btn-ghost btn-sm" title="Attach folder">
+
+          {/* Folder attach button */}
+          <button
+            className="btn-ghost btn-sm"
+            title="Attach folder"
+            onClick={() => setShowFolderInput(v => !v)}
+            style={{ color: folderPath ? "var(--accent)" : undefined }}
+          >
             <FolderOpen size={13} />
-            <span>Folder</span>
+            <span>{folderPath ? "Folder set" : "Folder"}</span>
           </button>
 
           <div style={{ flex: 1 }} />
@@ -184,7 +290,12 @@ function TaskComposer({
             onClick={() => createMutation.mutate()}
             style={{ minWidth: 80 }}
           >
-            {createMutation.isPending ? (
+            {uploading ? (
+              <>
+                <Loader size={12} className="animate-spin" />
+                Uploading…
+              </>
+            ) : createMutation.isPending ? (
               <>
                 <Loader size={12} className="animate-spin" />
                 Starting…

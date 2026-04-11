@@ -135,7 +135,7 @@ func (p *Planner) Plan(
 		sb.WriteString(chunk.ContentDelta)
 	}
 	raw := sb.String()
-	p.logger.Debug("planner raw response", "task_id", task.ID, "length", len(raw))
+	p.logger.Info("planner raw response", "task_id", task.ID, "length", len(raw), "snippet", truncate(raw, 300))
 
 	parsed, err := parsePlan(raw)
 	if err != nil {

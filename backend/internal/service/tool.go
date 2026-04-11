@@ -162,6 +162,9 @@ func BuildRegistry() *tools.Registry {
 	r.Register(tools.NewHTTPFetchTool())
 	r.Register(tools.MarkdownReportTool{})
 	r.Register(tools.JSONExportTool{})
+	r.Register(tools.WriteSlidesTool{})
+	r.Register(tools.WritePPTXTool{})
+	r.Register(tools.DocxTool{})
 	return r
 }
 

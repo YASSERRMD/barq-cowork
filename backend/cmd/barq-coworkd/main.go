@@ -71,6 +71,8 @@ func main() {
 		logger.Error("data directory not writable", "path", dataDir, "error", err)
 		os.Exit(1)
 	}
+	workspaceRoot := filepath.Join(dataDir, "workspace")
+	_ = os.MkdirAll(workspaceRoot, 0o755)
 
 	// ── Task recovery ─────────────────────────────────────────────────
 	// Reset any tasks that were stuck in planning/running from a previous
@@ -117,9 +119,9 @@ func main() {
 	subAgentOrch := orchestrator.NewSubAgentOrchestrator(
 		subAgentStore, planner, executor, planStore, eventRepo, logger,
 	)
-	orch     := orchestrator.New(
+	orch := orchestrator.New(
 		taskRepo, projectRepo, providerProfileRepo,
-		planner, executor, planStore,
+		planStore, registry, toolRegistry, artifactStore, eventRepo,
 		cfg, logger,
 	)
 
@@ -133,10 +135,11 @@ func main() {
 		Tools:      service.NewToolService(toolRegistry, approvalRepo, eventRepo),
 		Skills:     service.NewSkillService(skillStore),
 		Execution: server.ExecutionDeps{
-			Runner:    orch,
-			Plans:     planStore,
-			Artifacts: artifactStore,
-			Events:    eventRepo,
+			Runner:        orch,
+			Plans:         planStore,
+			Artifacts:     artifactStore,
+			Events:        eventRepo,
+			WorkspaceRoot: workspaceRoot,
 		},
 		Memory: server.MemoryDeps{
 			ContextFiles:  contextFileStore,

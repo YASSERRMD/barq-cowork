@@ -15,6 +15,8 @@ type ChatMessage struct {
 	Content string
 	// ToolCallID is set when Role == "tool" (returning a tool result).
 	ToolCallID string
+	// ToolCalls is set when Role == "assistant" and the LLM requested tool calls.
+	ToolCalls []ToolCall
 }
 
 // ToolDefinition describes a callable tool the LLM may invoke.

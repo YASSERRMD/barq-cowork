@@ -17,6 +17,7 @@ const TYPE_ICON: Record<ArtifactType, React.ElementType> = {
   json:     Braces,
   file:     File,
   log:      ScrollText,
+  html:     Package,
 };
 
 const TYPE_COLOR: Record<ArtifactType, string> = {
@@ -24,6 +25,7 @@ const TYPE_COLOR: Record<ArtifactType, string> = {
   json:     "#34d399",
   file:     "#a78bfa",
   log:      "#9090a8",
+  html:     "#f59e0b",
 };
 
 const TYPE_BADGE: Record<ArtifactType, string> = {
@@ -31,9 +33,10 @@ const TYPE_BADGE: Record<ArtifactType, string> = {
   json:     "badge-green",
   file:     "badge-purple",
   log:      "badge-gray",
+  html:     "badge-yellow",
 };
 
-const ALL_TYPES: ArtifactType[] = ["markdown", "json", "file", "log"];
+const ALL_TYPES: ArtifactType[] = ["markdown", "json", "file", "log", "html"];
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "—";

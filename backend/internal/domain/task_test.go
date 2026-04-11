@@ -12,9 +12,9 @@ func TestTask_Validate(t *testing.T) {
 		task    domain.Task
 		wantErr bool
 	}{
-		{"valid task", domain.Task{Title: "Do X", ProjectID: "p1"}, false},
+		{"valid task with project", domain.Task{Title: "Do X", ProjectID: "p1"}, false},
+		{"valid direct task no project", domain.Task{Title: "Do X"}, false}, // project-less tasks are allowed
 		{"missing title", domain.Task{ProjectID: "p1"}, true},
-		{"missing project_id", domain.Task{Title: "Do X"}, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -33,6 +33,18 @@ type wireMessage struct {
 	Role       string          `json:"role"`
 	Content    string          `json:"content"`
 	ToolCallID string          `json:"tool_call_id,omitempty"`
+	ToolCalls  []wireToolCall  `json:"tool_calls,omitempty"`
+}
+
+type wireToolCall struct {
+	ID       string               `json:"id"`
+	Type     string               `json:"type"` // always "function"
+	Function wireToolCallFunction `json:"function"`
+}
+
+type wireToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 type wireTool struct {
@@ -57,8 +69,9 @@ type sseChoice struct {
 }
 
 type sseDelta struct {
-	Content   string          `json:"content"`
-	ToolCalls []sseToolCall   `json:"tool_calls"`
+	Content          string        `json:"content"`
+	ReasoningContent string        `json:"reasoning_content"`
+	ToolCalls        []sseToolCall `json:"tool_calls"`
 }
 
 type sseToolCall struct {
@@ -77,8 +90,9 @@ type sseToolFunction struct {
 type chatResponse struct {
 	Choices []struct {
 		Message struct {
-			Content   string        `json:"content"`
-			ToolCalls []sseToolCall `json:"tool_calls"`
+			Content          string        `json:"content"`
+			ReasoningContent string        `json:"reasoning_content"`
+			ToolCalls        []sseToolCall `json:"tool_calls"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -153,7 +167,10 @@ func (c *Client) Chat(
 		return nil, mapHTTPError(resp)
 	}
 
-	if req.Stream {
+	// Some providers (e.g. Z.AI GLM) always return SSE even when stream=false.
+	// Check the actual Content-Type to decide which reader to use.
+	actualCT := resp.Header.Get("Content-Type")
+	if req.Stream || strings.Contains(actualCT, "text/event-stream") {
 		return streamSSE(ctx, resp), nil
 	}
 	return readFull(resp), nil
@@ -199,8 +216,15 @@ func streamSSE(ctx context.Context, resp *http.Response) <-chan provider.ChatCom
 			}
 
 			choice := chunk.Choices[0]
+
+			// GLM thinking models emit reasoning_content instead of content.
+			contentDelta := choice.Delta.Content
+			if contentDelta == "" {
+				contentDelta = choice.Delta.ReasoningContent
+			}
+
 			out := provider.ChatCompletionChunk{
-				ContentDelta: choice.Delta.Content,
+				ContentDelta: contentDelta,
 				FinishReason: choice.FinishReason,
 			}
 
@@ -223,7 +247,7 @@ func streamSSE(ctx context.Context, resp *http.Response) <-chan provider.ChatCom
 				}
 			}
 
-			if out.ContentDelta != "" || len(out.ToolCalls) > 0 || out.FinishReason != "" {
+			if contentDelta != "" || len(out.ToolCalls) > 0 || out.FinishReason != "" {
 				ch <- out
 			}
 		}
@@ -245,16 +269,16 @@ func readFull(resp *http.Response) <-chan provider.ChatCompletionChunk {
 		defer close(ch)
 		defer resp.Body.Close()
 
+		// Read the entire body first so we can attempt multiple parse strategies.
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			ch <- provider.ChatCompletionChunk{Done: true}
+			return
+		}
+
+		// Strategy 1: standard non-streaming JSON object.
 		var result chatResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			ch <- provider.ChatCompletionChunk{Done: true}
-			return
-		}
-		if result.Error != nil {
-			ch <- provider.ChatCompletionChunk{Done: true}
-			return
-		}
-		if len(result.Choices) > 0 {
+		if err := json.Unmarshal(bodyBytes, &result); err == nil && result.Error == nil && len(result.Choices) > 0 {
 			c := result.Choices[0]
 			var tcs []provider.ToolCall
 			for _, tc := range c.Message.ToolCalls {
@@ -264,11 +288,44 @@ func readFull(resp *http.Response) <-chan provider.ChatCompletionChunk {
 					Arguments: tc.Function.Arguments,
 				})
 			}
+			// GLM thinking models emit reasoning_content instead of content.
+			msgContent := c.Message.Content
+			if msgContent == "" {
+				msgContent = c.Message.ReasoningContent
+			}
 			ch <- provider.ChatCompletionChunk{
-				ContentDelta: c.Message.Content,
+				ContentDelta: msgContent,
 				ToolCalls:    tcs,
 				FinishReason: c.FinishReason,
 			}
+			ch <- provider.ChatCompletionChunk{Done: true}
+			return
+		}
+
+		// Strategy 2: the server returned SSE despite stream=false — parse inline.
+		var fullContent strings.Builder
+		for _, line := range strings.Split(string(bodyBytes), "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				break
+			}
+			var chunk sseChunk
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil || len(chunk.Choices) == 0 {
+				continue
+			}
+			// GLM thinking models emit reasoning_content instead of content.
+			delta := chunk.Choices[0].Delta.Content
+			if delta == "" {
+				delta = chunk.Choices[0].Delta.ReasoningContent
+			}
+			fullContent.WriteString(delta)
+		}
+		if fullContent.Len() > 0 {
+			ch <- provider.ChatCompletionChunk{ContentDelta: fullContent.String(), FinishReason: "stop"}
 		}
 		ch <- provider.ChatCompletionChunk{Done: true}
 	}()
@@ -282,7 +339,21 @@ func readFull(resp *http.Response) <-chan provider.ChatCompletionChunk {
 func buildRequest(cfg provider.ProviderConfig, req provider.ChatCompletionRequest) chatRequest {
 	msgs := make([]wireMessage, len(req.Messages))
 	for i, m := range req.Messages {
-		msgs[i] = wireMessage{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID}
+		wm := wireMessage{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID}
+		if len(m.ToolCalls) > 0 {
+			wm.ToolCalls = make([]wireToolCall, len(m.ToolCalls))
+			for j, tc := range m.ToolCalls {
+				wm.ToolCalls[j] = wireToolCall{
+					ID:   tc.ID,
+					Type: "function",
+					Function: wireToolCallFunction{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				}
+			}
+		}
+		msgs[i] = wm
 	}
 
 	var tools []wireTool

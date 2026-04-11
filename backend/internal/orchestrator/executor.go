@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -167,6 +168,11 @@ func (e *Executor) runTool(
 	}
 
 	result := t.Execute(ctx, ictx, step.ToolInput)
+	// Treat tool-level errors (status != ok) as step failures so the step is
+	// marked failed and the task ultimately reflects the error.
+	if result.Status != tools.ResultOK {
+		return result.ToJSON(), fmt.Errorf("%s", result.Error)
+	}
 	return result.ToJSON(), nil
 }
 
@@ -178,6 +184,9 @@ var artifactTools = map[string]domain.ArtifactType{
 	"write_markdown_report": domain.ArtifactTypeMarkdown,
 	"export_json":           domain.ArtifactTypeJSON,
 	"write_file":            domain.ArtifactTypeFile,
+	"write_html_slides":     domain.ArtifactTypeHTML,
+	"write_pptx":            domain.ArtifactTypeFile,
+	"write_docx":            domain.ArtifactTypeFile,
 }
 
 func (e *Executor) maybeRecordArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task) {

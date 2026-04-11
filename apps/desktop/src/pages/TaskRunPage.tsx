@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Play, FileText, Activity, Users, ChevronDown, ChevronRight,
   Clock, CheckCircle, XCircle, Loader, Circle, ArrowLeft,
-  AlertTriangle, Download, Copy, Zap, Terminal,
+  AlertTriangle, Download, Copy, Zap, Terminal, Maximize2, X,
+  PanelRight,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import {
   tasksApi, executionApi, toolsApi, agentsApi,
   type Task, type PlanStep, type TaskEvent, type Artifact,
@@ -198,7 +200,15 @@ function StepItem({
 
 type RightTab = "artifacts" | "events" | "agents";
 
-function ArtifactsPanel({ artifacts }: { artifacts: Artifact[] }) {
+function ArtifactsPanel({
+  artifacts,
+  onPreview,
+  previewId,
+}: {
+  artifacts: Artifact[];
+  onPreview?: (a: Artifact) => void;
+  previewId?: string;
+}) {
   if (!artifacts.length) return (
     <div className="empty-state" style={{ padding: "32px 16px" }}>
       <div className="empty-state-icon"><FileText size={16} color="var(--text-faint)" /></div>
@@ -210,7 +220,8 @@ function ArtifactsPanel({ artifacts }: { artifacts: Artifact[] }) {
       {artifacts.map((a) => (
         <div key={a.id} style={{
           padding: "10px 12px", background: "var(--surface-2)",
-          border: "1px solid var(--border)", borderRadius: 8,
+          border: `1px solid ${a.id === previewId ? "var(--accent)" : "var(--border)"}`,
+          borderRadius: 8,
         }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
             <FileText size={13} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
@@ -228,6 +239,16 @@ function ArtifactsPanel({ artifacts }: { artifacts: Artifact[] }) {
               </div>
             </div>
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              {onPreview && (
+                <button
+                  className="btn-ghost btn-xs"
+                  title={a.id === previewId ? "Close preview" : "Preview"}
+                  onClick={() => onPreview(a)}
+                  style={{ color: a.id === previewId ? "var(--accent)" : undefined }}
+                >
+                  <PanelRight size={11} />
+                </button>
+              )}
               <button
                 className="btn-ghost btn-xs"
                 title="Copy path"
@@ -236,9 +257,27 @@ function ArtifactsPanel({ artifacts }: { artifacts: Artifact[] }) {
                 <Copy size={11} />
               </button>
               {a.content_path && (
-                <button className="btn-ghost btn-xs" title="Open location">
+                <a
+                  href={`http://localhost:7331/api/v1/artifacts/${a.id}/download`}
+                  download
+                  className="btn-ghost btn-xs"
+                  title="Download file"
+                  style={{ display: "flex", alignItems: "center" }}
+                >
                   <Download size={11} />
-                </button>
+                </a>
+              )}
+              {a.type === "html" && (
+                <a
+                  href={`http://localhost:7331/api/v1/artifacts/${a.id}/download`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost btn-xs"
+                  title="Open in browser"
+                  style={{ display: "flex", alignItems: "center", fontSize: 10, gap: 3 }}
+                >
+                  <Maximize2 size={10} />
+                </a>
               )}
             </div>
           </div>
@@ -323,6 +362,163 @@ function AgentsPanel({ agents }: { agents: SubAgent[] }) {
   );
 }
 
+// ── Content preview panel ────────────────────────────────────────
+
+function ContentPreviewPanel({
+  artifact,
+  onClose,
+}: {
+  artifact: Artifact;
+  onClose: () => void;
+}) {
+  const downloadUrl = `http://localhost:7331/api/v1/artifacts/${artifact.id}/download`;
+  const [markdownContent, setMarkdownContent] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  // For markdown with inline content or remote fetch
+  useEffect(() => {
+    setMarkdownContent(null);
+    setLoadError(false);
+    if (artifact.type === "markdown") {
+      if (artifact.content_inline) {
+        setMarkdownContent(artifact.content_inline);
+      } else if (artifact.content_path) {
+        fetch(downloadUrl)
+          .then((r) => r.text())
+          .then(setMarkdownContent)
+          .catch(() => setLoadError(true));
+      }
+    }
+  }, [artifact.id, artifact.type, artifact.content_inline, artifact.content_path, downloadUrl]);
+
+  const fileName = artifact.name.split("/").pop() || artifact.name;
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: "var(--surface-1)", borderLeft: "1px solid var(--border)",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "8px 12px", borderBottom: "1px solid var(--border)",
+        flexShrink: 0, background: "var(--surface-2)",
+      }}>
+        <FileText size={13} color="var(--accent)" />
+        <span style={{
+          flex: 1, fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {fileName}
+        </span>
+        <span className="badge-gray" style={{ fontSize: 10, flexShrink: 0 }}>{artifact.type}</span>
+        <a
+          href={downloadUrl}
+          download
+          className="btn-ghost btn-xs"
+          title="Download"
+          style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+        >
+          <Download size={12} />
+        </a>
+        <button
+          className="btn-ghost btn-xs"
+          onClick={onClose}
+          title="Close preview"
+          style={{ flexShrink: 0 }}
+        >
+          <X size={12} />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflow: "auto" }}>
+        {artifact.type === "markdown" && (
+          <div style={{
+            padding: "16px 20px",
+            fontSize: 13, lineHeight: 1.7,
+            color: "var(--text-primary)",
+          }}>
+            {markdownContent != null ? (
+              <div className="markdown-preview" style={{
+                maxWidth: "100%",
+                wordBreak: "break-word",
+              }}>
+                <ReactMarkdown>{markdownContent}</ReactMarkdown>
+              </div>
+            ) : loadError ? (
+              <p style={{ color: "var(--red)", fontSize: 12 }}>Failed to load content.</p>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-faint)", fontSize: 12 }}>
+                <Loader size={12} className="animate-spin" /> Loading…
+              </div>
+            )}
+          </div>
+        )}
+
+        {artifact.type === "html" && (
+          <iframe
+            src={downloadUrl}
+            style={{ width: "100%", height: "100%", border: "none", background: "#fff" }}
+            title={fileName}
+            sandbox="allow-scripts allow-same-origin"
+          />
+        )}
+
+        {(artifact.type !== "markdown" && artifact.type !== "html") && (
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            height: "100%", gap: 20, padding: 32,
+          }}>
+            {/* File info card */}
+            <div style={{
+              background: "var(--surface-2)", border: "1px solid var(--border)",
+              borderRadius: 12, padding: "24px 32px", textAlign: "center",
+              maxWidth: 300, width: "100%",
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12,
+                background: "var(--accent-dim)", display: "flex",
+                alignItems: "center", justifyContent: "center",
+                margin: "0 auto 14px",
+              }}>
+                <FileText size={22} color="var(--accent)" />
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, wordBreak: "break-all" }}>
+                {fileName}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>
+                {artifact.type.toUpperCase()} · {formatBytes(artifact.size)}
+              </div>
+              {artifact.content_path && (
+                <div style={{ fontSize: 10.5, color: "var(--text-faint)", fontFamily: "monospace", marginBottom: 16, wordBreak: "break-all" }}>
+                  {artifact.content_path}
+                </div>
+              )}
+              <a
+                href={downloadUrl}
+                download
+                className="btn-primary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, textDecoration: "none" }}
+              >
+                <Download size={13} />
+                Download File
+              </a>
+            </div>
+            <button
+              className="btn-ghost btn-sm"
+              onClick={() => navigator.clipboard.writeText(artifact.content_path || artifact.name)}
+              style={{ fontSize: 11 }}
+            >
+              <Copy size={11} /> Copy path
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 
 export function TaskRunPage() {
@@ -331,6 +527,7 @@ export function TaskRunPage() {
   const qc = useQueryClient();
   const [rightTab, setRightTab] = useState<RightTab>("artifacts");
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const [previewArtifact, setPreviewArtifact] = useState<Artifact | null>(null);
 
   const { data: task, isLoading: taskLoading } = useQuery({
     queryKey: ["tasks", taskId],
@@ -513,7 +710,7 @@ export function TaskRunPage() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* Left: timeline */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px 32px" }}>
+        <div style={{ flex: previewArtifact ? "0 0 38%" : 1, minWidth: 0, overflowY: "auto", padding: "24px 24px 32px", transition: "flex 200ms ease" }}>
 
           {/* Description */}
           {task.description && task.description !== task.title && (
@@ -599,6 +796,16 @@ export function TaskRunPage() {
           )}
         </div>
 
+        {/* Center: content preview panel (split view) */}
+        {previewArtifact && (
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <ContentPreviewPanel
+              artifact={previewArtifact}
+              onClose={() => setPreviewArtifact(null)}
+            />
+          </div>
+        )}
+
         {/* Right panel */}
         <div className="right-panel" style={{ display: "flex", flexDirection: "column" }}>
           {/* Tabs */}
@@ -632,7 +839,13 @@ export function TaskRunPage() {
 
           {/* Panel content */}
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            {rightTab === "artifacts" && <ArtifactsPanel artifacts={artifacts} />}
+            {rightTab === "artifacts" && (
+              <ArtifactsPanel
+                artifacts={artifacts}
+                onPreview={(a) => setPreviewArtifact(previewArtifact?.id === a.id ? null : a)}
+                previewId={previewArtifact?.id}
+              />
+            )}
             {rightTab === "events"    && <EventsPanel events={events} />}
             {rightTab === "agents"    && <AgentsPanel agents={agents} />}
           </div>

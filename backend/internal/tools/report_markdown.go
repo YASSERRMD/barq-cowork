@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -40,8 +41,13 @@ func (t MarkdownReportTool) Execute(ctx context.Context, ictx InvocationContext,
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return Err("invalid arguments: %v", err)
 	}
-	if args.Filename == "" || args.Title == "" {
-		return Err("filename and title are required")
+	if args.Filename == "" {
+		return Err("filename is required")
+	}
+	// Auto-derive title from filename if not provided
+	if args.Title == "" {
+		args.Title = strings.ReplaceAll(strings.TrimSuffix(args.Filename, ".md"), "-", " ")
+		args.Title = strings.ReplaceAll(args.Title, "_", " ")
 	}
 
 	// Build report with header

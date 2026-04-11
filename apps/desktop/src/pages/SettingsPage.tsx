@@ -11,6 +11,7 @@ import {
   Trash2,
   Shield,
   ChevronDown,
+  Pencil,
 } from "lucide-react";
 import {
   providersApi,
@@ -64,6 +65,7 @@ export function SettingsPage() {
 function ProvidersTab() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<ProviderProfile | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
 
   const { data: profiles = [], isLoading } = useQuery({
@@ -83,6 +85,11 @@ function ProvidersTab() {
       setTestResults((prev) => ({ ...prev, [id]: result })),
   });
 
+  const handleEditSuccess = () => {
+    qc.invalidateQueries({ queryKey: ["provider-profiles"] });
+    setEditingProfile(null);
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -94,7 +101,7 @@ function ProvidersTab() {
         </div>
         <button
           className="btn-primary flex items-center gap-1.5 text-xs"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => { setShowForm((v) => !v); setEditingProfile(null); }}
         >
           {showForm ? (
             "Cancel"
@@ -142,14 +149,29 @@ function ProvidersTab() {
 
       <div className="space-y-2">
         {profiles.map((p) => (
-          <ProfileCard
-            key={p.id}
-            profile={p}
-            testResult={testResults[p.id]}
-            onTest={() => testMutation.mutate(p.id)}
-            testing={testMutation.isPending && testMutation.variables === p.id}
-            onDelete={() => deleteMutation.mutate(p.id)}
-          />
+          <div key={p.id}>
+            <ProfileCard
+              profile={p}
+              testResult={testResults[p.id]}
+              onTest={() => testMutation.mutate(p.id)}
+              testing={testMutation.isPending && testMutation.variables === p.id}
+              onDelete={() => deleteMutation.mutate(p.id)}
+              onEdit={() => {
+                setShowForm(false);
+                setEditingProfile(editingProfile?.id === p.id ? null : p);
+              }}
+              isEditing={editingProfile?.id === p.id}
+            />
+            {editingProfile?.id === p.id && (
+              <div className="mt-2">
+                <EditProfileForm
+                  profile={editingProfile}
+                  onSuccess={handleEditSuccess}
+                  onCancel={() => setEditingProfile(null)}
+                />
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -166,17 +188,24 @@ function ProfileCard({
   onTest,
   testing,
   onDelete,
+  onEdit,
+  isEditing,
 }: {
   profile: ProviderProfile;
   testResult?: TestResult;
   onTest: () => void;
   testing: boolean;
   onDelete: () => void;
+  onEdit: () => void;
+  isEditing: boolean;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="surface-2 rounded-lg border border-surface-3 p-4 space-y-3">
+    <div className={clsx(
+      "surface-2 rounded-lg border p-4 space-y-3",
+      isEditing ? "border-barq-500/40" : "border-surface-3"
+    )}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -220,6 +249,17 @@ function ProfileCard({
             ) : (
               "Test"
             )}
+          </button>
+
+          <button
+            className={clsx(
+              "btn-ghost text-xs h-7",
+              isEditing ? "text-barq-400" : "text-text-muted hover:text-text-secondary"
+            )}
+            onClick={onEdit}
+            title={isEditing ? "Close editor" : "Edit profile"}
+          >
+            <Pencil size={13} strokeWidth={1.75} />
           </button>
 
           {confirmDelete ? (
@@ -516,6 +556,220 @@ function CreateProfileForm({
             <><Loader2 size={13} className="animate-spin" /> Saving…</>
           ) : (
             "Save Provider"
+          )}
+        </button>
+        <button type="button" className="btn-ghost text-sm" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Edit profile form
+// ─────────────────────────────────────────────
+
+function EditProfileForm({
+  profile,
+  onSuccess,
+  onCancel,
+}: {
+  profile: ProviderProfile;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(profile.name);
+  const [providerName, setProviderName] = useState(profile.provider_name);
+  const [baseURL, setBaseURL] = useState(profile.base_url);
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState(profile.model);
+  const [timeoutSec, setTimeoutSec] = useState(profile.timeout_sec || 120);
+  const [isDefault, setIsDefault] = useState(profile.is_default);
+  const [showKey, setShowKey] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      providersApi.updateProfile(profile.id, {
+        name,
+        provider_name: providerName,
+        base_url: baseURL,
+        api_key: apiKey,
+        model,
+        timeout_sec: timeoutSec,
+        is_default: isDefault,
+      }),
+    onSuccess,
+  });
+
+  const applyPreset = (pName: string) => {
+    setProviderName(pName);
+    const preset = PROVIDER_PRESETS[pName];
+    if (preset) {
+      setBaseURL(preset.baseURL);
+      setModel(preset.model);
+    }
+  };
+
+  const preset = PROVIDER_PRESETS[providerName];
+
+  return (
+    <div className="surface-2 rounded-lg border border-barq-500/30 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-text-primary">Edit Provider</h3>
+      </div>
+
+      {/* Provider picker */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-text-secondary">Provider</label>
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(PROVIDER_PRESETS).map(([key, val]) => (
+            <button
+              key={key}
+              type="button"
+              className={clsx(
+                "px-3 py-1.5 rounded text-xs font-medium transition-colors border",
+                providerName === key
+                  ? "bg-barq-600 border-barq-500 text-white"
+                  : "bg-transparent border-surface-3 text-text-secondary hover:border-barq-600/50 hover:text-text-primary"
+              )}
+              onClick={() => applyPreset(key)}
+            >
+              {val.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {/* Profile name */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">
+            Profile Name <span className="text-red-400">*</span>
+          </label>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
+
+        {/* API Key */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+            <Key size={11} />
+            API Key
+          </label>
+          <div className="relative">
+            <input
+              className="input pr-9"
+              type={showKey ? "text" : "password"}
+              placeholder={profile.api_key_set ? `${profile.api_key_hint} — leave blank to keep current` : (preset?.placeholder ?? "Enter API key")}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors"
+              onClick={() => setShowKey((v) => !v)}
+              tabIndex={-1}
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-[11px] text-text-muted">
+            Leave blank to keep the current key. Enter a new key to replace it.
+          </p>
+        </div>
+
+        {/* Endpoint */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">
+            API Endpoint
+          </label>
+          <input
+            className="input font-mono text-xs"
+            value={baseURL}
+            onChange={(e) => setBaseURL(e.target.value)}
+            placeholder="https://api.openai.com/v1"
+          />
+        </div>
+
+        {/* Model */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-text-secondary">Model</label>
+          <input
+            className="input"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="e.g. gpt-4o"
+          />
+        </div>
+
+        {/* Advanced toggle */}
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
+          onClick={() => setAdvanced((v) => !v)}
+        >
+          <ChevronDown
+            size={13}
+            className={clsx("transition-transform", advanced && "rotate-180")}
+          />
+          Advanced options
+        </button>
+
+        {advanced && (
+          <div className="space-y-3 pl-0">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-text-secondary">Timeout (sec)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={5}
+                  max={600}
+                  value={timeoutSec}
+                  onChange={(e) => setTimeoutSec(Number(e.target.value))}
+                />
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={isDefault}
+                    onChange={(e) => setIsDefault(e.target.checked)}
+                  />
+                  <span className="text-sm text-text-secondary">Set as default</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {updateMutation.error && (
+        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded bg-red-500/10 border border-red-500/20 text-red-400">
+          <XCircle size={12} />
+          {(updateMutation.error as Error).message}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          className="btn-primary text-sm"
+          disabled={updateMutation.isPending || !name.trim()}
+          onClick={() => updateMutation.mutate()}
+        >
+          {updateMutation.isPending ? (
+            <><Loader2 size={13} className="animate-spin" /> Saving…</>
+          ) : (
+            "Save Changes"
           )}
         </button>
         <button type="button" className="btn-ghost text-sm" onClick={onCancel}>

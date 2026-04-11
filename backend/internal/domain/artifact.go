@@ -10,6 +10,7 @@ const (
 	ArtifactTypeJSON     ArtifactType = "json"
 	ArtifactTypeFile     ArtifactType = "file"
 	ArtifactTypeLog      ArtifactType = "log"
+	ArtifactTypeHTML     ArtifactType = "html"
 )
 
 // Artifact is any output produced by a task execution — a file, report,

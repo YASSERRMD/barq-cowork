@@ -10,6 +10,7 @@ import (
 	"github.com/barq-cowork/barq-cowork/internal/config"
 	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
+	"github.com/barq-cowork/barq-cowork/internal/tools"
 )
 
 // ─────────────────────────────────────────────
@@ -30,6 +31,7 @@ type ProjectRepo interface {
 // ProviderProfileRepo provides saved provider profile lookup.
 type ProviderProfileRepo interface {
 	GetByID(ctx context.Context, id string) (*domain.ProviderProfile, error)
+	GetDefault(ctx context.Context) (*domain.ProviderProfile, error)
 }
 
 // ─────────────────────────────────────────────
@@ -37,16 +39,19 @@ type ProviderProfileRepo interface {
 // ─────────────────────────────────────────────
 
 // Orchestrator coordinates the full task lifecycle:
-//   Pending → Planning → Running → Completed | Failed
+//
+//	Pending → Running → Completed | Failed
 type Orchestrator struct {
-	tasks    TaskRepo
-	projects ProjectRepo
-	profiles ProviderProfileRepo
-	planner  *Planner
-	executor *Executor
-	plans    PlanStore
-	cfg      *config.Config
-	logger   *slog.Logger
+	tasks            TaskRepo
+	projects         ProjectRepo
+	profiles         ProviderProfileRepo
+	plans            PlanStore
+	providerRegistry LLMProviderGetter
+	toolRegistry     *tools.Registry
+	artifacts        ArtifactStore
+	events           EventEmitter
+	cfg              *config.Config
+	logger           *slog.Logger
 }
 
 // New creates an Orchestrator.
@@ -54,28 +59,32 @@ func New(
 	tasks TaskRepo,
 	projects ProjectRepo,
 	profiles ProviderProfileRepo,
-	planner *Planner,
-	executor *Executor,
 	plans PlanStore,
+	providerRegistry LLMProviderGetter,
+	toolRegistry *tools.Registry,
+	artifacts ArtifactStore,
+	events EventEmitter,
 	cfg *config.Config,
 	logger *slog.Logger,
 ) *Orchestrator {
 	return &Orchestrator{
-		tasks:    tasks,
-		projects: projects,
-		profiles: profiles,
-		planner:  planner,
-		executor: executor,
-		plans:    plans,
-		cfg:      cfg,
-		logger:   logger,
+		tasks:            tasks,
+		projects:         projects,
+		profiles:         profiles,
+		plans:            plans,
+		providerRegistry: providerRegistry,
+		toolRegistry:     toolRegistry,
+		artifacts:        artifacts,
+		events:           events,
+		cfg:              cfg,
+		logger:           logger,
 	}
 }
 
 // RunOptions carries per-run parameters supplied by the caller.
 type RunOptions struct {
 	// WorkspaceRoot overrides the workspace's RootPath for file tools.
-	// If empty, tools will have no filesystem access.
+	// If empty, the orchestrator falls back to <dataDir>/workspace.
 	WorkspaceRoot string
 
 	// RequireApproval controls whether destructive tools gate on user approval.
@@ -105,6 +114,8 @@ func (o *Orchestrator) RunTask(ctx context.Context, taskID string, opts RunOptio
 			return fmt.Errorf("load project: %w", err)
 		}
 	}
+	// project variable consumed only for workspace root resolution (future use).
+	_ = project
 
 	// Resolve provider config
 	provCfg, err := o.resolveProviderConfig(ctx, task)
@@ -112,67 +123,56 @@ func (o *Orchestrator) RunTask(ctx context.Context, taskID string, opts RunOptio
 		return fmt.Errorf("resolve provider: %w", err)
 	}
 
+	// Default workspace root to <dataDir>/workspace so file tools always work.
+	if opts.WorkspaceRoot == "" {
+		dataDir := o.cfg.App.DataDir
+		if len(dataDir) > 1 && dataDir[:2] == "~/" {
+			if home, err := os.UserHomeDir(); err == nil {
+				dataDir = home + dataDir[1:]
+			}
+		}
+		opts.WorkspaceRoot = dataDir + "/workspace"
+		_ = os.MkdirAll(opts.WorkspaceRoot, 0o755)
+	}
+
 	// Run the full lifecycle in a detached goroutine.
 	// We use a background context so the run outlives the HTTP request.
 	runCtx := context.Background()
-	go o.run(runCtx, task, project, provCfg, opts)
+	go o.run(runCtx, task, provCfg, opts)
 
 	return nil
 }
 
-// run is the goroutine body that drives the full task lifecycle.
+// run is the goroutine body that drives the full task lifecycle via the agent loop.
 func (o *Orchestrator) run(
 	ctx context.Context,
 	task *domain.Task,
-	project *domain.Project,
 	provCfg provider.ProviderConfig,
 	opts RunOptions,
 ) {
 	log := o.logger.With("task_id", task.ID, "title", task.Title)
 
-	// ── Phase 1: Planning ────────────────────────────────────────────
-	log.Info("task planning started")
-	_ = o.tasks.UpdateStatus(ctx, task.ID, domain.TaskStatusPlanning, time.Now().UTC())
-
-	plan, err := o.planner.Plan(ctx, task, project, provCfg)
-	if err != nil {
-		log.Error("planning failed", "error", err)
+	// Resolve provider instance
+	prov, ok := o.providerRegistry.Get(provCfg.ProviderName)
+	if !ok {
+		log.Error("provider not registered", "provider", provCfg.ProviderName)
 		_ = o.tasks.UpdateStatus(ctx, task.ID, domain.TaskStatusFailed, time.Now().UTC())
 		return
 	}
 
-	// Persist the plan and its steps
-	if err := o.plans.CreatePlan(ctx, plan); err != nil {
-		log.Error("persist plan failed", "error", err)
-		_ = o.tasks.UpdateStatus(ctx, task.ID, domain.TaskStatusFailed, time.Now().UTC())
-		return
-	}
-	for _, step := range plan.Steps {
-		if err := o.plans.CreateStep(ctx, step); err != nil {
-			log.Error("persist step failed", "step_order", step.Order, "error", err)
-		}
-	}
-	log.Info("plan created", "steps", len(plan.Steps))
-
-	// ── Phase 2: Execution ───────────────────────────────────────────
-	log.Info("task execution started")
+	log.Info("agent loop starting")
 	_ = o.tasks.UpdateStatus(ctx, task.ID, domain.TaskStatusRunning, time.Now().UTC())
 
-	result := o.executor.Execute(ctx, plan, task, opts.WorkspaceRoot, opts.RequireApproval)
+	loop := NewAgentLoop(prov, provCfg, o.toolRegistry, o.plans, o.artifacts, o.events, o.logger)
+	result := loop.Run(ctx, task, opts.WorkspaceRoot)
 
-	log.Info("execution finished",
-		"completed", result.Completed,
-		"failed", result.Failed,
-		"skipped", result.Skipped,
-	)
-
-	// ── Phase 3: Final status ────────────────────────────────────────
+	// Final status
 	finalStatus := domain.TaskStatusCompleted
-	if result.Failed > 0 {
+	if result.Failed > 0 && result.Completed == 0 {
 		finalStatus = domain.TaskStatusFailed
 	}
 	_ = o.tasks.UpdateStatus(ctx, task.ID, finalStatus, time.Now().UTC())
-	log.Info("task finished", "final_status", finalStatus)
+	log.Info("agent finished", "completed", result.Completed, "failed", result.Failed)
 }
 
 // ─────────────────────────────────────────────
@@ -182,7 +182,7 @@ func (o *Orchestrator) run(
 // resolveProviderConfig builds a ProviderConfig for the task.
 // Priority: task.ProviderID → project default → config default.
 func (o *Orchestrator) resolveProviderConfig(ctx context.Context, task *domain.Task) (provider.ProviderConfig, error) {
-	// Try saved provider profile
+	// 1. Explicit profile selected on the task
 	if task.ProviderID != "" {
 		profile, err := o.profiles.GetByID(ctx, task.ProviderID)
 		if err == nil {
@@ -190,7 +190,13 @@ func (o *Orchestrator) resolveProviderConfig(ctx context.Context, task *domain.T
 		}
 	}
 
-	// Fall back to config default
+	// 2. Default (or any) saved profile in the database — this is what the
+	//    Settings page configures. Always prefer it over the env-var fallback.
+	if profile, err := o.profiles.GetDefault(ctx); err == nil {
+		return profileToConfig(profile), nil
+	}
+
+	// 3. Last resort: env-var config (no profile saved yet)
 	provName := o.cfg.LLM.DefaultProvider
 	pc, ok := o.cfg.LLM.Providers[provName]
 	if !ok {

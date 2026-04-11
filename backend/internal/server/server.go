@@ -30,10 +30,11 @@ type Services struct {
 
 // ExecutionDeps groups the ports needed by the execution HTTP handler.
 type ExecutionDeps struct {
-	Runner    v1.TaskRunner
-	Plans     v1.PlanQuerier
-	Artifacts v1.ArtifactQuerier
-	Events    v1.EventQuerier
+	Runner        v1.TaskRunner
+	Plans         v1.PlanQuerier
+	Artifacts     v1.ArtifactQuerier
+	Events        v1.EventQuerier
+	WorkspaceRoot string // base path for serving artifact files
 }
 
 // MemoryDeps groups the ports needed by the memory HTTP handler.
@@ -116,6 +117,7 @@ func (s *Server) routes() {
 			s.services.Execution.Plans,
 			s.services.Execution.Artifacts,
 			s.services.Execution.Events,
+			s.services.Execution.WorkspaceRoot,
 		).Register(r)
 		v1.NewMemoryHandler(
 			s.services.Memory.ContextFiles,

@@ -2,8 +2,14 @@ package v1
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
@@ -52,10 +58,11 @@ type EventQuerier interface {
 
 // ExecutionHandler mounts the task execution + observation endpoints.
 type ExecutionHandler struct {
-	runner    TaskRunner
-	plans     PlanQuerier
-	artifacts ArtifactQuerier
-	events    EventQuerier
+	runner        TaskRunner
+	plans         PlanQuerier
+	artifacts     ArtifactQuerier
+	events        EventQuerier
+	workspaceRoot string
 }
 
 // NewExecutionHandler creates an ExecutionHandler.
@@ -64,17 +71,22 @@ func NewExecutionHandler(
 	plans PlanQuerier,
 	artifacts ArtifactQuerier,
 	events EventQuerier,
+	workspaceRoot string,
 ) *ExecutionHandler {
 	return &ExecutionHandler{
-		runner:    runner,
-		plans:     plans,
-		artifacts: artifacts,
-		events:    events,
+		runner:        runner,
+		plans:         plans,
+		artifacts:     artifacts,
+		events:        events,
+		workspaceRoot: workspaceRoot,
 	}
 }
 
 // Register mounts the execution routes onto r (an /api/v1 sub-router).
 func (h *ExecutionHandler) Register(r chi.Router) {
+	// File upload
+	r.Post("/workspace/upload", h.uploadFiles)
+
 	// Task execution control
 	r.Post("/tasks/{id}/run", h.runTask)
 
@@ -86,9 +98,10 @@ func (h *ExecutionHandler) Register(r chi.Router) {
 	// Project-level artifact listing
 	r.Get("/projects/{projectID}/artifacts", h.listArtifactsByProject)
 
-	// Global artifact listing + single artifact
+	// Global artifact listing + single artifact + download
 	r.Get("/artifacts", h.listArtifactsRecent)
 	r.Get("/artifacts/{id}", h.getArtifact)
+	r.Get("/artifacts/{id}/download", h.downloadArtifact)
 
 	// Global event log
 	r.Get("/events", h.listEventsRecent)
@@ -220,6 +233,114 @@ func (h *ExecutionHandler) listEventsRecent(w http.ResponseWriter, r *http.Reque
 		out = []*eventDTO{}
 	}
 	jsonOK(w, out)
+}
+
+// downloadArtifact GET /api/v1/artifacts/{id}/download
+// Reads the file from disk and streams it to the client with correct Content-Type.
+func (h *ExecutionHandler) downloadArtifact(w http.ResponseWriter, r *http.Request) {
+	a, err := h.artifacts.GetByID(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+
+	// Resolve full path: workspaceRoot + content_path
+	root := h.workspaceRoot
+	if root == "" {
+		http.Error(w, "workspace root not configured", http.StatusInternalServerError)
+		return
+	}
+
+	fullPath := filepath.Join(root, filepath.FromSlash(a.ContentPath))
+	// Security: ensure the resolved path is still under workspaceRoot
+	if !strings.HasPrefix(fullPath, filepath.Clean(root)) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("file not found: %v", err), http.StatusNotFound)
+		return
+	}
+
+	// Determine MIME type from extension
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	ct := mime.TypeByExtension(ext)
+	if ct == "" {
+		switch ext {
+		case ".md":
+			ct = "text/markdown; charset=utf-8"
+		case ".html":
+			ct = "text/html; charset=utf-8"
+		case ".json":
+			ct = "application/json"
+		case ".pptx":
+			ct = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+		case ".docx":
+			ct = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+		case ".xlsx":
+			ct = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+		case ".pdf":
+			ct = "application/pdf"
+		default:
+			ct = "application/octet-stream"
+		}
+	}
+
+	filename := filepath.Base(fullPath)
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// uploadFiles POST /api/v1/workspace/upload
+// Accepts multipart form data with files under the "files" key and saves them
+// under {workspaceRoot}/uploads/. Returns relative paths.
+func (h *ExecutionHandler) uploadFiles(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(50 << 20); err != nil { // 50MB max
+		http.Error(w, "request too large", http.StatusBadRequest)
+		return
+	}
+
+	root := h.workspaceRoot
+	if root == "" {
+		http.Error(w, "workspace not configured", http.StatusInternalServerError)
+		return
+	}
+
+	uploadDir := filepath.Join(root, "uploads")
+	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+		http.Error(w, "cannot create upload dir", http.StatusInternalServerError)
+		return
+	}
+
+	var paths []string
+	files := r.MultipartForm.File["files"]
+	for _, fh := range files {
+		f, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			continue
+		}
+
+		// Sanitize filename
+		name := filepath.Base(fh.Filename)
+		dest := filepath.Join(uploadDir, name)
+		if err := os.WriteFile(dest, data, 0o644); err != nil {
+			continue
+		}
+		paths = append(paths, filepath.Join("uploads", name))
+	}
+
+	jsonOK(w, map[string]any{"paths": paths})
 }
 
 func (h *ExecutionHandler) respondArtifacts(w http.ResponseWriter, artifacts []*domain.Artifact) {
