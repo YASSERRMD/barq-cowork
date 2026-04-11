@@ -18,20 +18,17 @@ jobs:
   # Build the Go backend sidecar for each platform
   # ─────────────────────────────────────────────────────────────────────────
   build-backend:
-    name: Backend (${{ matrix.os }})
+    name: Backend (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14           # Apple Silicon runner
+          - os: macos-14
             goos: darwin
             goarch: arm64
             target: aarch64-apple-darwin
-          - os: macos-13           # Intel runner
-            goos: darwin
-            goarch: amd64
-            target: x86_64-apple-darwin
+
           - os: windows-latest
             goos: windows
             goarch: amd64
@@ -44,19 +41,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
 
       - name: Build barq-coworkd
+        shell: bash
         env:
-          GOOS:   ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+          GOOS:        ${{ matrix.goos }}
+          GOARCH:      ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: |
           cd backend
           go build \
             -trimpath \
             -ldflags="-s -w" \
-            -o ../apps/desktop/src-tauri/binaries/barq-coworkd-${{ matrix.target }}${{ matrix.ext }} \
+            -o "../apps/desktop/src-tauri/binaries/barq-coworkd-${{ matrix.target }}${{ matrix.ext }}" \
             ./cmd/barq-coworkd
 
       - name: Upload sidecar binary
@@ -67,10 +64,10 @@ jobs:
           retention-days: 1
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Build the Tauri desktop app (depends on sidecar binaries)
+  # Build the Tauri desktop app
   # ─────────────────────────────────────────────────────────────────────────
   build-desktop:
-    name: Desktop (${{ matrix.os }})
+    name: Desktop (${{ matrix.target }})
     needs: build-backend
     runs-on: ${{ matrix.os }}
     strategy:
@@ -79,15 +76,14 @@ jobs:
         include:
           - os: macos-14
             target: aarch64-apple-darwin
-          - os: macos-13
-            target: x86_64-apple-darwin
+
           - os: windows-latest
             target: x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
 
-      # ── Rust toolchain ──────────────────────────────────────────────────
+      # Rust toolchain
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -96,18 +92,17 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
-      # ── Node / Frontend ─────────────────────────────────────────────────
+      # Node / Frontend
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
 
       - name: Install frontend dependencies
+        shell: bash
         working-directory: apps/desktop
         run: npm ci
 
-      # ── Download sidecar binary for this platform ───────────────────────
+      # Download sidecar binary
       - name: Download backend binary
         uses: actions/download-artifact@v4
         with:
@@ -116,17 +111,10 @@ jobs:
 
       - name: Make sidecar executable (macOS)
         if: runner.os == 'macOS'
+        shell: bash
         run: chmod +x apps/desktop/src-tauri/binaries/barq-coworkd-${{ matrix.target }}
 
-      # ── Generate placeholder icons (CI has no artwork yet) ───────────────
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Generate app icons
-        run: python3 scripts/gen-icons.py
-
-      # ── Build & package ─────────────────────────────────────────────────
+      # Tauri build + GitHub Release
       - name: Tauri build
         uses: tauri-apps/tauri-action@v0
         env:
@@ -139,28 +127,31 @@ jobs:
           APPLE_PASSWORD:                 ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:                  ${{ secrets.APPLE_TEAM_ID }}
           # Windows code-signing (optional)
-          TAURI_SIGNING_PRIVATE_KEY:      ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: apps/desktop
-          tagName:     ${{ github.ref_name }}
-          releaseName: "Barq Cowork ${{ github.ref_name }}"
-          releaseBody: |
-            ## What's Changed
-            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          projectPath:  apps/desktop
+          tagName:      ${{ github.ref_name }}
+          releaseName:  "Barq Cowork ${{ github.ref_name }}"
+          releaseBody:  |
+            ## Barq Cowork ${{ github.ref_name }}
+
+            Cross-platform desktop AI agent workspace.
 
             ### Downloads
+
             | Platform | Installer |
             |----------|-----------|
             | macOS (Apple Silicon) | `Barq_Cowork_*_aarch64.dmg` |
-            | macOS (Intel)         | `Barq_Cowork_*_x64.dmg` |
-            | Windows               | `Barq_Cowork_*_x64-setup.exe` |
+            | Windows | `Barq_Cowork_*_x64-setup.exe` |
+
+            See [docs/building.md](https://github.com/${{ github.repository }}/blob/main/docs/building.md) to build from source.
           releaseDraft: false
-          prerelease:  ${{ contains(github.ref_name, '-') }}
-          args:        --target ${{ matrix.target }}
+          prerelease:   ${{ contains(github.ref_name, '-') }}
+          args:         --target ${{ matrix.target }}
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Backend unit tests (run on every push/PR, not just releases)
+  # Backend unit tests
   # ─────────────────────────────────────────────────────────────────────────
   test-backend:
     name: Go tests
@@ -175,7 +166,7 @@ jobs:
         run: go test ./... -race -timeout 60s
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Frontend type-check (run on every push/PR)
+  # Frontend type-check
   # ─────────────────────────────────────────────────────────────────────────
   type-check-frontend:
     name: TypeScript check
@@ -185,11 +176,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
       - name: Install dependencies
         working-directory: apps/desktop
         run: npm ci
       - name: Type-check
         working-directory: apps/desktop
-        run: npm run type-check || npx tsc --noEmit
+        run: npx tsc --noEmit
