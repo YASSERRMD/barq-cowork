@@ -108,6 +108,7 @@ func main() {
 	contextFileStore    := sqlite.NewContextFileStore(db)
 	taskTemplateStore   := sqlite.NewTaskTemplateStore(db)
 	subAgentStore       := sqlite.NewSubAgentStore(db)
+	skillStore          := sqlite.NewSkillStore(db)
 
 	// ── Orchestrator ──────────────────────────────────────────────────
 	wsMemory    := memory.New(contextFileStore)
@@ -130,6 +131,7 @@ func main() {
 		Providers:  service.NewProviderService(providerProfileRepo, registry, cfg),
 		Schedules:  service.NewScheduleService(scheduleRepo, projectRepo),
 		Tools:      service.NewToolService(toolRegistry, approvalRepo, eventRepo),
+		Skills:     service.NewSkillService(skillStore),
 		Execution: server.ExecutionDeps{
 			Runner:    orch,
 			Plans:     planStore,

@@ -21,6 +21,7 @@ type Services struct {
 	Providers  *service.ProviderService
 	Schedules  *service.ScheduleService
 	Tools      *service.ToolService
+	Skills     *service.SkillService
 	Execution   ExecutionDeps
 	Memory      MemoryDeps
 	Agents      AgentDeps
@@ -109,6 +110,7 @@ func (s *Server) routes() {
 		v1.NewProviderHandler(s.services.Providers).Register(r)
 		v1.NewScheduleHandler(s.services.Schedules).Register(r)
 		v1.NewToolHandler(s.services.Tools).Register(r)
+		v1.NewSkillHandler(s.services.Skills).Register(r)
 		v1.NewExecutionHandler(
 			s.services.Execution.Runner,
 			s.services.Execution.Plans,
