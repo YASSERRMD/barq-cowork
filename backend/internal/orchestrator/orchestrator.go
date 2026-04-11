@@ -97,9 +97,13 @@ func (o *Orchestrator) RunTask(ctx context.Context, taskID string, opts RunOptio
 		}
 	}
 
-	project, err := o.projects.GetByID(ctx, task.ProjectID)
-	if err != nil {
-		return fmt.Errorf("load project: %w", err)
+	// project is optional — direct (project-less) tasks have an empty ProjectID
+	var project *domain.Project
+	if task.ProjectID != "" {
+		project, err = o.projects.GetByID(ctx, task.ProjectID)
+		if err != nil {
+			return fmt.Errorf("load project: %w", err)
+		}
 	}
 
 	// Resolve provider config
