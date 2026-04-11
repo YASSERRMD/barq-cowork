@@ -20,11 +20,14 @@ func NewTaskService(tasks domain.TaskRepository, projects domain.ProjectReposito
 	return &TaskService{tasks: tasks, projects: projects}
 }
 
-// Create validates, checks project existence, and persists a new task.
+// Create validates, optionally checks project existence, and persists a new task.
+// projectID may be empty for direct (project-less) tasks.
 func (s *TaskService) Create(ctx context.Context, projectID, title, description, providerID string) (*domain.Task, error) {
-	// Verify project exists.
-	if _, err := s.projects.GetByID(ctx, projectID); err != nil {
-		return nil, fmt.Errorf("project %s: %w", projectID, err)
+	// Only verify project when one is explicitly provided.
+	if projectID != "" {
+		if _, err := s.projects.GetByID(ctx, projectID); err != nil {
+			return nil, fmt.Errorf("project %s: %w", projectID, err)
+		}
 	}
 
 	now := time.Now().UTC()
@@ -45,6 +48,11 @@ func (s *TaskService) Create(ctx context.Context, projectID, title, description,
 		return nil, fmt.Errorf("task service create: %w", err)
 	}
 	return t, nil
+}
+
+// ListAll returns all tasks across all projects, newest first.
+func (s *TaskService) ListAll(ctx context.Context, limit int) ([]*domain.Task, error) {
+	return s.tasks.ListAll(ctx, limit)
 }
 
 // Get retrieves a task by ID.

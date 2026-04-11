@@ -47,9 +47,6 @@ func (t *Task) Validate() error {
 	if t.Title == "" {
 		return &ValidationError{Field: "title", Message: "required"}
 	}
-	if t.ProjectID == "" {
-		return &ValidationError{Field: "project_id", Message: "required"}
-	}
 	return nil
 }
 
@@ -77,6 +74,7 @@ type TaskRepository interface {
 	Create(ctx context.Context, t *Task) error
 	GetByID(ctx context.Context, id string) (*Task, error)
 	ListByProject(ctx context.Context, projectID string) ([]*Task, error)
+	ListAll(ctx context.Context, limit int) ([]*Task, error)
 	Update(ctx context.Context, t *Task) error
 	UpdateStatus(ctx context.Context, id string, status TaskStatus, now time.Time) error
 	Delete(ctx context.Context, id string) error

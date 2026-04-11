@@ -90,6 +90,30 @@ func (s *TaskStore) ListByProject(ctx context.Context, projectID string) ([]*dom
 	return out, rows.Err()
 }
 
+func (s *TaskStore) ListAll(ctx context.Context, limit int) ([]*domain.Task, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+taskCols+` FROM tasks ORDER BY created_at DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("task list all: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*domain.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, fmt.Errorf("task scan: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 func (s *TaskStore) Update(ctx context.Context, t *domain.Task) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE tasks SET title=?, description=?, status=?, provider_id=?,
