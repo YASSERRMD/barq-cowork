@@ -68,12 +68,15 @@ type taskDTO struct {
 // Provider profile DTOs
 // ─────────────────────────────────────────────
 
+// providerProfileDTO is the wire type for provider profiles.
+// The raw API key is NEVER included in responses — only whether a key is set.
 type providerProfileDTO struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
 	ProviderName string    `json:"provider_name"`
 	BaseURL      string    `json:"base_url"`
-	APIKeyEnv    string    `json:"api_key_env"` // env var name only, never the value
+	APIKeySet    bool      `json:"api_key_set"`  // true if a key is stored
+	APIKeyHint   string    `json:"api_key_hint"` // last 4 chars of key, or env var name
 	Model        string    `json:"model"`
 	TimeoutSec   int       `json:"timeout_sec"`
 	IsDefault    bool      `json:"is_default"`
@@ -82,12 +85,25 @@ type providerProfileDTO struct {
 }
 
 func toProviderProfileDTO(p *domain.ProviderProfile) *providerProfileDTO {
+	hint := ""
+	apiKeySet := false
+	if p.APIKey != "" {
+		apiKeySet = true
+		if len(p.APIKey) > 4 {
+			hint = "••••" + p.APIKey[len(p.APIKey)-4:]
+		} else {
+			hint = "••••"
+		}
+	} else if p.APIKeyEnv != "" {
+		hint = p.APIKeyEnv + " (env)"
+	}
 	return &providerProfileDTO{
 		ID:           p.ID,
 		Name:         p.Name,
 		ProviderName: p.ProviderName,
 		BaseURL:      p.BaseURL,
-		APIKeyEnv:    p.APIKeyEnv,
+		APIKeySet:    apiKeySet,
+		APIKeyHint:   hint,
 		Model:        p.Model,
 		TimeoutSec:   p.TimeoutSec,
 		IsDefault:    p.IsDefault,
@@ -97,11 +113,13 @@ func toProviderProfileDTO(p *domain.ProviderProfile) *providerProfileDTO {
 }
 
 // profileInput is the shared request body for create/update provider profile.
+// api_key is write-only — it is stored but never returned.
 type profileInput struct {
 	Name         string `json:"name"`
 	ProviderName string `json:"provider_name"`
 	BaseURL      string `json:"base_url"`
-	APIKeyEnv    string `json:"api_key_env"`
+	APIKey       string `json:"api_key"`      // direct key (preferred)
+	APIKeyEnv    string `json:"api_key_env"`  // env var fallback (legacy)
 	Model        string `json:"model"`
 	TimeoutSec   int    `json:"timeout_sec"`
 	IsDefault    bool   `json:"is_default"`
@@ -307,5 +325,43 @@ func toTaskTemplateDTO(t *domain.TaskTemplate) *taskTemplateDTO {
 		ProviderID:  t.ProviderID,
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
+	}
+}
+
+// ─────────────────────────────────────────────
+// Schedule DTOs
+// ─────────────────────────────────────────────
+
+type scheduleDTO struct {
+	ID          string     `json:"id"`
+	ProjectID   string     `json:"project_id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	CronExpr    string     `json:"cron_expr"`
+	TaskTitle   string     `json:"task_title"`
+	TaskDesc    string     `json:"task_desc"`
+	ProviderID  string     `json:"provider_id"`
+	Enabled     bool       `json:"enabled"`
+	LastRunAt   *time.Time `json:"last_run_at,omitempty"`
+	NextRunAt   *time.Time `json:"next_run_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+func toScheduleDTO(s *domain.Schedule) *scheduleDTO {
+	return &scheduleDTO{
+		ID:          s.ID,
+		ProjectID:   s.ProjectID,
+		Name:        s.Name,
+		Description: s.Description,
+		CronExpr:    s.CronExpr,
+		TaskTitle:   s.TaskTitle,
+		TaskDesc:    s.TaskDesc,
+		ProviderID:  s.ProviderID,
+		Enabled:     s.Enabled,
+		LastRunAt:   s.LastRunAt,
+		NextRunAt:   s.NextRunAt,
+		CreatedAt:   s.CreatedAt,
+		UpdatedAt:   s.UpdatedAt,
 	}
 }
