@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { FileText, Braces, File, ScrollText, Package } from "lucide-react";
 import { executionApi, type Artifact, type ArtifactType } from "../lib/api";
 import clsx from "clsx";
 
-const TYPE_ICON: Record<ArtifactType, string> = {
-  markdown: "📄",
-  json:     "📋",
-  file:     "📁",
-  log:      "📜",
+const TYPE_ICON: Record<ArtifactType, React.ElementType> = {
+  markdown: FileText,
+  json:     Braces,
+  file:     File,
+  log:      ScrollText,
 };
 
 const TYPE_BADGE: Record<ArtifactType, string> = {
@@ -100,10 +101,10 @@ export function ArtifactsPage() {
       {error && <p className="text-red-400 text-sm">Failed to load artifacts.</p>}
 
       {!isLoading && !error && filtered.length === 0 && (
-        <div className="card p-8 text-center text-gray-500 text-sm space-y-2">
-          <p className="text-2xl">📦</p>
-          <p>No artifacts yet.</p>
-          <p className="text-xs text-gray-600">
+        <div className="surface-2 rounded-lg border border-surface-3 p-8 text-center space-y-2">
+          <Package size={24} className="mx-auto text-text-muted opacity-30" />
+          <p className="text-sm text-text-secondary">No artifacts yet</p>
+          <p className="text-xs text-text-muted">
             Run a task with write_file, write_markdown_report, or export_json to generate artifacts.
           </p>
         </div>
@@ -136,10 +137,11 @@ export function ArtifactsPage() {
 }
 
 function ArtifactRow({ artifact: a }: { artifact: Artifact }) {
+  const Icon = TYPE_ICON[a.type] ?? Package;
   return (
     <tr className="hover:bg-gray-900/40 transition-colors">
-      <td className="px-4 py-3 text-base text-center">
-        {TYPE_ICON[a.type] ?? "📦"}
+      <td className="px-4 py-3 text-center">
+        <Icon size={15} strokeWidth={1.75} className="mx-auto text-text-muted" />
       </td>
       <td className="px-4 py-3">
         <div className="min-w-0">

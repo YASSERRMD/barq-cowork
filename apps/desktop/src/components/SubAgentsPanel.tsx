@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { agentsApi, type SubAgent, type AgentRole, type TaskStatus } from "../lib/api";
 import clsx from "clsx";
 
@@ -204,7 +205,7 @@ function AgentCard({
                   disabled={cancelling}
                   title="Cancel this agent"
                 >
-                  ✕
+                  <X size={12} strokeWidth={2} />
                 </button>
               )}
             </div>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Play, Pause } from "lucide-react";
 import { eventsApi, type TaskEvent } from "../lib/api";
 import clsx from "clsx";
 
@@ -97,7 +98,11 @@ export function LogsPage() {
             )}
             onClick={() => setPaused((v) => !v)}
           >
-            {paused ? "▶ Resume" : "⏸ Pause"}
+            {paused ? (
+              <><Play size={12} strokeWidth={2} /> Resume</>
+            ) : (
+              <><Pause size={12} strokeWidth={2} /> Pause</>
+            )}
           </button>
           <button
             className="btn-ghost text-xs"
