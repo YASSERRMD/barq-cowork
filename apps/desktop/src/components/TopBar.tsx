@@ -12,61 +12,96 @@ export function TopBar({ title, subtitle, actions, onSearch }: TopBarProps) {
     <div
       style={{
         height: "var(--topbar-h)",
-        borderBottom: "1px solid #2a2a3a",
+        borderBottom: "1px solid var(--border)",
         display: "flex",
         alignItems: "center",
         padding: "0 20px",
         gap: 12,
         flexShrink: 0,
-        background: "#111118",
+        background: "var(--surface-1)",
+        backdropFilter: "blur(12px)",
       }}
     >
       {/* Title area */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {title && (
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#e2e2e8", letterSpacing: "-0.01em" }}>
+            <span
+              style={{
+                fontSize: 13.5,
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                letterSpacing: "-0.015em",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               {title}
             </span>
             {subtitle && (
-              <span style={{ fontSize: 12, color: "#50505f" }}>{subtitle}</span>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                {subtitle}
+              </span>
             )}
           </div>
         )}
       </div>
 
-      {/* Search */}
+      {/* Search / command palette trigger */}
       <button
         onClick={onSearch}
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          background: "#1c1c27",
-          border: "1px solid #2a2a3a",
-          borderRadius: 6,
-          padding: "5px 10px",
-          color: "#50505f",
+          gap: 7,
+          background: "var(--surface-3)",
+          border: "1px solid var(--border)",
+          borderRadius: 7,
+          padding: "5px 11px",
+          color: "var(--text-muted)",
           fontSize: 12,
           cursor: "pointer",
-          transition: "all 150ms",
+          transition: "background 120ms, border-color 120ms, color 120ms",
+          userSelect: "none",
+          minWidth: 160,
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "#3a3a4e";
-          (e.currentTarget as HTMLButtonElement).style.color = "#7a7a90";
+          const el = e.currentTarget as HTMLButtonElement;
+          el.style.background = "var(--surface-4)";
+          el.style.borderColor = "var(--border-mid)";
+          el.style.color = "var(--text-secondary)";
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "#2a2a3a";
-          (e.currentTarget as HTMLButtonElement).style.color = "#50505f";
+          const el = e.currentTarget as HTMLButtonElement;
+          el.style.background = "var(--surface-3)";
+          el.style.borderColor = "var(--border)";
+          el.style.color = "var(--text-muted)";
         }}
       >
-        <Search size={13} />
-        <span>Search</span>
-        <kbd style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>⌘K</kbd>
+        <Search size={12} strokeWidth={2} />
+        <span style={{ flex: 1 }}>Quick search…</span>
+        <kbd
+          style={{
+            fontSize: 10,
+            color: "var(--text-faint)",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            padding: "1px 5px",
+            letterSpacing: "0.01em",
+          }}
+        >
+          ⌘K
+        </kbd>
       </button>
 
       {/* Custom actions */}
-      {actions && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>{actions}</div>}
+      {actions && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,16 @@
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  FolderOpen,
+  Home,
   Play,
-  Calendar,
+  Sparkles,
   Plug,
-  CheckCircle,
+  Puzzle,
   FileText,
+  FolderOpen,
+  Calendar,
   Settings,
-  Activity,
+  CheckCircle,
   Zap,
 } from "lucide-react";
 import clsx from "clsx";
@@ -29,59 +31,92 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex flex-col"
       style={{
         width: "var(--sidebar-w)",
         minWidth: "var(--sidebar-w)",
-        background: "#16161f",
-        borderRight: "1px solid #2a2a3a",
+        background: "var(--surface-1)",
+        borderRight: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
         minHeight: 0,
+        flexShrink: 0,
       }}
     >
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: "1px solid #2a2a3a" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "0 14px",
+          height: "var(--topbar-h)",
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
+      >
         <div
           style={{
             width: 26,
             height: 26,
-            borderRadius: 6,
-            background: "#4f46e5",
+            borderRadius: 7,
+            background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
+            boxShadow: "0 2px 8px rgba(99,102,241,0.4)",
           }}
         >
-          <Zap size={14} color="#fff" strokeWidth={2.5} />
+          <Zap size={13} color="#fff" strokeWidth={2.5} />
         </div>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e2e8", letterSpacing: "-0.01em" }}>
+        <span
+          style={{
+            fontSize: 13.5,
+            fontWeight: 600,
+            color: "var(--text-primary)",
+            letterSpacing: "-0.02em",
+          }}
+        >
           Barq Cowork
         </span>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-        <NavSection label="Workspace">
-          <SidebarLink to="/projects" icon={FolderOpen} label="Projects" />
-          <SidebarLink to="/runs" icon={Play} label="Runs" />
-          <SidebarLink to="/schedules" icon={Calendar} label="Schedules" />
-        </NavSection>
+      <nav
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "8px 8px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+        }}
+      >
+        {/* Primary */}
+        <SidebarLink to="/" icon={Home} label="Home" end />
 
-        <NavSection label="System">
-          <SidebarLink
-            to="/approvals"
-            icon={CheckCircle}
-            label="Approvals"
-            badge={pendingCount}
-          />
-          <SidebarLink to="/artifacts" icon={FileText} label="Artifacts" />
-          <SidebarLink to="/connectors" icon={Plug} label="Connectors" />
-          <SidebarLink to="/logs" icon={Activity} label="Logs" />
-        </NavSection>
+        <div style={{ height: 12 }} />
+        <SectionLabel label="Work" />
+        <SidebarLink to="/runs" icon={Play} label="Runs" />
+        <SidebarLink to="/skills" icon={Sparkles} label="Skills" />
+        <SidebarLink to="/connectors" icon={Plug} label="Connectors" />
+        <SidebarLink to="/plugins" icon={Puzzle} label="Plugins" />
 
-        <NavSection label="App">
-          <SidebarLink to="/settings" icon={Settings} label="Settings" />
-        </NavSection>
+        <div style={{ height: 12 }} />
+        <SectionLabel label="Library" />
+        <SidebarLink to="/artifacts" icon={FileText} label="Artifacts" />
+        <SidebarLink to="/projects" icon={FolderOpen} label="Projects" />
+        <SidebarLink to="/schedules" icon={Calendar} label="Schedules" />
+
+        <div style={{ height: 12 }} />
+        <SectionLabel label="System" />
+        <SidebarLink
+          to="/approvals"
+          icon={CheckCircle}
+          label="Approvals"
+          badge={pendingCount}
+        />
+        <SidebarLink to="/settings" icon={Settings} label="Settings" />
       </nav>
 
       {/* Status footer */}
@@ -90,16 +125,19 @@ export function Sidebar() {
   );
 }
 
-function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
+function SectionLabel({ label }: { label: string }) {
   return (
-    <div className="pb-1">
-      <div
-        className="px-3 pb-1 pt-2"
-        style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "#40404f" }}
-      >
-        {label}
-      </div>
-      {children}
+    <div
+      style={{
+        padding: "0 9px 4px",
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: "0.07em",
+        textTransform: "uppercase",
+        color: "var(--text-faint)",
+      }}
+    >
+      {label}
     </div>
   );
 }
@@ -109,25 +147,31 @@ function SidebarLink({
   icon: Icon,
   label,
   badge = 0,
+  end,
 }: {
   to: string;
   icon: React.ElementType;
   label: string;
   badge?: number;
+  end?: boolean;
 }) {
   return (
     <NavLink
       to={to}
-      className={({ isActive }) =>
-        clsx("nav-item", isActive && "active")
-      }
+      end={end}
+      className={({ isActive }) => clsx("nav-item", isActive && "active")}
     >
-      <Icon size={15} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-      <span style={{ flex: 1 }}>{label}</span>
+      <Icon
+        size={15}
+        strokeWidth={1.75}
+        style={{ flexShrink: 0, opacity: 0.85 }}
+        className="nav-icon"
+      />
+      <span style={{ flex: 1, fontSize: 13 }}>{label}</span>
       {badge > 0 && (
         <span
           style={{
-            background: "#4f46e5",
+            background: "var(--accent)",
             color: "#fff",
             fontSize: 10,
             fontWeight: 700,
@@ -153,7 +197,7 @@ function StatusFooter() {
   return (
     <div
       style={{
-        borderTop: "1px solid #2a2a3a",
+        borderTop: "1px solid var(--border)",
         padding: "10px 14px",
         display: "flex",
         alignItems: "center",
@@ -161,20 +205,24 @@ function StatusFooter() {
       }}
     >
       <div
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: backendReachable ? "#10b981" : "#ef4444",
-          flexShrink: 0,
-          boxShadow: backendReachable ? "0 0 6px rgba(16,185,129,0.5)" : "none",
-        }}
+        className={
+          backendReachable ? "status-dot status-dot-green" : "status-dot status-dot-red"
+        }
       />
-      <span style={{ fontSize: 11, color: "#50505f", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span
+        style={{
+          fontSize: 11,
+          color: "var(--text-faint)",
+          flex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
         {backendReachable ? "Connected" : "Disconnected"}
       </span>
       {version && (
-        <span style={{ fontSize: 11, color: "#35354a", flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: "var(--text-faint)", flexShrink: 0 }}>
           v{version}
         </span>
       )}
