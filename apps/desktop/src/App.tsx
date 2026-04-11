@@ -10,6 +10,7 @@ import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { LogsPage } from "./pages/LogsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import DiagnosticsPage from "./pages/DiagnosticsPage";
 import { useAppStore } from "./store/appStore";
 import { checkHealth, getAppVersion } from "./lib/tauri";
 
@@ -52,7 +53,8 @@ export default function App() {
           <Route path="/artifacts"  element={<ArtifactsPage />} />
           <Route path="/approvals"  element={<ApprovalsPage />} />
           <Route path="/logs"       element={<LogsPage />} />
-          <Route path="/settings"   element={<SettingsPage />} />
+          <Route path="/settings"     element={<SettingsPage />} />
+          <Route path="/diagnostics"  element={<DiagnosticsPage />} />
         </Routes>
       </main>
     </div>

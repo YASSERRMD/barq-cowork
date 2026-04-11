@@ -42,6 +42,7 @@ export function Sidebar() {
           badge={pendingCount}
         />
         <SidebarLink to="/logs" icon="≡" label="Logs" />
+        <SidebarLink to="/diagnostics" icon="⊕" label="Diagnostics" />
         <SidebarLink to="/settings" icon="⚙" label="Settings" />
       </nav>
 

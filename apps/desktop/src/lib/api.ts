@@ -450,3 +450,25 @@ export const tasksApi = {
   delete: (id: string): Promise<void> =>
     request(`/tasks/${id}`, { method: "DELETE" }),
 };
+
+// ──────────────────── Diagnostics ────────────────────
+
+export interface SystemInfo {
+  generated_at: string;
+  version: string;
+  go_version: string;
+  os: string;
+  arch: string;
+  num_cpu: number;
+  num_goroutine: number;
+  mem_alloc_mb: number;
+  mem_total_alloc_mb: number;
+  build_info?: Record<string, string>;
+}
+
+export const diagnosticsApi = {
+  getInfo: (): Promise<SystemInfo> => request("/diagnostics/info"),
+
+  /** Returns the URL to download the diagnostic ZIP bundle. */
+  bundleUrl: (): string => `${BASE}/diagnostics/bundle`,
+};

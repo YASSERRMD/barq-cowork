@@ -20,9 +20,10 @@ type Services struct {
 	Tasks      *service.TaskService
 	Providers  *service.ProviderService
 	Tools      *service.ToolService
-	Execution  ExecutionDeps
-	Memory     MemoryDeps
-	Agents     AgentDeps
+	Execution   ExecutionDeps
+	Memory      MemoryDeps
+	Agents      AgentDeps
+	Diagnostics DiagnosticDeps
 }
 
 // ExecutionDeps groups the ports needed by the execution HTTP handler.
@@ -37,6 +38,13 @@ type ExecutionDeps struct {
 type MemoryDeps struct {
 	ContextFiles  v1.ContextFileStore
 	TaskTemplates v1.TaskTemplateStore
+}
+
+// DiagnosticDeps groups the ports needed by the diagnostics handler.
+type DiagnosticDeps struct {
+	Events    v1.EventQuerier
+	Artifacts v1.ArtifactQuerier
+	Version   string
 }
 
 // AgentDeps groups the ports needed by the sub-agent HTTP handler.
@@ -112,6 +120,11 @@ func (s *Server) routes() {
 		v1.NewAgentsHandler(
 			s.services.Agents.Runner,
 			s.services.Agents.DefaultProvider,
+		).Register(r)
+		v1.NewDiagnosticsHandler(
+			s.services.Diagnostics.Events,
+			s.services.Diagnostics.Artifacts,
+			s.services.Diagnostics.Version,
 		).Register(r)
 	})
 }
