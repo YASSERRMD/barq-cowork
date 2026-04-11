@@ -61,3 +61,8 @@ func decode(w http.ResponseWriter, r *http.Request, dst any) bool {
 	}
 	return true
 }
+
+// encodeJSON writes v as JSON to w; errors are swallowed (already writing response).
+func encodeJSON(w http.ResponseWriter, v any) error {
+	return json.NewEncoder(w).Encode(v)
+}

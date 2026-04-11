@@ -78,11 +78,15 @@ func main() {
 	artifactStore       := sqlite.NewArtifactStore(db)
 	contextFileStore    := sqlite.NewContextFileStore(db)
 	taskTemplateStore   := sqlite.NewTaskTemplateStore(db)
+	subAgentStore       := sqlite.NewSubAgentStore(db)
 
 	// ── Orchestrator ──────────────────────────────────────────────────
-	wsMemory := memory.New(contextFileStore)
-	planner  := orchestrator.NewPlanner(registry, wsMemory, logger)
-	executor := orchestrator.NewExecutor(planStore, artifactStore, eventRepo, toolRegistry, logger)
+	wsMemory    := memory.New(contextFileStore)
+	planner     := orchestrator.NewPlanner(registry, wsMemory, logger)
+	executor    := orchestrator.NewExecutor(planStore, artifactStore, eventRepo, toolRegistry, logger)
+	subAgentOrch := orchestrator.NewSubAgentOrchestrator(
+		subAgentStore, planner, executor, planStore, eventRepo, logger,
+	)
 	orch     := orchestrator.New(
 		taskRepo, projectRepo, providerProfileRepo,
 		planner, executor, planStore,
@@ -105,6 +109,24 @@ func main() {
 		Memory: server.MemoryDeps{
 			ContextFiles:  contextFileStore,
 			TaskTemplates: taskTemplateStore,
+		},
+		Agents: server.AgentDeps{
+			Runner: subAgentOrch,
+			DefaultProvider: func() provider.ProviderConfig {
+				provName := cfg.LLM.DefaultProvider
+				pc, ok := cfg.LLM.Providers[provName]
+				if !ok {
+					return provider.ProviderConfig{}
+				}
+				return provider.ProviderConfig{
+					ProviderName: provName,
+					BaseURL:      pc.BaseURL,
+					APIKey:       os.Getenv(pc.APIKeyEnv),
+					Model:        pc.Model,
+					TimeoutSec:   pc.TimeoutSec,
+					ExtraHeaders: pc.ExtraHeaders,
+				}
+			},
 		},
 	}
 

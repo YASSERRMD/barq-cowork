@@ -263,6 +263,40 @@ type taskTemplateDTO struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// ─────────────────────────────────────────────
+// Sub-agent DTOs
+// ─────────────────────────────────────────────
+
+type subAgentDTO struct {
+	ID           string           `json:"id"`
+	ParentTaskID string           `json:"parent_task_id"`
+	Role         domain.AgentRole `json:"role"`
+	Title        string           `json:"title"`
+	Instructions string           `json:"instructions"`
+	Status       domain.TaskStatus `json:"status"`
+	PlanID       string           `json:"plan_id,omitempty"`
+	CreatedAt    time.Time        `json:"created_at"`
+	UpdatedAt    time.Time        `json:"updated_at"`
+	StartedAt    *time.Time       `json:"started_at,omitempty"`
+	CompletedAt  *time.Time       `json:"completed_at,omitempty"`
+}
+
+func toSubAgentDTO(a *domain.SubAgent) *subAgentDTO {
+	return &subAgentDTO{
+		ID:           a.ID,
+		ParentTaskID: a.ParentTaskID,
+		Role:         a.Role,
+		Title:        a.Title,
+		Instructions: a.Instructions,
+		Status:       a.Status,
+		PlanID:       a.PlanID,
+		CreatedAt:    a.CreatedAt,
+		UpdatedAt:    a.UpdatedAt,
+		StartedAt:    a.StartedAt,
+		CompletedAt:  a.CompletedAt,
+	}
+}
+
 func toTaskTemplateDTO(t *domain.TaskTemplate) *taskTemplateDTO {
 	return &taskTemplateDTO{
 		ID:          t.ID,
