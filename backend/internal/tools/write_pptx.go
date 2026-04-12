@@ -241,6 +241,38 @@ type pptxSlide struct {
 	Table       *pptxTableData     `json:"table,omitempty"`
 }
 
+// pptxPalette holds the full color palette for a presentation theme.
+type pptxPalette struct {
+	bg      string // background color hex (no #)
+	card    string // surface/card color hex
+	accent  string // accent color hex
+	accent2 string // lighter accent
+	text    string // primary text color
+	muted   string // muted text color
+	border  string // border color hex
+}
+
+var themepalettes = map[string]pptxPalette{
+	"tech":        {bg: "0F172A", card: "1E293B", accent: "6366F1", accent2: "A5B4FC", text: "F8FAFC", muted: "94A3B8", border: "2D3F55"},
+	"healthcare":  {bg: "061B2E", card: "0E2D45", accent: "06B6D4", accent2: "67E8F9", text: "F8FAFC", muted: "94A3B8", border: "1A4060"},
+	"education":   {bg: "1A1100", card: "2D1E00", accent: "F59E0B", accent2: "FCD34D", text: "F8FAFC", muted: "94A3B8", border: "4A3500"},
+	"environment": {bg: "071A10", card: "0F2B1C", accent: "10B981", accent2: "6EE7B7", text: "F8FAFC", muted: "94A3B8", border: "1A4A30"},
+	"finance":     {bg: "061A0E", card: "102B1A", accent: "22C55E", accent2: "86EFAC", text: "F8FAFC", muted: "94A3B8", border: "1A4A28"},
+	"creative":    {bg: "140A2A", card: "221545", accent: "8B5CF6", accent2: "C4B5FD", text: "F8FAFC", muted: "94A3B8", border: "3A2060"},
+	"security":    {bg: "1A0808", card: "2E1010", accent: "EF4444", accent2: "FCA5A5", text: "F8FAFC", muted: "94A3B8", border: "4A1818"},
+	"data":        {bg: "061A1E", card: "0E2B30", accent: "14B8A6", accent2: "5EEAD4", text: "F8FAFC", muted: "94A3B8", border: "1A4048"},
+	"logistics":   {bg: "0A1020", card: "162035", accent: "3B82F6", accent2: "93C5FD", text: "F8FAFC", muted: "94A3B8", border: "203050"},
+	"retail":      {bg: "1A0C00", card: "2E1800", accent: "F97316", accent2: "FDBA74", text: "F8FAFC", muted: "94A3B8", border: "4A2800"},
+	"hr":          {bg: "1A0A18", card: "2E1530", accent: "EC4899", accent2: "F9A8D4", text: "F8FAFC", muted: "94A3B8", border: "4A1840"},
+}
+
+func paletteFor(themeName string) pptxPalette {
+	if p, ok := themepalettes[themeName]; ok {
+		return p
+	}
+	return themepalettes["tech"]
+}
+
 func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON string) Result {
 	var args pptxArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
@@ -265,16 +297,11 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 		return Err("create slides dir: %v", err)
 	}
 
-	// Try the pptx_engine bridge first (full 10-layout professional renderer).
-	// Falls back to the raw Go XML generator if Python is unavailable.
+	// Pure Go PPTX engine — no Python dependency.
 	themeName := pickThemeName(args.Title, args.Subtitle)
-	data, genErr := buildPPTXviaPython(ctx, args, themeName)
-	if genErr != nil {
-		// Python unavailable or failed — fall back to Go XML generator
-		data, err = buildPPTX(args.Title, args.Subtitle, args.Slides)
-		if err != nil {
-			return Err("build pptx: %v", err)
-		}
+	data, err := buildPPTX(args.Title, args.Subtitle, args.Slides, themeName)
+	if err != nil {
+		return Err("build pptx: %v", err)
 	}
 
 	if err := os.WriteFile(abs, data, 0o644); err != nil {
@@ -468,8 +495,8 @@ func pickThemeName(title, subtitle string) string {
 		return "creative"
 	}
 	// Security / Cyber / Risk
-	if hasWord(c, "security", "cyber", "threat", "hack", "ransomware", "firewall",
-		"privacy", "compliance", "risk") {
+	if hasWord(c, "security", "cyber", "cybersecurity", "threat", "hack", "ransomware", "firewall",
+		"privacy", "compliance", "risk", "breach", "malware", "phishing") {
 		return "security"
 	}
 	// Data / Analytics / BI / Warehouse
@@ -642,13 +669,13 @@ func spRightArrow(g *idg, name string, x, y, w, h int, fill string) string {
 
 // ── Common slide header ───────────────────────────────────────────────────────
 
-func slideHeader(g *idg, heading, accent string) string {
+func slideHeader(g *idg, heading string, pal pptxPalette) string {
 	var sb strings.Builder
-	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, "0F172A"))
-	sb.WriteString(spRect(g, "topBar", 0, 0, 9144000, 12700, accent))
-	sb.WriteString(spEllipse(g, "decCircleLg", 7500000, -600000, 2400000, 2400000, "", 0, accent, 19050, 15))
-	sb.WriteString(spTextLeft(g, "headingText", 457200, 60000, 8229600, 457200, heading, "FFFFFF", 3600, true, "ctr", "Calibri Light"))
-	sb.WriteString(spRect(g, "divider", 457200, 571500, 8229600, 9525, "2D3F55"))
+	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
+	sb.WriteString(spRect(g, "topBar", 0, 0, 9144000, 12700, pal.accent))
+	sb.WriteString(spEllipse(g, "decCircleLg", 7500000, -600000, 2400000, 2400000, "", 0, pal.accent, 19050, 15))
+	sb.WriteString(spTextLeft(g, "headingText", 457200, 60000, 8229600, 457200, heading, pal.text, 3600, true, "ctr", "Calibri Light"))
+	sb.WriteString(spRect(g, "divider", 457200, 571500, 8229600, 9525, pal.border))
 	return sb.String()
 }
 
@@ -684,45 +711,45 @@ func wrapSlide(body string) string {
 
 // ── Cover slide ───────────────────────────────────────────────────────────────
 
-func pptxCoverSlide(title, subtitle, accent string) string {
+func pptxCoverSlide(title, subtitle string, pal pptxPalette) string {
 	g := &idg{}
 	var sb strings.Builder
 
-	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, "0F172A"))
-	sb.WriteString(spEllipse(g, "decCircle1", 7000000, -800000, 3000000, 3000000, "", 0, accent, 28575, 15))
-	sb.WriteString(spEllipse(g, "decCircle2", 7600000, -200000, 2000000, 2000000, "", 0, accent, 19050, 10))
-	sb.WriteString(spEllipse(g, "decCircleSm", 200000, 5800000, 600000, 600000, accent, 8, "", 0, 0))
-	sb.WriteString(spRect(g, "accentBar", 457200, 1371600, 19050, 3657600, accent))
+	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
+	sb.WriteString(spEllipse(g, "decCircle1", 7000000, -800000, 3000000, 3000000, "", 0, pal.accent, 28575, 15))
+	sb.WriteString(spEllipse(g, "decCircle2", 7600000, -200000, 2000000, 2000000, "", 0, pal.accent, 19050, 10))
+	sb.WriteString(spEllipse(g, "decCircleSm", 200000, 5800000, 600000, 600000, pal.accent, 8, "", 0, 0))
+	sb.WriteString(spRect(g, "accentBar", 457200, 1371600, 19050, 3657600, pal.accent))
 
 	id := g.next()
 	sb.WriteString(fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="titleText"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
 <p:spPr><a:xfrm><a:off x="762000" y="1600200"/><a:ext cx="7467600" cy="1981200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
 <p:txBody><a:bodyPr anchor="ctr" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="4400" b="1" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:latin typeface="Calibri Light" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
+<a:p><a:r><a:rPr lang="en-US" sz="4400" b="1" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri Light" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
 </p:txBody>
-</p:sp>`, id, xmlEsc(title)))
+</p:sp>`, id, pal.text, xmlEsc(title)))
 
 	id = g.next()
 	sb.WriteString(fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="subtitleText"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
 <p:spPr><a:xfrm><a:off x="762000" y="3657600"/><a:ext cx="7467600" cy="685800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
 <p:txBody><a:bodyPr anchor="t" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="2000" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill><a:latin typeface="Calibri" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
+<a:p><a:r><a:rPr lang="en-US" sz="2000" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
 </p:txBody>
-</p:sp>`, id, xmlEsc(subtitle)))
+</p:sp>`, id, pal.muted, xmlEsc(subtitle)))
 
-	sb.WriteString(spRect(g, "bottomLine", 0, 6845300, 9144000, 12700, accent))
+	sb.WriteString(spRect(g, "bottomLine", 0, 6845300, 9144000, 12700, pal.accent))
 
 	return wrapSlide(sb.String())
 }
 
 // ── Bullets layout ────────────────────────────────────────────────────────────
 
-func pptxBulletsSlide(heading string, points []string, accent string) string {
+func pptxBulletsSlide(heading string, points []string, pal pptxPalette) string {
 	g := &idg{}
 	var sb strings.Builder
-	sb.WriteString(slideHeader(g, heading, accent))
+	sb.WriteString(slideHeader(g, heading, pal))
 
 	twoCol := len(points) >= 5
 	contentTop := 640000
@@ -749,18 +776,18 @@ func pptxBulletsSlide(heading string, points []string, accent string) string {
 			}
 			cardY := contentTop + row*(cardH+cardGap)
 
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, colW, cardH, "1E293B", accent, 15))
-			sb.WriteString(spRect(g, fmt.Sprintf("strip%d", i), cardX, cardY, 9000, cardH, accent))
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, colW, cardH, pal.card, pal.accent, 15))
+			sb.WriteString(spRect(g, fmt.Sprintf("strip%d", i), cardX, cardY, 9000, cardH, pal.accent))
 
 			badgeSize := 228600
 			badgeX := cardX + 30000
 			badgeY := cardY + (cardH-badgeSize)/2
-			sb.WriteString(spEllipse(g, fmt.Sprintf("badge%d", i), badgeX, badgeY, badgeSize, badgeSize, accent, 100, "", 0, 0))
-			sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), badgeX, badgeY, badgeSize, badgeSize, fmt.Sprintf("%d", i+1), "FFFFFF", 1400, true, "ctr", "Calibri"))
+			sb.WriteString(spEllipse(g, fmt.Sprintf("badge%d", i), badgeX, badgeY, badgeSize, badgeSize, pal.accent, 100, "", 0, 0))
+			sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), badgeX, badgeY, badgeSize, badgeSize, fmt.Sprintf("%d", i+1), pal.text, 1400, true, "ctr", "Calibri"))
 
 			textX := cardX + 290000
 			textW := colW - 310000
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("ptText%d", i), textX, cardY+30000, textW, cardH-60000, pt, "FFFFFF", 1600, false, "ctr", "Calibri"))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("ptText%d", i), textX, cardY+30000, textW, cardH-60000, pt, pal.text, 1600, false, "ctr", "Calibri"))
 		}
 	} else {
 		numCards := len(points)
@@ -777,32 +804,32 @@ func pptxBulletsSlide(heading string, points []string, accent string) string {
 
 		for i, pt := range points {
 			cardY := contentTop + i*(cardH+60000)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, cardW, cardH, "1E293B", accent, 15))
-			sb.WriteString(spRect(g, fmt.Sprintf("strip%d", i), cardX, cardY, 9000, cardH, accent))
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, cardW, cardH, pal.card, pal.accent, 15))
+			sb.WriteString(spRect(g, fmt.Sprintf("strip%d", i), cardX, cardY, 9000, cardH, pal.accent))
 
 			badgeSize := 228600
 			badgeX := cardX + 40000
 			badgeY := cardY + (cardH-badgeSize)/2
-			sb.WriteString(spEllipse(g, fmt.Sprintf("badge%d", i), badgeX, badgeY, badgeSize, badgeSize, accent, 100, "", 0, 0))
-			sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), badgeX, badgeY, badgeSize, badgeSize, fmt.Sprintf("%d", i+1), "FFFFFF", 1400, true, "ctr", "Calibri"))
+			sb.WriteString(spEllipse(g, fmt.Sprintf("badge%d", i), badgeX, badgeY, badgeSize, badgeSize, pal.accent, 100, "", 0, 0))
+			sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), badgeX, badgeY, badgeSize, badgeSize, fmt.Sprintf("%d", i+1), pal.text, 1400, true, "ctr", "Calibri"))
 
 			textX := cardX + 320000
 			textW := cardW - 380000
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("ptText%d", i), textX, cardY+20000, textW, cardH-40000, pt, "FFFFFF", 1800, false, "ctr", "Calibri"))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("ptText%d", i), textX, cardY+20000, textW, cardH-40000, pt, pal.text, 1800, false, "ctr", "Calibri"))
 		}
 	}
 
-	sb.WriteString(spEllipse(g, "decCircleSmBR", 8800000, 6400000, 500000, 500000, accent, 8, "", 0, 0))
+	sb.WriteString(spEllipse(g, "decCircleSmBR", 8800000, 6400000, 500000, 500000, pal.accent, 8, "", 0, 0))
 
 	return wrapSlide(sb.String())
 }
 
 // ── Stats layout ──────────────────────────────────────────────────────────────
 
-func pptxStatsSlide(heading string, stats []pptxStat, points []string, accent string) string {
+func pptxStatsSlide(heading string, stats []pptxStat, points []string, pal pptxPalette) string {
 	g := &idg{}
 	var sb strings.Builder
-	sb.WriteString(slideHeader(g, heading, accent))
+	sb.WriteString(slideHeader(g, heading, pal))
 
 	allStats := make([]pptxStat, 0, len(stats)+len(points))
 	allStats = append(allStats, stats...)
@@ -843,13 +870,12 @@ func pptxStatsSlide(heading string, stats []pptxStat, points []string, accent st
 
 	for i, st := range allStats {
 		cardX := startX + i*(cardW+gap)
-		acc := accent
-		sb.WriteString(spRoundRect(g, fmt.Sprintf("statCard%d", i), cardX, cardTop, cardW, cardH, "1E293B", acc, 15))
-		sb.WriteString(spRect(g, fmt.Sprintf("statTopStrip%d", i), cardX, cardTop, cardW, cardH/12, acc))
-		sb.WriteString(spText(g, fmt.Sprintf("statVal%d", i), cardX, cardTop+cardH/10, cardW, cardH/3, st.Value, acc, 6000, true, "ctr", "Calibri Light"))
-		sb.WriteString(spText(g, fmt.Sprintf("statLabel%d", i), cardX, cardTop+cardH/3+cardH/10+60000, cardW, cardH/5, st.Label, "FFFFFF", 1800, false, "ctr", "Calibri"))
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("statCard%d", i), cardX, cardTop, cardW, cardH, pal.card, pal.accent, 15))
+		sb.WriteString(spRect(g, fmt.Sprintf("statTopStrip%d", i), cardX, cardTop, cardW, cardH/12, pal.accent))
+		sb.WriteString(spText(g, fmt.Sprintf("statVal%d", i), cardX, cardTop+cardH/10, cardW, cardH/3, st.Value, pal.accent, 6000, true, "ctr", "Calibri Light"))
+		sb.WriteString(spText(g, fmt.Sprintf("statLabel%d", i), cardX, cardTop+cardH/3+cardH/10+60000, cardW, cardH/5, st.Label, pal.text, 1800, false, "ctr", "Calibri"))
 		if st.Desc != "" {
-			sb.WriteString(spText(g, fmt.Sprintf("statDesc%d", i), cardX, cardTop+cardH/3+cardH/10+cardH/5+80000, cardW, cardH/7, st.Desc, "94A3B8", 1400, false, "ctr", "Calibri"))
+			sb.WriteString(spText(g, fmt.Sprintf("statDesc%d", i), cardX, cardTop+cardH/3+cardH/10+cardH/5+80000, cardW, cardH/7, st.Desc, pal.muted, 1400, false, "ctr", "Calibri"))
 		}
 		hasPercent := strings.Contains(st.Value, "%")
 		if hasPercent {
@@ -864,10 +890,10 @@ func pptxStatsSlide(heading string, stats []pptxStat, points []string, accent st
 			}
 			trackY := cardTop + cardH - cardH/10
 			trackH := 19050
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("track%d", i), cardX+50000, trackY, cardW-100000, trackH, "2D3F55", "", 0))
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("track%d", i), cardX+50000, trackY, cardW-100000, trackH, pal.border, "", 0))
 			filledW := (cardW - 100000) * pct / 100
 			if filledW > 0 {
-				sb.WriteString(spRoundRect(g, fmt.Sprintf("fill%d", i), cardX+50000, trackY, filledW, trackH, acc, "", 0))
+				sb.WriteString(spRoundRect(g, fmt.Sprintf("fill%d", i), cardX+50000, trackY, filledW, trackH, pal.accent, "", 0))
 			}
 		}
 	}
@@ -877,10 +903,10 @@ func pptxStatsSlide(heading string, stats []pptxStat, points []string, accent st
 
 // ── Steps layout ──────────────────────────────────────────────────────────────
 
-func pptxStepsSlide(heading string, points []string, accent string) string {
+func pptxStepsSlide(heading string, points []string, pal pptxPalette) string {
 	g := &idg{}
 	var sb strings.Builder
-	sb.WriteString(slideHeader(g, heading, accent))
+	sb.WriteString(slideHeader(g, heading, pal))
 
 	steps := points
 	if len(steps) == 0 {
@@ -907,13 +933,13 @@ func pptxStepsSlide(heading string, points []string, accent string) string {
 			boxX := startX + i*(boxW+gap)
 			acc := rowPalette[(rowStartNum+i)%len(rowPalette)]
 			sb.WriteString(spRoundRect(g, fmt.Sprintf("stepBox%d", rowStartNum+i), boxX, rowTop, boxW, boxH, acc, "", 0))
-			sb.WriteString(spText(g, fmt.Sprintf("stepNum%d", rowStartNum+i), boxX, rowTop, boxW, boxH, fmt.Sprintf("%d", rowStartNum+i+1), "FFFFFF", 3200, true, "ctr", "Calibri Light"))
-			sb.WriteString(spText(g, fmt.Sprintf("stepLabel%d", rowStartNum+i), boxX, rowTop+boxH+40000, boxW, labelH, step, "E2E8F0", 1400, false, "t", "Calibri"))
+			sb.WriteString(spText(g, fmt.Sprintf("stepNum%d", rowStartNum+i), boxX, rowTop, boxW, boxH, fmt.Sprintf("%d", rowStartNum+i+1), pal.text, 3200, true, "ctr", "Calibri Light"))
+			sb.WriteString(spText(g, fmt.Sprintf("stepLabel%d", rowStartNum+i), boxX, rowTop+boxH+40000, boxW, labelH, step, pal.text, 1400, false, "t", "Calibri"))
 
 			if i < n-1 {
 				arrX := boxX + boxW
 				arrY := rowTop + (boxH-arrowH)/2
-				sb.WriteString(spRightArrow(g, fmt.Sprintf("arrow%d", rowStartNum+i), arrX, arrY, arrowW, arrowH, "2D3F55"))
+				sb.WriteString(spRightArrow(g, fmt.Sprintf("arrow%d", rowStartNum+i), arrX, arrY, arrowW, arrowH, pal.border))
 			}
 		}
 	}
@@ -934,10 +960,10 @@ func pptxStepsSlide(heading string, points []string, accent string) string {
 
 var cardIcons = []string{"◈", "⬡", "◎", "◇", "△", "▣"}
 
-func pptxCardsSlide(heading string, points []string, accent string) string {
+func pptxCardsSlide(heading string, points []string, pal pptxPalette) string {
 	g := &idg{}
 	var sb strings.Builder
-	sb.WriteString(slideHeader(g, heading, accent))
+	sb.WriteString(slideHeader(g, heading, pal))
 
 	cards := points
 	if len(cards) > 6 {
@@ -960,14 +986,12 @@ func pptxCardsSlide(heading string, points []string, accent string) string {
 		row := i / cols
 		cardX := startX + col*(cardW+gapX)
 		cardY := startY + row*(cardH+gapY)
-		acc := accent
-
-		sb.WriteString(spRoundRect(g, fmt.Sprintf("featureCard%d", i), cardX, cardY, cardW, cardH, "1E293B", acc, 15))
-		sb.WriteString(spRect(g, fmt.Sprintf("cardStrip%d", i), cardX, cardY, 9000, cardH, acc))
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("featureCard%d", i), cardX, cardY, cardW, cardH, pal.card, pal.accent, 15))
+		sb.WriteString(spRect(g, fmt.Sprintf("cardStrip%d", i), cardX, cardY, 9000, cardH, pal.accent))
 
 		icon := cardIcons[i%len(cardIcons)]
 		iconH := cardH / 3
-		sb.WriteString(spText(g, fmt.Sprintf("cardIcon%d", i), cardX, cardY+20000, cardW, iconH, icon, acc, 3200, false, "ctr", "Calibri"))
+		sb.WriteString(spText(g, fmt.Sprintf("cardIcon%d", i), cardX, cardY+20000, cardW, iconH, icon, pal.accent, 3200, false, "ctr", "Calibri"))
 
 		title := pt
 		body := ""
@@ -979,9 +1003,9 @@ func pptxCardsSlide(heading string, points []string, accent string) string {
 				body = pt[split+1:]
 			}
 		}
-		sb.WriteString(spText(g, fmt.Sprintf("cardTitle%d", i), cardX+20000, cardY+iconH+30000, cardW-40000, cardH/5, title, "FFFFFF", 1600, true, "ctr", "Calibri"))
+		sb.WriteString(spText(g, fmt.Sprintf("cardTitle%d", i), cardX+20000, cardY+iconH+30000, cardW-40000, cardH/5, title, pal.text, 1600, true, "ctr", "Calibri"))
 		if body != "" {
-			sb.WriteString(spText(g, fmt.Sprintf("cardBody%d", i), cardX+20000, cardY+iconH+cardH/5+50000, cardW-40000, cardH/4, body, "94A3B8", 1300, false, "t", "Calibri"))
+			sb.WriteString(spText(g, fmt.Sprintf("cardBody%d", i), cardX+20000, cardY+iconH+cardH/5+50000, cardW-40000, cardH/4, body, pal.muted, 1300, false, "t", "Calibri"))
 		}
 	}
 
@@ -990,7 +1014,7 @@ func pptxCardsSlide(heading string, points []string, accent string) string {
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
 
-func pptxContentSlide(s pptxSlide, accent string) string {
+func pptxContentSlide(s pptxSlide, pal pptxPalette) string {
 	layout := s.Layout
 	if layout == "" {
 		if len(s.Stats) > 0 {
@@ -1002,34 +1026,23 @@ func pptxContentSlide(s pptxSlide, accent string) string {
 
 	switch layout {
 	case "stats":
-		return pptxStatsSlide(s.Heading, s.Stats, s.Points, accent)
+		return pptxStatsSlide(s.Heading, s.Stats, s.Points, pal)
 	case "steps":
-		return pptxStepsSlide(s.Heading, s.Points, accent)
+		return pptxStepsSlide(s.Heading, s.Points, pal)
 	case "cards":
-		return pptxCardsSlide(s.Heading, s.Points, accent)
+		return pptxCardsSlide(s.Heading, s.Points, pal)
 	default:
-		return pptxBulletsSlide(s.Heading, s.Points, accent)
+		return pptxBulletsSlide(s.Heading, s.Points, pal)
 	}
 }
 
 // ── PPTX builder ──────────────────────────────────────────────────────────────
 
-func buildPPTX(title, subtitle string, slides []pptxSlide) ([]byte, error) {
+func buildPPTX(title, subtitle string, slides []pptxSlide, themeName string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	// Pick ONE consistent accent color for the entire presentation based on topic.
-	themeAccentMap := map[string]string{
-		"tech": "6366F1", "healthcare": "06B6D4", "education": "F59E0B",
-		"environment": "14B8A6", "finance": "10B981", "creative": "8B5CF6",
-		"security": "EF4444", "data": "14B8A6", "logistics": "3B82F6",
-		"retail": "F97316", "hr": "EC4899",
-	}
-	tn := pickThemeName(title, subtitle)
-	accent := themeAccentMap[tn]
-	if accent == "" {
-		accent = "6366F1"
-	}
+	pal := paletteFor(themeName)
 
 	type entry struct {
 		name    string
@@ -1045,8 +1058,8 @@ func buildPPTX(title, subtitle string, slides []pptxSlide) ([]byte, error) {
 		{"docProps/core.xml", pptxCoreXML(title)},
 		{"ppt/presentation.xml", pptxPresentationXML(totalSlides)},
 		{"ppt/_rels/presentation.xml.rels", pptxPresentationRels(totalSlides)},
-		{"ppt/theme/theme1.xml", pptxThemeXML()},
-		{"ppt/slideMasters/slideMaster1.xml", pptxSlideMasterXML()},
+		{"ppt/theme/theme1.xml", pptxThemeXML(pal)},
+		{"ppt/slideMasters/slideMaster1.xml", pptxSlideMasterXML(pal)},
 		{"ppt/slideMasters/_rels/slideMaster1.xml.rels", pptxSlideMasterRels()},
 		{"ppt/slideLayouts/slideLayout1.xml", pptxLayoutTitleXML()},
 		{"ppt/slideLayouts/_rels/slideLayout1.xml.rels", pptxLayoutRels()},
@@ -1055,14 +1068,14 @@ func buildPPTX(title, subtitle string, slides []pptxSlide) ([]byte, error) {
 	}
 
 	entries = append(entries,
-		entry{"ppt/slides/slide1.xml", pptxCoverSlide(title, subtitle, accent)},
+		entry{"ppt/slides/slide1.xml", pptxCoverSlide(title, subtitle, pal)},
 		entry{"ppt/slides/_rels/slide1.xml.rels", pptxSlideRels("../slideLayouts/slideLayout1.xml")},
 	)
 
 	for i, s := range slides {
 		idx := i + 2
 		entries = append(entries,
-			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), pptxContentSlide(s, accent)},
+			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), pptxContentSlide(s, pal)},
 			entry{fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", idx), pptxSlideRels("../slideLayouts/slideLayout2.xml")},
 		)
 	}
@@ -1186,24 +1199,24 @@ func pptxPresentationRels(numSlides int) string {
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
-func pptxThemeXML() string {
-	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+func pptxThemeXML(pal pptxPalette) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="BarqTheme">
   <a:themeElements>
     <a:clrScheme name="Barq">
-      <a:dk1><a:srgbClr val="0F172A"/></a:dk1>
-      <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
-      <a:dk2><a:srgbClr val="1E293B"/></a:dk2>
+      <a:dk1><a:srgbClr val="%s"/></a:dk1>
+      <a:lt1><a:srgbClr val="%s"/></a:lt1>
+      <a:dk2><a:srgbClr val="%s"/></a:dk2>
       <a:lt2><a:srgbClr val="F1F5F9"/></a:lt2>
-      <a:accent1><a:srgbClr val="6366F1"/></a:accent1>
-      <a:accent2><a:srgbClr val="8B5CF6"/></a:accent2>
-      <a:accent3><a:srgbClr val="06B6D4"/></a:accent3>
-      <a:accent4><a:srgbClr val="10B981"/></a:accent4>
-      <a:accent5><a:srgbClr val="F59E0B"/></a:accent5>
-      <a:accent6><a:srgbClr val="EF4444"/></a:accent6>
-      <a:hlink><a:srgbClr val="6366F1"/></a:hlink>
-      <a:folHlink><a:srgbClr val="8B5CF6"/></a:folHlink>
-    </a:clrScheme>
+      <a:accent1><a:srgbClr val="%s"/></a:accent1>
+      <a:accent2><a:srgbClr val="%s"/></a:accent2>
+      <a:accent3><a:srgbClr val="%s"/></a:accent3>
+      <a:accent4><a:srgbClr val="%s"/></a:accent4>
+      <a:accent5><a:srgbClr val="%s"/></a:accent5>
+      <a:accent6><a:srgbClr val="%s"/></a:accent6>
+      <a:hlink><a:srgbClr val="%s"/></a:hlink>
+      <a:folHlink><a:srgbClr val="%s"/></a:folHlink>
+    </a:clrScheme>`, pal.bg, pal.text, pal.card, pal.accent, pal.accent2, pal.accent, pal.accent2, pal.accent, pal.accent2, pal.accent, pal.accent2) + `
     <a:fontScheme name="Barq">
       <a:majorFont>
         <a:latin typeface="Calibri Light" panose="020F0302020204030204"/>
@@ -1282,8 +1295,8 @@ func pptxThemeXML() string {
 
 // ── Slide Master ──────────────────────────────────────────────────────────────
 
-func pptxSlideMasterXML() string {
-	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+func pptxSlideMasterXML(pal pptxPalette) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sldMaster
   xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
   xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -1291,10 +1304,10 @@ func pptxSlideMasterXML() string {
   <p:cSld>
     <p:bg>
       <p:bgPr>
-        <a:solidFill><a:srgbClr val="0F172A"/></a:solidFill>
+        <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
         <a:effectLst/>
       </p:bgPr>
-    </p:bg>
+    </p:bg>`, pal.bg) + `
     <p:spTree>
       <p:nvGrpSpPr>
         <p:cNvPr id="1" name=""/>
