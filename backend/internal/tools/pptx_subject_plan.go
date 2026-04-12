@@ -234,6 +234,8 @@ func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string
 func deriveAudience(subtitle, title string) string {
 	text := strings.ToLower(strings.TrimSpace(title + " " + subtitle))
 	switch {
+	case containsAny(text, "kid", "kids", "child", "children", "young learner", "classroom"):
+		return "young learners"
 	case containsAny(text, "executive", "board", "leadership", "steering", "investor"):
 		return "executive stakeholders"
 	case containsAny(text, "sales", "go to market", "customer", "prospect"):

@@ -686,49 +686,8 @@ func wrapSlide(body string) string {
 
 // ── Cover slide ───────────────────────────────────────────────────────────────
 
-func pptxCoverSlide(title, subtitle string, pal pptxPalette) string {
-	g := &idg{}
-	var sb strings.Builder
-
-	// Full background
-	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
-	// Right-side accent panel (vertical strip, ~30% width)
-	sb.WriteString(spRect(g, "accentPanel", 6400000, 0, 2744000, 6858000, pal.accent))
-	// Decorative large circle overlapping accent panel
-	sb.WriteString(spEllipse(g, "decCircle1", 5800000, 1200000, 3200000, 3200000, pal.accent, 12, "", 0, 0))
-	// Smaller accent circle bottom-left
-	sb.WriteString(spEllipse(g, "decCircle2", -200000, 5400000, 1200000, 1200000, pal.accent, 6, "", 0, 0))
-	// Subtle border ring top-right
-	sb.WriteString(spEllipse(g, "ringTR", 7400000, -400000, 2000000, 2000000, "", 0, pal.text, 12700, 8))
-	// Left-aligned accent bar
-	sb.WriteString(spRect(g, "accentBar", 457200, 1800000, 80000, 6350, pal.accent))
-
-	// Title — large, left-aligned, in the left 65%
-	id := g.next()
-	sb.WriteString(fmt.Sprintf(`<p:sp>
-<p:nvSpPr><p:cNvPr id="%d" name="titleText"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="457200" y="1900000"/><a:ext cx="5600000" cy="2400000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-<p:txBody><a:bodyPr anchor="t" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="4800" b="1" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri Light" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
-</p:txBody>
-</p:sp>`, id, pal.text, xmlEsc(title)))
-
-	// Subtitle — below title
-	id = g.next()
-	sb.WriteString(fmt.Sprintf(`<p:sp>
-<p:nvSpPr><p:cNvPr id="%d" name="subtitleText"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="457200" y="4400000"/><a:ext cx="5600000" cy="600000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-<p:txBody><a:bodyPr anchor="t" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="2000" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
-</p:txBody>
-</p:sp>`, id, pal.muted, xmlEsc(subtitle)))
-
-	// Bottom accent bar
-	sb.WriteString(spRect(g, "bottomBar", 0, 6800000, 6400000, 57150, pal.accent))
-	// "Barq Cowork" watermark bottom-left
-	sb.WriteString(spTextLeft(g, "watermark", 457200, 6200000, 2000000, 300000, "Barq Cowork", pal.muted, 1100, false, "b", "Calibri"))
-
-	return wrapSlide(sb.String())
+func pptxCoverSlide(deck pptxDeckContext, pal pptxPalette) string {
+	return renderPPTXCoverSlide(deck, pal)
 }
 
 // ── Bullets layout ────────────────────────────────────────────────────────────
@@ -1030,6 +989,7 @@ func buildPPTX(title, subtitle string, planned plannedPPTXPresentation) ([]byte,
 	zw := zip.NewWriter(&buf)
 
 	pal := paletteFor(planned.ThemeName)
+	deck := newPPTXDeckContext(title, subtitle, planned)
 	manifest, err := buildPPTXPreviewManifest(title, subtitle, planned)
 	if err != nil {
 		return nil, fmt.Errorf("build pptx manifest: %w", err)
@@ -1060,14 +1020,14 @@ func buildPPTX(title, subtitle string, planned plannedPPTXPresentation) ([]byte,
 	}
 
 	entries = append(entries,
-		entry{"ppt/slides/slide1.xml", pptxCoverSlide(title, subtitle, pal)},
+		entry{"ppt/slides/slide1.xml", pptxCoverSlide(deck, pal)},
 		entry{"ppt/slides/_rels/slide1.xml.rels", pptxSlideRels("../slideLayouts/slideLayout1.xml")},
 	)
 
 	for i, slide := range planned.Slides {
 		idx := i + 2
 		entries = append(entries,
-			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), renderDeckSlide(slide.Slide, pal, pptxDeckContext{Title: title, SlideCount: len(planned.Slides)}, i)},
+			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), renderDeckSlide(slide.Slide, pal, deck, i)},
 			entry{fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", idx), pptxSlideRels("../slideLayouts/slideLayout2.xml")},
 		)
 	}

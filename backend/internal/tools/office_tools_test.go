@@ -70,6 +70,16 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	if manifest.DeckPlan.Subject == "" || manifest.DeckPlan.Audience == "" || manifest.DeckPlan.VisualDirection == "" {
 		t.Fatalf("expected populated deck plan in manifest, got %+v", manifest.DeckPlan)
 	}
+	coverXML := strings.ToUpper(string(unzipEntryData(t, data, "ppt/slides/slide1.xml")))
+	if !strings.Contains(coverXML, "AUDIENCE") &&
+		!strings.Contains(coverXML, "STORY STRUCTURE") &&
+		!strings.Contains(coverXML, "VISUAL DIRECTION") &&
+		!strings.Contains(coverXML, "PRIORITY") {
+		t.Fatalf("expected planned cover metadata, got %s", coverXML)
+	}
+	if !strings.Contains(coverXML, "BULLETS") && !strings.Contains(coverXML, "STATS") && !strings.Contains(coverXML, "TIMELINE") {
+		t.Fatalf("expected subject-driven cover metadata, got %s", coverXML)
+	}
 
 	html, err := tools.PreviewOfficeArtifact(pptxPath)
 	if err != nil {

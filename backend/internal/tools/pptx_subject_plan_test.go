@@ -80,3 +80,10 @@ func TestInferCardIcon_NormalizesLegacyEmojiToSemanticToken(t *testing.T) {
 		t.Fatalf("expected chart token, got %q", icon)
 	}
 }
+
+func TestDeriveAudience_DetectsYoungLearners(t *testing.T) {
+	audience := deriveAudience("Discover how computers can draw and create", "Generative AI for Kids")
+	if audience != "young learners" {
+		t.Fatalf("expected young learners, got %q", audience)
+	}
+}
