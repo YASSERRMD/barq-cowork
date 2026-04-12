@@ -90,6 +90,7 @@ def _line_from_theme(theme: DeckTheme) -> RGBColor:
     return _h(theme.colors.border)
 
 
+
 # ── Low-level XML primitives (mirror gen_pptx.py) ────────────────────────────
 
 def _spPr(shape):
