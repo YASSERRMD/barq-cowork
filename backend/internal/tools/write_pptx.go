@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -214,7 +213,6 @@ type pptxTableData struct {
 }
 
 // pptxSlide is the full slide definition accepted by the write_pptx tool.
-// The bridge (pptx_bridge.py) translates this into a pptx_engine Slide.
 type pptxSlide struct {
 	Heading      string `json:"heading"`
 	Type         string `json:"type"`   // primary field
@@ -314,90 +312,6 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 		fmt.Sprintf("PowerPoint presentation written to %s (%d slides, %d bytes)", relPath, len(args.Slides)+1, len(data)),
 		map[string]any{"path": relPath, "size": int64(len(data))},
 	)
-}
-
-// buildPPTXviaPython calls pptx_bridge.py — the pptx_engine bridge script.
-// It translates the tool's JSON payload into a full Deck schema and renders
-// using the engine's 10-layout slide registry (charts, timeline, compare, etc.).
-// Falls back to gen_pptx.py if the bridge is not found.
-func buildPPTXviaPython(ctx context.Context, args pptxArgs, themeName string) ([]byte, error) {
-	// Prefer the new engine bridge; fall back to legacy gen_pptx.py
-	scriptPath := findScript("scripts/pptx_bridge.py")
-	if scriptPath == "" {
-		scriptPath = findScript("scripts/gen_pptx.py")
-	}
-	if scriptPath == "" {
-		return nil, fmt.Errorf("pptx_bridge.py (and gen_pptx.py fallback) not found")
-	}
-
-	// Build the JSON payload. The bridge accepts both the old and new formats;
-	// we send the extended format so all 10 slide types are available.
-	type pyPayload struct {
-		Title    string      `json:"title"`
-		Subtitle string      `json:"subtitle"`
-		Author   string      `json:"author,omitempty"`
-		Theme    string      `json:"theme"`
-		Slides   []pptxSlide `json:"slides"`
-	}
-	payload, err := json.Marshal(pyPayload{
-		Title:    args.Title,
-		Subtitle: args.Subtitle,
-		Author:   args.Author,
-		Theme:    themeName,
-		Slides:   args.Slides,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := exec.CommandContext(ctx, "python3", scriptPath)
-	cmd.Stdin = bytes.NewReader(payload)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("pptx_bridge error: %v — %s", err, stderr.String())
-	}
-	if stdout.Len() < 100 {
-		return nil, fmt.Errorf("pptx_bridge produced too-small output (%d bytes); stderr: %s",
-			stdout.Len(), stderr.String())
-	}
-	return stdout.Bytes(), nil
-}
-
-// findScript searches common locations for the given relative script path.
-func findScript(rel string) string {
-	// 1. Next to the running executable
-	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), rel)
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	// 2. Relative to current working directory (dev mode: go run from backend/)
-	if wd, err := os.Getwd(); err == nil {
-		p := filepath.Join(wd, rel)
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	// 3. Walk up from cwd looking for the scripts directory
-	if wd, err := os.Getwd(); err == nil {
-		dir := wd
-		for i := 0; i < 5; i++ {
-			p := filepath.Join(dir, rel)
-			if _, err := os.Stat(p); err == nil {
-				return p
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
-		}
-	}
-	return ""
 }
 
 // ── XML helpers ───────────────────────────────────────────────────────────────
