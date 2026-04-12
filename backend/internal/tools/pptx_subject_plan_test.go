@@ -12,7 +12,7 @@ func TestPlanPPTXPresentation_BuildsDeckStrategyAndAuditsSlides(t *testing.T) {
 			{Heading: "Adoption trend", Type: "chart", ChartType: "column", ChartCategories: []string{"Q1", "Q2", "Q3", "Q4"}, ChartSeries: []pptxChartSeries{{Name: "Adoption", Values: []float64{18, 34, 51, 72}}}},
 			{Heading: "Implementation roadmap", Type: "timeline", Timeline: []pptxTimelineItem{{Date: "Q1", Title: "Pilot", Desc: "Initial deployment"}, {Date: "Q2", Title: "Expand", Desc: "Add more clinics"}, {Date: "Q3", Title: "Standardize", Desc: "Roll out best practices"}}},
 		},
-		"",
+		pptxDeckDesignInput{},
 	)
 
 	if planned.ThemeName != "healthcare" {
@@ -47,7 +47,7 @@ func TestPlanPPTXPresentation_FillsSubjectAwareFallbacks(t *testing.T) {
 			{Heading: "Capability story", Type: "cards"},
 			{Heading: "Decision matrix", Type: "table"},
 		},
-		"",
+		pptxDeckDesignInput{},
 	)
 
 	if err := validatePPTXPresentation(planned); err != nil {
@@ -71,6 +71,41 @@ func TestPickThemeName_PrefersEducationForKidsAudience(t *testing.T) {
 	)
 	if theme != "education" {
 		t.Fatalf("expected education theme, got %q", theme)
+	}
+}
+
+func TestPlanPPTXPresentation_PrefersExplicitDeckDesign(t *testing.T) {
+	planned := planPPTXPresentation(
+		"Kids and AI",
+		"Guide for families",
+		[]pptxSlide{{Heading: "Why it matters", Type: "bullets", Points: []string{"Creativity tools are everywhere", "Families need practical guidance", "Children need safe exploration"}}},
+		pptxDeckDesignInput{
+			Audience:    "parents and educators",
+			Theme:       "education",
+			VisualStyle: "playful classroom collage",
+			CoverStyle:  "playful",
+			Motif:       "learning",
+			Kicker:      "A visual guide for curious learners",
+			Palette: &pptxPaletteInput{
+				Background: "FFF6E5",
+				Card:       "FFFDF7",
+				Accent:     "F59E0B",
+				Accent2:    "FCD34D",
+				Text:       "1F2937",
+				Muted:      "6B7280",
+				Border:     "E8D8B8",
+			},
+		},
+	)
+
+	if planned.ThemeName != "education" {
+		t.Fatalf("expected explicit education theme, got %q", planned.ThemeName)
+	}
+	if planned.DeckPlan.CoverStyle != "playful" || planned.DeckPlan.Motif != "learning" {
+		t.Fatalf("expected explicit deck design to be preserved, got %+v", planned.DeckPlan)
+	}
+	if planned.Palette.bg != "FFF6E5" || planned.Palette.accent != "F59E0B" {
+		t.Fatalf("expected explicit palette override, got %+v", planned.Palette)
 	}
 }
 

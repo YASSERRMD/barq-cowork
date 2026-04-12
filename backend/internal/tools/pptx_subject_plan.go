@@ -9,6 +9,7 @@ import (
 
 type plannedPPTXPresentation struct {
 	ThemeName string
+	Palette   pptxPalette
 	DeckPlan  plannedPPTXDeckPlan
 	Slides    []plannedPPTXSlide
 }
@@ -19,6 +20,10 @@ type plannedPPTXDeckPlan struct {
 	NarrativeArc    string   `json:"narrative_arc"`
 	VisualDirection string   `json:"visual_direction"`
 	DominantNeed    string   `json:"dominant_need"`
+	CoverStyle      string   `json:"cover_style,omitempty"`
+	ColorStory      string   `json:"color_story,omitempty"`
+	Motif           string   `json:"motif,omitempty"`
+	Kicker          string   `json:"kicker,omitempty"`
 	LayoutMix       []string `json:"layout_mix,omitempty"`
 }
 
@@ -43,14 +48,13 @@ type plannedPPTXSlideAudit struct {
 	Notes      []string `json:"notes,omitempty"`
 }
 
-func planPPTXPresentation(title, subtitle string, slides []pptxSlide, themeName string) plannedPPTXPresentation {
-	if strings.TrimSpace(themeName) == "" {
-		themeName = pickThemeName(title, subtitle)
-	}
+func planPPTXPresentation(title, subtitle string, slides []pptxSlide, deckInput pptxDeckDesignInput) plannedPPTXPresentation {
+	themeName := resolveDeckThemeName(title, subtitle, deckInput)
 
-	deckPlan := deriveDeckPlan(title, subtitle, slides, themeName)
+	deckPlan := deriveDeckPlan(title, subtitle, slides, themeName, deckInput)
 	planned := plannedPPTXPresentation{
 		ThemeName: themeName,
+		Palette:   resolveDeckPalette(themeName, deckInput, deckPlan.Audience),
 		DeckPlan:  deckPlan,
 		Slides:    make([]plannedPPTXSlide, 0, len(slides)),
 	}
@@ -60,7 +64,9 @@ func planPPTXPresentation(title, subtitle string, slides []pptxSlide, themeName 
 	}
 
 	planned.DeckPlan.LayoutMix = plannedLayoutMix(planned.Slides)
-	planned.DeckPlan.NarrativeArc = deriveNarrativeArc(planned.Slides)
+	if strings.TrimSpace(planned.DeckPlan.NarrativeArc) == "" {
+		planned.DeckPlan.NarrativeArc = deriveNarrativeArc(planned.Slides)
+	}
 	return planned
 }
 
@@ -219,15 +225,57 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 	}
 }
 
-func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string) plannedPPTXDeckPlan {
-	subject := strings.TrimSpace(firstNonEmpty(title, subtitle, "Presentation"))
+func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string, deckInput pptxDeckDesignInput) plannedPPTXDeckPlan {
+	subject := strings.TrimSpace(firstNonEmpty(deckInput.Subject, title, subtitle, "Presentation"))
+	audience := strings.TrimSpace(firstNonEmpty(deckInput.Audience, deriveAudience(subtitle, title)))
 	return plannedPPTXDeckPlan{
 		Subject:         subject,
-		Audience:        deriveAudience(subtitle, title),
-		NarrativeArc:    deriveNarrativeArcFromInputs(slides),
-		VisualDirection: themeVisualDirection(themeName),
+		Audience:        audience,
+		NarrativeArc:    strings.TrimSpace(firstNonEmpty(deckInput.Narrative, deriveNarrativeArcFromInputs(slides))),
+		VisualDirection: strings.TrimSpace(firstNonEmpty(deckInput.VisualStyle, themeVisualDirection(themeName))),
 		DominantNeed:    themeDominantNeed(themeName),
+		CoverStyle:      strings.TrimSpace(firstNonEmpty(deckInput.CoverStyle, defaultCoverStyle(themeName, audience, deckInput.VisualStyle))),
+		ColorStory:      strings.TrimSpace(firstNonEmpty(deckInput.ColorStory, defaultColorStory(themeName, audience))),
+		Motif:           strings.TrimSpace(firstNonEmpty(deckInput.Motif, defaultMotif(themeName, audience))),
+		Kicker:          strings.TrimSpace(firstNonEmpty(deckInput.Kicker, defaultDeckKicker(themeName, audience, subject))),
 		LayoutMix:       plannedLayoutMixFromInputs(slides),
+	}
+}
+
+func resolveDeckThemeName(title, subtitle string, deckInput pptxDeckDesignInput) string {
+	if theme := normalizeDeckThemeName(deckInput.Theme); theme != "" {
+		return theme
+	}
+	return pickThemeName(title, subtitle)
+}
+
+func normalizeDeckThemeName(raw string) string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case containsAny(text, "health", "healthcare", "medical", "clinical", "patient", "pharma"):
+		return "healthcare"
+	case containsAny(text, "education", "learning", "school", "classroom", "student", "teacher", "kids", "children"):
+		return "education"
+	case containsAny(text, "environment", "climate", "sustainability", "renewable", "carbon", "eco"):
+		return "environment"
+	case containsAny(text, "finance", "financial", "investor", "revenue", "market", "bank"):
+		return "finance"
+	case containsAny(text, "creative", "design", "brand", "marketing", "media", "fashion"):
+		return "creative"
+	case containsAny(text, "security", "cyber", "privacy", "risk", "compliance", "governance"):
+		return "security"
+	case containsAny(text, "data", "analytics", "dashboard", "bi", "insight"):
+		return "data"
+	case containsAny(text, "logistics", "supply", "delivery", "fleet", "warehouse", "transport"):
+		return "logistics"
+	case containsAny(text, "retail", "ecommerce", "consumer", "store", "merchandise"):
+		return "retail"
+	case containsAny(text, "hr", "talent", "recruit", "employee", "workforce", "people ops"):
+		return "hr"
+	case containsAny(text, "tech", "technology", "software", "ai", "digital", "platform"):
+		return "tech"
+	default:
+		return ""
 	}
 }
 
@@ -289,27 +337,27 @@ func deriveNarrativeArc(slides []plannedPPTXSlide) string {
 func themeVisualDirection(themeName string) string {
 	switch themeName {
 	case "healthcare":
-		return "calm clinical credibility with clean data emphasis"
+		return "calm clinical layout with clean data framing"
 	case "education":
-		return "structured learning flow with warm instructional cues"
+		return "warm learning-first design with clear instructional pacing"
 	case "environment":
-		return "impact-focused sustainability story with milestone framing"
+		return "organic impact story with spacious milestone framing"
 	case "finance":
-		return "measured business rigor with signal-first visuals"
+		return "decision-led business layout with restrained signal graphics"
 	case "creative":
-		return "high-contrast storytelling with expressive section breaks"
+		return "bold visual storytelling with expressive composition shifts"
 	case "security":
-		return "controlled risk narrative with strong contrast and auditability"
+		return "high-contrast control-room narrative with strong structure"
 	case "data":
-		return "analysis-led narrative with charts and structured comparisons"
+		return "analysis-led system design with charts and comparisons"
 	case "logistics":
-		return "operational clarity with process and timeline visuals"
+		return "operational flow design with route and timeline cues"
 	case "retail":
-		return "commercial performance story with growth signals"
+		return "commercial story with energetic growth-focused rhythm"
 	case "hr":
-		return "people-centric change narrative with adoption emphasis"
+		return "people-centric change story with approachable structure"
 	default:
-		return "modern product narrative with varied layouts and clear hierarchy"
+		return "subject-led modern presentation with varied layouts and clear hierarchy"
 	}
 }
 
@@ -327,6 +375,131 @@ func themeDominantNeed(themeName string) string {
 		return "impact"
 	default:
 		return "execution"
+	}
+}
+
+func defaultCoverStyle(themeName, audience, visualStyle string) string {
+	text := strings.ToLower(strings.Join([]string{themeName, audience, visualStyle}, " "))
+	switch {
+	case containsAny(text, "playful", "kids", "young learners", "classroom", "children"):
+		return "playful"
+	case containsAny(text, "editorial", "minimal", "paper", "executive", "board"):
+		return "editorial"
+	case containsAny(text, "poster", "studio", "campaign", "vibrant", "creative"):
+		return "poster"
+	case containsAny(text, "mosaic", "grid", "collage", "modular"):
+		return "mosaic"
+	default:
+		switch themeName {
+		case "education", "hr":
+			return "mosaic"
+		case "creative", "retail":
+			return "poster"
+		case "tech", "data":
+			return "orbit"
+		case "environment":
+			return "mosaic"
+		case "security", "finance":
+			return "editorial"
+		default:
+			return "editorial"
+		}
+	}
+}
+
+func defaultColorStory(themeName, audience string) string {
+	if containsAny(strings.ToLower(audience), "young learners", "children", "kids") {
+		return "bright classroom tones with soft contrast"
+	}
+	switch themeName {
+	case "healthcare":
+		return "cool clinical tones with calm contrast"
+	case "education":
+		return "warm daylight tones with clear contrast"
+	case "environment":
+		return "earthy natural tones with soft depth"
+	case "finance":
+		return "clean business neutrals with green accents"
+	case "creative":
+		return "high-energy studio tones with saturated accents"
+	case "security":
+		return "dark command-center tones with sharp red signals"
+	case "data":
+		return "cool analytical tones with structured contrast"
+	case "logistics":
+		return "clear route-map blues with operational contrast"
+	case "retail":
+		return "sunlit retail tones with confident warm accents"
+	case "hr":
+		return "soft people-first tones with approachable color"
+	default:
+		return "balanced modern tones with subject-specific accent color"
+	}
+}
+
+func defaultMotif(themeName, audience string) string {
+	if containsAny(strings.ToLower(audience), "young learners", "children", "kids") {
+		return "learning"
+	}
+	switch themeName {
+	case "healthcare":
+		return "health"
+	case "education":
+		return "learning"
+	case "environment":
+		return "leaf"
+	case "finance", "retail":
+		return "growth"
+	case "security":
+		return "shield"
+	case "data":
+		return "chart"
+	case "logistics":
+		return "logistics"
+	case "hr":
+		return "people"
+	case "creative":
+		return "spark"
+	default:
+		return "integration"
+	}
+}
+
+func defaultDeckKicker(themeName, audience, subject string) string {
+	audienceText := strings.ToLower(audience)
+	switch {
+	case containsAny(audienceText, "parents", "educators", "teachers"):
+		return "A family and classroom guide"
+	case containsAny(audienceText, "parents", "families"):
+		return "A practical guide for families"
+	case containsAny(audienceText, "educators", "teachers", "schools"):
+		return "A guide for classrooms"
+	case containsAny(audienceText, "young learners", "children", "kids"):
+		return "A visual guide for curious learners"
+	}
+	switch themeName {
+	case "healthcare":
+		return "Operational care briefing"
+	case "education":
+		return "Learning and adoption overview"
+	case "environment":
+		return "Impact and transition overview"
+	case "finance":
+		return "Decision-ready business brief"
+	case "creative":
+		return "Creative strategy presentation"
+	case "security":
+		return "Risk and resilience overview"
+	case "data":
+		return "Analytics and signal overview"
+	case "logistics":
+		return "Operational flow briefing"
+	case "retail":
+		return "Growth and experience overview"
+	case "hr":
+		return "People and change overview"
+	default:
+		return "Subject-specific presentation"
 	}
 }
 

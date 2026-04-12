@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
 )
 
@@ -78,6 +77,34 @@ func (WritePPTXTool) InputSchema() map[string]any {
 		},
 		"required": []string{"headers", "rows"},
 	}
+	paletteSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"background": map[string]any{"type": "string", "description": "Optional custom hex background color, e.g. '#F6F1E8'"},
+			"card":       map[string]any{"type": "string", "description": "Optional custom hex surface color"},
+			"accent":     map[string]any{"type": "string", "description": "Optional custom primary accent hex color"},
+			"accent2":    map[string]any{"type": "string", "description": "Optional custom secondary accent hex color"},
+			"text":       map[string]any{"type": "string", "description": "Optional custom primary text hex color"},
+			"muted":      map[string]any{"type": "string", "description": "Optional custom muted text hex color"},
+			"border":     map[string]any{"type": "string", "description": "Optional custom border hex color"},
+		},
+	}
+	deckSchema := map[string]any{
+		"type":        "object",
+		"description": "Deck-level design plan chosen by the model. Use this so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults.",
+		"properties": map[string]any{
+			"subject":      map[string]any{"type": "string", "description": "Explicit subject framing if it should differ from the title"},
+			"audience":     map[string]any{"type": "string", "description": "Who this presentation is for, e.g. 'parents and educators' or 'board members'"},
+			"narrative":    map[string]any{"type": "string", "description": "High-level story arc for the deck"},
+			"theme":        map[string]any{"type": "string", "description": "Domain/theme choice such as tech, education, healthcare, finance, environment, creative, security, data, logistics, retail, or hr"},
+			"visual_style": map[string]any{"type": "string", "description": "Overall visual direction, e.g. 'playful classroom collage', 'editorial minimal', 'executive signal-led', or 'bold studio poster'"},
+			"cover_style":  map[string]any{"type": "string", "description": "Cover composition style such as editorial, orbit, mosaic, poster, or playful"},
+			"color_story":  map[string]any{"type": "string", "description": "Color mood like 'warm daylight', 'cool clinical', 'soft paper', or 'dark command center'"},
+			"motif":        map[string]any{"type": "string", "description": "Visual motif or semantic icon token for the cover, e.g. learning, spark, shield, leaf, chart"},
+			"kicker":       map[string]any{"type": "string", "description": "Optional short cover kicker shown above the title"},
+			"palette":      paletteSchema,
+		},
+	}
 
 	return map[string]any{
 		"type": "object",
@@ -86,6 +113,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"title":    map[string]any{"type": "string", "description": "Presentation title (shown on cover slide)"},
 			"subtitle": map[string]any{"type": "string", "description": "Subtitle or tagline shown on cover slide"},
 			"author":   map[string]any{"type": "string", "description": "Optional author name"},
+			"deck":     deckSchema,
 			"slides": map[string]any{
 				"type":        "array",
 				"description": "Slides array — first slide is auto-made the cover/title slide. Plan the overall narrative and vary slide types based on the subject instead of using a fixed template. Aim for 6-10 slides.",
@@ -166,11 +194,35 @@ func (WritePPTXTool) InputSchema() map[string]any {
 }
 
 type pptxArgs struct {
-	Filename string      `json:"filename"`
-	Title    string      `json:"title"`
-	Subtitle string      `json:"subtitle"`
-	Author   string      `json:"author"`
-	Slides   []pptxSlide `json:"slides"`
+	Filename string              `json:"filename"`
+	Title    string              `json:"title"`
+	Subtitle string              `json:"subtitle"`
+	Author   string              `json:"author"`
+	Deck     pptxDeckDesignInput `json:"deck"`
+	Slides   []pptxSlide         `json:"slides"`
+}
+
+type pptxPaletteInput struct {
+	Background string `json:"background,omitempty"`
+	Card       string `json:"card,omitempty"`
+	Accent     string `json:"accent,omitempty"`
+	Accent2    string `json:"accent2,omitempty"`
+	Text       string `json:"text,omitempty"`
+	Muted      string `json:"muted,omitempty"`
+	Border     string `json:"border,omitempty"`
+}
+
+type pptxDeckDesignInput struct {
+	Subject     string            `json:"subject,omitempty"`
+	Audience    string            `json:"audience,omitempty"`
+	Narrative   string            `json:"narrative,omitempty"`
+	Theme       string            `json:"theme,omitempty"`
+	VisualStyle string            `json:"visual_style,omitempty"`
+	CoverStyle  string            `json:"cover_style,omitempty"`
+	ColorStory  string            `json:"color_story,omitempty"`
+	Motif       string            `json:"motif,omitempty"`
+	Kicker      string            `json:"kicker,omitempty"`
+	Palette     *pptxPaletteInput `json:"palette,omitempty"`
 }
 
 // pptxStat is a KPI metric item for the stats layout.
@@ -253,24 +305,137 @@ type pptxPalette struct {
 }
 
 var themepalettes = map[string]pptxPalette{
-	"tech":        {bg: "0F172A", card: "1E293B", accent: "6366F1", accent2: "A5B4FC", text: "F8FAFC", muted: "94A3B8", border: "2D3F55"},
-	"healthcare":  {bg: "061B2E", card: "0E2D45", accent: "06B6D4", accent2: "67E8F9", text: "F8FAFC", muted: "94A3B8", border: "1A4060"},
-	"education":   {bg: "1A1100", card: "2D1E00", accent: "F59E0B", accent2: "FCD34D", text: "F8FAFC", muted: "94A3B8", border: "4A3500"},
-	"environment": {bg: "071A10", card: "0F2B1C", accent: "10B981", accent2: "6EE7B7", text: "F8FAFC", muted: "94A3B8", border: "1A4A30"},
-	"finance":     {bg: "061A0E", card: "102B1A", accent: "22C55E", accent2: "86EFAC", text: "F8FAFC", muted: "94A3B8", border: "1A4A28"},
-	"creative":    {bg: "140A2A", card: "221545", accent: "8B5CF6", accent2: "C4B5FD", text: "F8FAFC", muted: "94A3B8", border: "3A2060"},
-	"security":    {bg: "1A0808", card: "2E1010", accent: "EF4444", accent2: "FCA5A5", text: "F8FAFC", muted: "94A3B8", border: "4A1818"},
-	"data":        {bg: "061A1E", card: "0E2B30", accent: "14B8A6", accent2: "5EEAD4", text: "F8FAFC", muted: "94A3B8", border: "1A4048"},
-	"logistics":   {bg: "0A1020", card: "162035", accent: "3B82F6", accent2: "93C5FD", text: "F8FAFC", muted: "94A3B8", border: "203050"},
-	"retail":      {bg: "1A0C00", card: "2E1800", accent: "F97316", accent2: "FDBA74", text: "F8FAFC", muted: "94A3B8", border: "4A2800"},
-	"hr":          {bg: "1A0A18", card: "2E1530", accent: "EC4899", accent2: "F9A8D4", text: "F8FAFC", muted: "94A3B8", border: "4A1840"},
+	"editorial-light": {bg: "F7F2E8", card: "FFFDF9", accent: "4F46E5", accent2: "A5B4FC", text: "1F2937", muted: "6B7280", border: "D8CFC0"},
+	"studio-light":    {bg: "EEF4FF", card: "FFFFFF", accent: "4F46E5", accent2: "A5B4FC", text: "111827", muted: "6B7280", border: "D7DDED"},
+	"playful-light":   {bg: "FFF6E5", card: "FFFDF7", accent: "F59E0B", accent2: "FCD34D", text: "1F2937", muted: "6B7280", border: "E8D8B8"},
+	"earth-light":     {bg: "F2F1EA", card: "FBFAF6", accent: "10B981", accent2: "6EE7B7", text: "1F2937", muted: "667085", border: "D3CFC1"},
+	"executive-dark":  {bg: "0F172A", card: "162033", accent: "4F46E5", accent2: "A5B4FC", text: "F8FAFC", muted: "CBD5E1", border: "334155"},
+	"signal-dark":     {bg: "111827", card: "1F2937", accent: "14B8A6", accent2: "5EEAD4", text: "F9FAFB", muted: "D1D5DB", border: "374151"},
 }
 
 func paletteFor(themeName string) pptxPalette {
-	if p, ok := themepalettes[themeName]; ok {
-		return p
+	return resolveDeckPalette(themeName, pptxDeckDesignInput{}, "")
+}
+
+func resolveDeckPalette(themeName string, design pptxDeckDesignInput, audience string) pptxPalette {
+	family := pickPaletteFamily(themeName, design, audience)
+	pal, ok := themepalettes[family]
+	if !ok {
+		pal = themepalettes["editorial-light"]
 	}
-	return themepalettes["tech"]
+
+	accent, accent2 := themeAccentColors(themeName)
+	pal.accent = accent
+	pal.accent2 = accent2
+	pal = overlayPaletteInput(pal, design.Palette)
+	return pal
+}
+
+func pickPaletteFamily(themeName string, design pptxDeckDesignInput, audience string) string {
+	text := strings.ToLower(strings.Join([]string{
+		themeName,
+		audience,
+		design.VisualStyle,
+		design.CoverStyle,
+		design.ColorStory,
+		design.Kicker,
+	}, " "))
+
+	switch {
+	case containsAny(text, "playful", "kids", "kid", "children", "classroom", "young learners", "storybook", "collage"):
+		return "playful-light"
+	case containsAny(text, "editorial", "magazine", "minimal", "clean", "story-led", "refined", "paper"):
+		return "editorial-light"
+	case containsAny(text, "poster", "studio", "bold", "vibrant", "campaign", "gallery", "showcase"):
+		return "studio-light"
+	case containsAny(text, "earth", "organic", "natural", "sustainable", "calm", "warm neutral"):
+		return "earth-light"
+	case containsAny(text, "executive", "board", "premium", "midnight", "dark", "dramatic"):
+		return "executive-dark"
+	case containsAny(text, "signal", "command center", "dashboard", "operations", "system", "control"):
+		return "signal-dark"
+	}
+
+	switch themeName {
+	case "education", "retail", "hr":
+		return "playful-light"
+	case "environment":
+		return "earth-light"
+	case "healthcare", "data", "finance", "logistics":
+		return "editorial-light"
+	case "security", "tech":
+		return "executive-dark"
+	case "creative":
+		return "studio-light"
+	default:
+		return "editorial-light"
+	}
+}
+
+func themeAccentColors(themeName string) (string, string) {
+	switch themeName {
+	case "healthcare":
+		return "0EA5E9", "67E8F9"
+	case "education":
+		return "F59E0B", "FCD34D"
+	case "environment":
+		return "10B981", "6EE7B7"
+	case "finance":
+		return "16A34A", "86EFAC"
+	case "creative":
+		return "D946EF", "F0ABFC"
+	case "security":
+		return "EF4444", "FCA5A5"
+	case "data":
+		return "14B8A6", "5EEAD4"
+	case "logistics":
+		return "2563EB", "93C5FD"
+	case "retail":
+		return "EA580C", "FDBA74"
+	case "hr":
+		return "EC4899", "F9A8D4"
+	default:
+		return "4F46E5", "A5B4FC"
+	}
+}
+
+func overlayPaletteInput(base pptxPalette, input *pptxPaletteInput) pptxPalette {
+	if input == nil {
+		return base
+	}
+	if color := normalizePaletteHex(input.Background); color != "" {
+		base.bg = color
+	}
+	if color := normalizePaletteHex(input.Card); color != "" {
+		base.card = color
+	}
+	if color := normalizePaletteHex(input.Accent); color != "" {
+		base.accent = color
+	}
+	if color := normalizePaletteHex(input.Accent2); color != "" {
+		base.accent2 = color
+	}
+	if color := normalizePaletteHex(input.Text); color != "" {
+		base.text = color
+	}
+	if color := normalizePaletteHex(input.Muted); color != "" {
+		base.muted = color
+	}
+	if color := normalizePaletteHex(input.Border); color != "" {
+		base.border = color
+	}
+	return base
+}
+
+func normalizePaletteHex(value string) string {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(value) == 3 {
+		value = strings.Repeat(string(value[0]), 2) + strings.Repeat(string(value[1]), 2) + strings.Repeat(string(value[2]), 2)
+	}
+	if matched, _ := regexp.MatchString(`(?i)^[0-9a-f]{6}$`, value); !matched {
+		return ""
+	}
+	return strings.ToUpper(value)
 }
 
 func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON string) Result {
@@ -284,9 +449,6 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	if args.Title == "" {
 		args.Title = strings.ReplaceAll(args.Filename, "-", " ")
 	}
-	if args.Subtitle == "" {
-		args.Subtitle = time.Now().Format("January 2006")
-	}
 
 	relPath := filepath.Join("slides", args.Filename+".pptx")
 	abs, err := scopedPath(ictx.WorkspaceRoot, relPath)
@@ -298,8 +460,7 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	}
 
 	// Pure Go PPTX engine — no Python dependency.
-	themeName := pickThemeName(args.Title, args.Subtitle)
-	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, themeName)
+	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, args.Deck)
 	if err := validatePPTXPresentation(planned); err != nil {
 		return Err("plan pptx: %v", err)
 	}
@@ -988,7 +1149,10 @@ func buildPPTX(title, subtitle string, planned plannedPPTXPresentation) ([]byte,
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	pal := paletteFor(planned.ThemeName)
+	pal := planned.Palette
+	if pal.bg == "" {
+		pal = paletteFor(planned.ThemeName)
+	}
 	deck := newPPTXDeckContext(title, subtitle, planned)
 	manifest, err := buildPPTXPreviewManifest(title, subtitle, planned)
 	if err != nil {
