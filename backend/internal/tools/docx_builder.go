@@ -214,7 +214,9 @@ func docxDocumentXML(args docxArgs) string {
 			case line == "":
 				continue
 			case strings.HasPrefix(line, "• ") || strings.HasPrefix(line, "- "):
-				body.WriteString(docxBulletParagraph(strings.TrimSpace(line[2:])))
+				line = strings.TrimPrefix(line, "• ")
+				line = strings.TrimPrefix(line, "- ")
+				body.WriteString(docxBulletParagraph(strings.TrimSpace(line)))
 			default:
 				body.WriteString(docxStyledParagraph("Normal", line, docxRunStyle{FontSizeHalfPts: 21, Color: "1E293B"}, 80, 110, "left", "", false))
 			}

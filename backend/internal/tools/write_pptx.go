@@ -20,6 +20,7 @@ type WritePPTXTool struct{}
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
 	return "Create a professional PowerPoint presentation (.pptx) powered by the Barq PPTX Engine. " +
+		"Plans the full deck theme and layout first, then audits each slide for content fit, layout fit, and visual fit before rendering. " +
 		"Supports 10 rich slide types: bullets, stats, steps, cards, chart, timeline, compare, table, title, blank. " +
 		"Use this for ALL presentation, slides, deck, or slideshow requests. " +
 		"Saves to slides/<filename>.pptx."
@@ -87,7 +88,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"author":   map[string]any{"type": "string", "description": "Optional author name"},
 			"slides": map[string]any{
 				"type":        "array",
-				"description": "Slides array — first slide is auto-made the cover/title slide. Mix types for visual variety. Aim for 6-10 slides.",
+				"description": "Slides array — first slide is auto-made the cover/title slide. Plan the overall narrative and vary slide types based on the subject instead of using a fixed template. Aim for 6-10 slides.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -127,8 +128,8 @@ func (WritePPTXTool) InputSchema() map[string]any {
 
 						// chart
 						"chart_type": map[string]any{
-							"type": "string",
-							"enum": []string{"column", "bar", "line", "pie", "doughnut", "area", "scatter"},
+							"type":        "string",
+							"enum":        []string{"column", "bar", "line", "pie", "doughnut", "area", "scatter"},
 							"description": "[chart] Chart type",
 						},
 						"chart_categories": map[string]any{
@@ -150,7 +151,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 						},
 
 						// compare
-						"left_column": compareColumnSchema,
+						"left_column":  compareColumnSchema,
 						"right_column": compareColumnSchema,
 
 						// table
@@ -215,30 +216,30 @@ type pptxTableData struct {
 // pptxSlide is the full slide definition accepted by the write_pptx tool.
 // The bridge (pptx_bridge.py) translates this into a pptx_engine Slide.
 type pptxSlide struct {
-	Heading      string             `json:"heading"`
-	Type         string             `json:"type"`            // primary field
-	Layout       string             `json:"layout"`          // backward-compat alias for Type
-	SpeakerNotes string             `json:"speaker_notes"`
+	Heading      string `json:"heading"`
+	Type         string `json:"type"`   // primary field
+	Layout       string `json:"layout"` // backward-compat alias for Type
+	SpeakerNotes string `json:"speaker_notes"`
 	// bullets
-	Points       []string           `json:"points,omitempty"`
+	Points []string `json:"points,omitempty"`
 	// stats
-	Stats        []pptxStat         `json:"stats,omitempty"`
+	Stats []pptxStat `json:"stats,omitempty"`
 	// steps
-	Steps        []string           `json:"steps,omitempty"`
+	Steps []string `json:"steps,omitempty"`
 	// cards
-	Cards        []pptxCard         `json:"cards,omitempty"`
+	Cards []pptxCard `json:"cards,omitempty"`
 	// chart
-	ChartType       string               `json:"chart_type,omitempty"`
-	ChartCategories []string             `json:"chart_categories,omitempty"`
-	ChartSeries     []pptxChartSeries    `json:"chart_series,omitempty"`
-	YLabel          string               `json:"y_label,omitempty"`
+	ChartType       string            `json:"chart_type,omitempty"`
+	ChartCategories []string          `json:"chart_categories,omitempty"`
+	ChartSeries     []pptxChartSeries `json:"chart_series,omitempty"`
+	YLabel          string            `json:"y_label,omitempty"`
 	// timeline
-	Timeline    []pptxTimelineItem `json:"timeline,omitempty"`
+	Timeline []pptxTimelineItem `json:"timeline,omitempty"`
 	// compare
 	LeftColumn  *pptxCompareColumn `json:"left_column,omitempty"`
 	RightColumn *pptxCompareColumn `json:"right_column,omitempty"`
 	// table
-	Table       *pptxTableData     `json:"table,omitempty"`
+	Table *pptxTableData `json:"table,omitempty"`
 }
 
 // pptxPalette holds the full color palette for a presentation theme.
@@ -299,7 +300,8 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 
 	// Pure Go PPTX engine — no Python dependency.
 	themeName := pickThemeName(args.Title, args.Subtitle)
-	data, err := buildPPTX(args.Title, args.Subtitle, args.Slides, themeName)
+	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, themeName)
+	data, err := buildPPTX(args.Title, args.Subtitle, planned.Slides, planned.ThemeName)
 	if err != nil {
 		return Err("build pptx: %v", err)
 	}
@@ -442,7 +444,7 @@ func hasWord(text string, keywords ...string) bool {
 					break
 				}
 				idx += strings.Index(padded, k) + 1 // re-anchor; simpler to just use Contains above
-				break // avoid infinite loop; substring found, not whole-word
+				break                               // avoid infinite loop; substring found, not whole-word
 			}
 			// Simpler fallback: just prefix/suffix word check
 			if strings.Contains(padded, " "+k+" ") ||
@@ -892,8 +894,12 @@ func pptxStatsSlide(heading string, stats []pptxStat, points []string, pal pptxP
 			pctStr := strings.TrimSuffix(strings.TrimSpace(st.Value), "%")
 			pct := 0
 			fmt.Sscanf(pctStr, "%d", &pct)
-			if pct < 0 { pct = 0 }
-			if pct > 100 { pct = 100 }
+			if pct < 0 {
+				pct = 0
+			}
+			if pct > 100 {
+				pct = 100
+			}
 			trackY := cardTop + cardH - 200000
 			trackH := 38100
 			barMargin := 80000
@@ -1048,30 +1054,12 @@ func pptxCardsSlide(heading string, points []string, pal pptxPalette) string {
 // ── Dispatch ──────────────────────────────────────────────────────────────────
 
 func pptxContentSlide(s pptxSlide, pal pptxPalette) string {
-	layout := s.Layout
-	if layout == "" {
-		if len(s.Stats) > 0 {
-			layout = "stats"
-		} else {
-			layout = autoLayout(s.Heading, s.Points)
-		}
-	}
-
-	switch layout {
-	case "stats":
-		return pptxStatsSlide(s.Heading, s.Stats, s.Points, pal)
-	case "steps":
-		return pptxStepsSlide(s.Heading, s.Points, pal)
-	case "cards":
-		return pptxCardsSlide(s.Heading, s.Points, pal)
-	default:
-		return pptxBulletsSlide(s.Heading, s.Points, pal)
-	}
+	return renderDeckSlide(s, pal, pptxDeckContext{}, 0)
 }
 
 // ── PPTX builder ──────────────────────────────────────────────────────────────
 
-func buildPPTX(title, subtitle string, slides []pptxSlide, themeName string) ([]byte, error) {
+func buildPPTX(title, subtitle string, slides []plannedPPTXSlide, themeName string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -1105,10 +1093,10 @@ func buildPPTX(title, subtitle string, slides []pptxSlide, themeName string) ([]
 		entry{"ppt/slides/_rels/slide1.xml.rels", pptxSlideRels("../slideLayouts/slideLayout1.xml")},
 	)
 
-	for i, s := range slides {
+	for i, planned := range slides {
 		idx := i + 2
 		entries = append(entries,
-			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), pptxContentSlide(s, pal)},
+			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), renderDeckSlide(planned.Slide, pal, pptxDeckContext{Title: title, SlideCount: len(slides)}, i)},
 			entry{fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", idx), pptxSlideRels("../slideLayouts/slideLayout2.xml")},
 		)
 	}
