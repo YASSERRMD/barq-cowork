@@ -423,8 +423,9 @@ function ContentPreviewPanel({
 
   return (
     <div style={{
-      display: "flex", flexDirection: "column", height: "100%",
+      display: "flex", flexDirection: "column", flex: 1,
       background: "var(--surface-1)", borderLeft: "1px solid var(--border)",
+      minHeight: 0,
     }}>
       {/* Header */}
       <div style={{
@@ -460,7 +461,7 @@ function ContentPreviewPanel({
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: "auto" }}>
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
         {artifact.type === "markdown" && (
           <div style={{
             padding: "16px 20px",
@@ -487,7 +488,7 @@ function ContentPreviewPanel({
         {artifact.type === "html" && (
           <iframe
             src={downloadUrl}
-            style={{ width: "100%", height: "100%", border: "none", background: "#fff" }}
+            style={{ width: "100%", flex: 1, border: "none", background: "#fff", display: "block" }}
             title={fileName}
             sandbox="allow-scripts allow-same-origin"
           />
@@ -916,7 +917,7 @@ export function TaskRunPage() {
 
         {/* Center: content preview panel (split view) */}
         {previewArtifact && (
-          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
             <ContentPreviewPanel
               artifact={previewArtifact}
               onClose={() => setPreviewArtifact(null)}

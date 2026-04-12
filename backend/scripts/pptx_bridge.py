@@ -318,7 +318,8 @@ def _translate_slide(raw: dict, idx: int) -> Slide:
                                                      raw.get("categories") or [])]
         kw["chart_series"] = _parse_chart_series(raw.get("chart_series") or
                                                    raw.get("series") or [])
-        kw["chart_title"] = str(raw.get("y_label", raw.get("chart_title", "")))
+        kw["chart_title"] = str(raw.get("chart_title", ""))
+        kw["y_label"] = str(raw.get("y_label", ""))
 
     elif slide_type == SlideType.timeline:
         raw_tl = raw.get("timeline")
