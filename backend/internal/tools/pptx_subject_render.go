@@ -253,8 +253,8 @@ func renderCoverPlayfulCanvas(g *idg, sb *strings.Builder, deck pptxDeckContext,
 	sb.WriteString(spEllipse(g, "playOrbThree", 7340000, 4640000, 1280000, 1280000, pal.accent, 14, "", 0, 0))
 	sb.WriteString(spRoundRect(g, "titleCard", 860000, 1820000, 4480000, 2800000, pal.card, pal.border, 12))
 	sb.WriteString(spRect(g, "titleAccent", 860000, 1820000, 4480000, 38100, pal.accent))
-	sb.WriteString(spRoundRect(g, "stickerOne", 1140000, 1240000, 1460000, 320000, pal.accent, "", 0))
-	sb.WriteString(spText(g, "titleKicker", 1140000, 1240000, 1460000, 320000, strings.ToUpper(coverKicker(deck)), pal.text, 1120, true, "ctr", "Calibri"))
+	sb.WriteString(spRoundRect(g, "stickerOne", 1120000, 1240000, 2200000, 320000, pal.accent, "", 0))
+	sb.WriteString(spText(g, "titleKicker", 1120000, 1240000, 2200000, 320000, strings.ToUpper(coverKicker(deck)), pal.text, 1120, true, "ctr", "Calibri"))
 	renderCoverMotif(g, sb, "playMotifOne", 5640000, 1880000, 1080000, pal, coverMotifToken(deck), 24)
 	renderCoverMotif(g, sb, "playMotifTwo", 7040000, 3200000, 820000, pal, coverMotifToken(deck), 20)
 	sb.WriteString(spTextLeft(g, "title", 1240000, 2320000, 3840000, 1360000, firstNonEmpty(deck.Title, "Presentation"), pal.text, 3420, true, "t", "Calibri Light"))
@@ -264,7 +264,6 @@ func renderCoverPlayfulCanvas(g *idg, sb *strings.Builder, deck pptxDeckContext,
 	if support := coverSupportLine(deck); support != "" {
 		sb.WriteString(spTextLeft(g, "support", 1240000, 4200000, 3300000, 320000, support, pal.muted, 1100, false, "t", "Calibri"))
 	}
-	sb.WriteString(spTextLeft(g, "subjectLine", 5840000, 5600000, 2100000, 180000, coverSubjectLine(deck), pal.muted, 920, true, "t", "Calibri"))
 }
 
 func coverStyleKey(deck pptxDeckContext) string {
@@ -303,7 +302,7 @@ func coverSupportLine(deck pptxDeckContext) string {
 }
 
 func coverKicker(deck pptxDeckContext) string {
-	return coverCompactText(firstNonEmpty(deck.DeckPlan.Kicker, "Subject-specific presentation"), 34)
+	return coverCompactText(firstNonEmpty(deck.DeckPlan.Kicker, "Subject-specific presentation"), 46)
 }
 
 func coverSubjectLine(deck pptxDeckContext) string {
