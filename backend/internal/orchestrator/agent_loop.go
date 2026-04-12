@@ -200,6 +200,7 @@ func (a *AgentLoop) Run(
 
 	var result ExecuteResult
 	stepOrder := 0
+	forcedToolNudges := 0
 
 	a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepStarted, map[string]any{
 		"message": "agent loop started",
@@ -257,6 +258,24 @@ func (a *AgentLoop) Run(
 
 		// No tool calls → agent decided it is done
 		if len(toolCalls) == 0 {
+			requiredTool := requiredOutputTool(task)
+			if requiredTool != "" && result.Completed == 0 && forcedToolNudges < 2 {
+				forcedToolNudges++
+				messages = append(messages, provider.ChatMessage{
+					Role:    "assistant",
+					Content: content,
+				})
+				messages = append(messages, provider.ChatMessage{
+					Role: "system",
+					Content: fmt.Sprintf(
+						"You have not called any tool yet. Stop planning and call %s now. "+
+							"Produce the output file in this turn and do not answer with prose only.",
+						requiredTool,
+					),
+				})
+				a.logger.Warn("agent loop: no tool calls, nudging required output tool", "task_id", task.ID, "iter", iter, "tool", requiredTool, "nudges", forcedToolNudges)
+				continue
+			}
 			a.logger.Info("agent loop: no tool calls, stopping", "task_id", task.ID, "iter", iter)
 			break
 		}
@@ -398,4 +417,31 @@ func (a *AgentLoop) emitAgentEvent(ctx context.Context, taskID string, t domain.
 	if err := a.events.Create(ctx, ev); err != nil {
 		a.logger.Warn("agent loop: event emit failed", "error", err)
 	}
+}
+
+func requiredOutputTool(task *domain.Task) string {
+	text := strings.ToLower(strings.TrimSpace(task.Title + " " + task.Description))
+	switch {
+	case containsTaskKeyword(text, "presentation", "slides", "deck", "slideshow", "pptx", "powerpoint"):
+		return "write_pptx"
+	case containsTaskKeyword(text, "document", "report", "doc", "word", "brief", "proposal", "writeup", "paper"):
+		return "write_docx"
+	case containsTaskKeyword(text, "summary", "notes", "markdown"):
+		return "write_markdown_report"
+	case containsTaskKeyword(text, "data", "spreadsheet", "export", "json"):
+		return "export_json"
+	case text != "":
+		return "write_file"
+	default:
+		return ""
+	}
+}
+
+func containsTaskKeyword(text string, keywords ...string) bool {
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
 }
