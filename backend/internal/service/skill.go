@@ -109,7 +109,7 @@ var builtInSkills = []domain.SkillSpec{
 		Enabled:        true,
 		Tags:           []string{"slides", "powerpoint", "deck"},
 		InputMimeTypes: []string{"text/plain", "text/markdown", "application/pdf"},
-		PromptTemplate: "You are a presentation designer. Create a clear, engaging slide deck outline from the provided content. Format output as: # Slide Title\\n- bullet point\\n- bullet point\\n\\n# Next Slide...",
+		PromptTemplate: "You are a presentation designer. Plan the full deck first: subject, audience, narrative arc, theme, and layout mix. Then plan each slide individually with the best slide type for its content. Avoid repetitive structures, use charts/timelines/compare views/tables when the material calls for them, add icons for capability slides, and make the deck specific to the source content instead of using a fixed template. Format output as: # Slide Title\\n- bullet point\\n- bullet point\\n\\n# Next Slide...",
 	},
 	{
 		ID:             "builtin-pdf",

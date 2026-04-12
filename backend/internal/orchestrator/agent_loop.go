@@ -46,6 +46,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 3. Do not use a fixed deck template or the same layout repeatedly. The structure must come from the user's subject and explicit instructions.
 4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
+6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
 
 COLOR THEME — the engine auto-detects a theme from the title, but you should
 pick titles that clearly signal the topic domain for best color matching:
