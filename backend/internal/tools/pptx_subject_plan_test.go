@@ -124,6 +124,19 @@ func TestResolveDeckPalette_KeepsChosenVisualFamilyAccent(t *testing.T) {
 	}
 }
 
+func TestCoverStyleKey_PrefersExplicitCoverStyle(t *testing.T) {
+	key := coverStyleKey(pptxDeckContext{
+		DeckPlan: plannedPPTXDeckPlan{
+			CoverStyle:      "poster",
+			VisualDirection: "bright playful collage with modern colors",
+			ColorStory:      "bright energetic and optimistic",
+		},
+	})
+	if key != "poster" {
+		t.Fatalf("expected explicit poster cover style to win, got %q", key)
+	}
+}
+
 func TestInferCardIcon_NormalizesLegacyEmojiToSemanticToken(t *testing.T) {
 	icon := inferCardIcon(pptxCard{Icon: "📊", Title: "Insights", Desc: "Data visibility"}, 0)
 	if icon != "chart" {

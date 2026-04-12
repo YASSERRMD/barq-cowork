@@ -39,7 +39,7 @@ const SUGGESTIONS = [
     icon: Presentation,
     label: "Create a presentation",
     prompt:
-      "Create a subject-specific PowerPoint presentation. Plan the deck first, choose a fresh visual style, cover style, color story, motif, and full palette from the subject, do not reuse an old cover pattern, vary slide types, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide.",
+      "Create a subject-specific PowerPoint presentation. Plan the deck first, choose a fresh visual style, cover style, color story, motif, kicker, and full palette from the subject, do not reuse an old cover pattern, vary slide types, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide.",
   },
   {
     icon: FileSpreadsheet,

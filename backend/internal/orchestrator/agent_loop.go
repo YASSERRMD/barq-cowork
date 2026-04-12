@@ -47,7 +47,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
-7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, and a full palette.
+7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, kicker, and a full palette.
 8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
 9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
 

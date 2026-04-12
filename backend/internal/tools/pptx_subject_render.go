@@ -267,8 +267,10 @@ func renderCoverPlayfulCanvas(g *idg, sb *strings.Builder, deck pptxDeckContext,
 }
 
 func coverStyleKey(deck pptxDeckContext) string {
+	if explicit := normalizeCoverStyleToken(deck.DeckPlan.CoverStyle); explicit != "" {
+		return explicit
+	}
 	text := strings.ToLower(strings.Join([]string{
-		deck.DeckPlan.CoverStyle,
 		deck.DeckPlan.VisualDirection,
 		deck.DeckPlan.ColorStory,
 		deck.DeckPlan.Audience,
@@ -284,6 +286,15 @@ func coverStyleKey(deck pptxDeckContext) string {
 		return "poster"
 	default:
 		return "editorial"
+	}
+}
+
+func normalizeCoverStyleToken(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "editorial", "orbit", "mosaic", "poster", "playful":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return ""
 	}
 }
 

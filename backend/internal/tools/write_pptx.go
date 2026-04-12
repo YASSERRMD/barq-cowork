@@ -102,10 +102,10 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"cover_style":  map[string]any{"type": "string", "description": "Cover composition style such as editorial, orbit, mosaic, poster, or playful"},
 			"color_story":  map[string]any{"type": "string", "description": "Color mood like 'warm daylight', 'cool clinical', 'soft paper', or 'dark command center'"},
 			"motif":        map[string]any{"type": "string", "description": "Visual motif or semantic icon token for the cover, e.g. learning, spark, shield, leaf, chart"},
-			"kicker":       map[string]any{"type": "string", "description": "Optional short cover kicker shown above the title"},
+			"kicker":       map[string]any{"type": "string", "description": "Short cover kicker shown above the title"},
 			"palette":      paletteSchema,
 		},
-		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "palette"},
+		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette"},
 	}
 
 	return map[string]any{
@@ -461,6 +461,9 @@ func missingDeckDesignFields(deck pptxDeckDesignInput) []string {
 	}
 	if strings.TrimSpace(deck.Motif) == "" {
 		missing = append(missing, "deck.motif")
+	}
+	if strings.TrimSpace(deck.Kicker) == "" {
+		missing = append(missing, "deck.kicker")
 	}
 	if deck.Palette == nil {
 		missing = append(missing, "deck.palette")
