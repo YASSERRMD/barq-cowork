@@ -439,6 +439,30 @@ func pickThemeName(title, subtitle string) string {
 		"senate", "legislation", "democrat", "republican", "law", "regulation", "civic") {
 		return "security"
 	}
+	// Security / Cyber / Risk
+	if hasWord(c, "security", "cyber", "threat", "hack", "ransomware", "firewall",
+		"privacy", "compliance", "risk") {
+		return "security"
+	}
+	// Data / Analytics / BI / Warehouse
+	if hasWord(c, "data", "analytics", "bi", "warehouse", "databrick", "snowflake",
+		"insight", "dashboard", "intelligence") {
+		return "data"
+	}
+	// Logistics / Supply Chain / Shipping
+	if hasWord(c, "logistics", "supply", "shipping", "transport", "fleet", "delivery",
+		"warehouse") {
+		return "logistics"
+	}
+	// Retail / E-commerce / Consumer
+	if hasWord(c, "retail", "shop", "ecommerce", "consumer", "merchandise", "store") {
+		return "retail"
+	}
+	// HR / Human Resources / Talent
+	if hasWord(c, "hr", "human resource", "talent", "recruit", "employee", "workforce",
+		"people ops") {
+		return "hr"
+	}
 	// Technology / AI / Digital / Software — checked last as most generic
 	if hasWord(c, "ai", "technology", "software", "code", "developer", "digital",
 		"data science", "neural", "cloud", "cybersecurity", "blockchain", "api",

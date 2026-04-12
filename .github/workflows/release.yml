@@ -9,9 +9,19 @@ on:
       tag:
         description: "Release tag (e.g. v0.2.0)"
         required: true
+      sign_macos:
+        description: "Enable macOS code signing and notarization"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
@@ -37,6 +47,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - uses: actions/setup-go@v5
         with:
@@ -70,6 +82,8 @@ jobs:
     name: Desktop (${{ matrix.target }})
     needs: build-backend
     runs-on: ${{ matrix.os }}
+    env:
+      MACOS_SIGNING_READY: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_macos == true && secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'true' || 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -82,6 +96,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       # Rust toolchain
       - uses: dtolnay/rust-toolchain@stable
@@ -114,12 +130,13 @@ jobs:
         shell: bash
         run: chmod +x apps/desktop/src-tauri/binaries/barq-coworkd-${{ matrix.target }}
 
-      # Tauri build + GitHub Release
-      - name: Tauri build
+      # Signed macOS builds are opt-in so tag releases remain stable even when
+      # Apple signing credentials are unavailable or intentionally omitted.
+      - name: Tauri build (signed macOS)
+        if: runner.os == 'macOS' && env.MACOS_SIGNING_READY == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Apple code signing + notarization (set these secrets to enable)
           APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -128,10 +145,38 @@ jobs:
           APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath:  apps/desktop
-          tagName:      ${{ github.ref_name }}
-          releaseName:  "Barq Cowork ${{ github.ref_name }}"
+          tagName:      ${{ env.RELEASE_TAG }}
+          releaseName:  "Barq Cowork ${{ env.RELEASE_TAG }}"
           releaseBody:  |
-            ## Barq Cowork ${{ github.ref_name }}
+            ## Barq Cowork ${{ env.RELEASE_TAG }}
+
+            Cross-platform desktop AI agent workspace.
+
+            ### Downloads
+
+            | Platform | Installer |
+            |----------|-----------|
+            | macOS (Apple Silicon) | `Barq_Cowork_*_aarch64.dmg` |
+            | Windows | `Barq_Cowork_*_x64-setup.exe` |
+
+            > **macOS note:** If the app shows "damaged" or won't open, download **`mac-setup.command`** from the assets below and double-click it once after installing. This is a one-time step for unsigned builds.
+
+            See [docs/building.md](https://github.com/${{ github.repository }}/blob/main/docs/building.md) to build from source.
+          releaseDraft: false
+          prerelease:   ${{ contains(github.ref_name, '-') }}
+          args:         --target ${{ matrix.target }}
+
+      - name: Tauri build (default unsigned)
+        if: runner.os != 'macOS' || env.MACOS_SIGNING_READY != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath:  apps/desktop
+          tagName:      ${{ env.RELEASE_TAG }}
+          releaseName:  "Barq Cowork ${{ env.RELEASE_TAG }}"
+          releaseBody:  |
+            ## Barq Cowork ${{ env.RELEASE_TAG }}
 
             Cross-platform desktop AI agent workspace.
 
@@ -157,7 +202,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: scripts/mac-setup.command
           asset_name: mac-setup.command
-          tag: ${{ github.ref_name }}
+          tag: ${{ env.RELEASE_TAG }}
           overwrite: true
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -168,6 +213,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
@@ -183,6 +230,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
