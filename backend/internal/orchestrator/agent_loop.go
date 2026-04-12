@@ -29,6 +29,7 @@ RULES:
 1. Call ONE tool at a time.
 2. ALWAYS produce at least one output file. Never finish without writing a file.
 3. Stop after the file is written. Max 15 tool calls total.
+4. Use ask_user when you need clarification, preference, or feedback mid-task. The user will respond in real-time via the UI. Keep questions short and specific.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WRITE_PPTX — 10 SLIDE TYPES

@@ -17,6 +17,8 @@ const (
 	EventTypeApprovalNeeded EventType = "approval.needed"
 	EventTypeArtifactReady  EventType = "artifact.ready"
 	EventTypeLogLine        EventType = "log.line"
+	EventTypeInputNeeded    EventType = "input.needed"
+	EventTypeInputAnswered  EventType = "input.answered"
 )
 
 // Event is an immutable audit record of something that happened during

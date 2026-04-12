@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/barq-cowork/barq-cowork/internal/config"
+	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/memory"
 	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
@@ -24,6 +26,8 @@ import (
 	"github.com/barq-cowork/barq-cowork/internal/server"
 	"github.com/barq-cowork/barq-cowork/internal/service"
 	"github.com/barq-cowork/barq-cowork/internal/store/sqlite"
+	"github.com/barq-cowork/barq-cowork/internal/tools"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -93,10 +97,6 @@ func main() {
 	registry.Register(ollamaprovider.New(300))     // ollama (local, longer timeout)
 	logger.Info("providers registered", "providers", registry.List())
 
-	// ── Tool registry ──────────────────────────────────────────────────
-	toolRegistry := service.BuildRegistry()
-	logger.Info("tools registered", "tools", toolRegistry.List())
-
 	// ── Repositories ──────────────────────────────────────────────────
 	workspaceRepo       := sqlite.NewWorkspaceStore(db)
 	projectRepo         := sqlite.NewProjectStore(db)
@@ -107,6 +107,26 @@ func main() {
 	eventRepo           := sqlite.NewEventStore(db)
 	planStore           := sqlite.NewPlanStore(db)
 	artifactStore       := sqlite.NewArtifactStore(db)
+
+	// ── Tool registry ──────────────────────────────────────────────────
+	// userInputStore must outlive tool calls; ask_user blocks on it.
+	userInputStore := tools.NewUserInputStore()
+	inputEmitter := func(taskID, pendingID, question string) {
+		payload, _ := json.Marshal(map[string]any{
+			"input_id": pendingID,
+			"question": question,
+		})
+		ev := &domain.Event{
+			ID:        uuid.NewString(),
+			TaskID:    taskID,
+			Type:      domain.EventTypeInputNeeded,
+			Payload:   string(payload),
+			CreatedAt: time.Now().UTC(),
+		}
+		_ = eventRepo.Create(context.Background(), ev)
+	}
+	toolRegistry := service.BuildRegistry(userInputStore, inputEmitter)
+	logger.Info("tools registered", "tools", toolRegistry.List())
 	contextFileStore    := sqlite.NewContextFileStore(db)
 	taskTemplateStore   := sqlite.NewTaskTemplateStore(db)
 	subAgentStore       := sqlite.NewSubAgentStore(db)
@@ -140,6 +160,7 @@ func main() {
 			Artifacts:     artifactStore,
 			Events:        eventRepo,
 			WorkspaceRoot: workspaceRoot,
+			UserInput:     userInputStore,
 		},
 		Memory: server.MemoryDeps{
 			ContextFiles:  contextFileStore,
