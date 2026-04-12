@@ -5,7 +5,7 @@ import {
   Play, FileText, Activity, Users, ChevronDown, ChevronRight,
   Clock, CheckCircle, XCircle, Loader, Circle, ArrowLeft,
   AlertTriangle, Download, Copy, Zap, Terminal, Maximize2, X,
-  Send, HelpCircle, Bot, PanelRight,
+  PanelRight, MessageSquare, Send, HelpCircle,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -52,11 +52,11 @@ function formatBytes(b: number) {
 
 function StepIcon({ status }: { status: StepStatus }) {
   switch (status) {
-    case "running":   return <Loader size={13} color="var(--yellow)" className="animate-spin" />;
-    case "completed": return <CheckCircle size={13} color="var(--green)" />;
-    case "failed":    return <XCircle size={13} color="var(--red)" />;
-    case "skipped":   return <Circle size={13} color="var(--text-faint)" />;
-    default:          return <Circle size={13} color="var(--surface-4)" style={{ opacity: 0.5 }} />;
+    case "running":   return <Loader size={14} color="var(--yellow)" className="animate-spin" />;
+    case "completed": return <CheckCircle size={14} color="var(--green)" />;
+    case "failed":    return <XCircle size={14} color="var(--red)" />;
+    case "skipped":   return <Circle size={14} color="var(--text-faint)" />;
+    default:          return <Circle size={14} color="var(--surface-4)" style={{ opacity: 0.5 }} />;
   }
 }
 
@@ -74,9 +74,10 @@ function StepItem({
 
   return (
     <div style={{ display: "flex", gap: 0, position: "relative" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 26, flexShrink: 0 }}>
+      {/* Connector + dot column */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 28, flexShrink: 0 }}>
         <div style={{
-          width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
           background: isRunning ? "rgba(251,191,36,0.12)" : isCompleted ? "rgba(52,211,153,0.10)" : isFailed ? "rgba(248,113,113,0.10)" : "var(--surface-3)",
           border: `1px solid ${isRunning ? "rgba(251,191,36,0.3)" : isCompleted ? "rgba(52,211,153,0.25)" : isFailed ? "rgba(248,113,113,0.25)" : "var(--border)"}`,
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -85,76 +86,84 @@ function StepItem({
           <StepIcon status={step.status} />
         </div>
         {!isLast && (
-          <div style={{ width: 1, flex: 1, minHeight: 10, background: isCompleted ? "rgba(52,211,153,0.2)" : "var(--border)", marginTop: 2 }} />
+          <div style={{ width: 1, flex: 1, minHeight: 12, background: isCompleted ? "rgba(52,211,153,0.2)" : "var(--border)", marginTop: 2 }} />
         )}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0, paddingLeft: 10, paddingBottom: isLast ? 0 : 14 }}>
+      {/* Content */}
+      <div style={{ flex: 1, minWidth: 0, paddingLeft: 12, paddingBottom: isLast ? 0 : 16 }}>
         <div
           onClick={hasDetail ? onToggle : undefined}
           style={{
-            display: "flex", alignItems: "flex-start", gap: 6,
+            display: "flex", alignItems: "flex-start", gap: 8,
             cursor: hasDetail ? "pointer" : "default",
-            padding: "3px 6px", borderRadius: 6, marginLeft: -6,
+            padding: "4px 8px", borderRadius: 6, marginLeft: -8,
             background: isRunning ? "rgba(251,191,36,0.04)" : "transparent",
             transition: "background 120ms",
           }}
         >
-          <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{
-                fontSize: 12, fontWeight: isRunning ? 600 : 500,
+                fontSize: 13, fontWeight: isRunning ? 600 : 500,
                 color: isRunning ? "var(--text-primary)" : "var(--text-secondary)",
+                letterSpacing: "-0.005em",
               }}>
                 {step.title}
               </span>
               {step.tool_name && (
                 <span style={{
-                  fontSize: 10, color: "var(--text-faint)",
+                  fontSize: 10.5, color: "var(--text-faint)",
                   background: "var(--surface-3)", border: "1px solid var(--border)",
-                  borderRadius: 4, padding: "1px 5px", fontFamily: "monospace",
+                  borderRadius: 4, padding: "1px 6px", fontFamily: "monospace",
                 }}>
                   {step.tool_name}
                 </span>
               )}
+              {step.started_at && (
+                <span style={{ fontSize: 11, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 3 }}>
+                  <Clock size={10} />
+                  {formatDuration(step.started_at, step.completed_at)}
+                </span>
+              )}
             </div>
-            {step.started_at && (
-              <span style={{ fontSize: 10.5, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
-                <Clock size={9} />
-                {formatDuration(step.started_at, step.completed_at)}
-              </span>
+            {step.description && !expanded && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "2px 0 0", lineHeight: 1.4 }}>
+                {step.description}
+              </p>
             )}
           </div>
           {hasDetail && (
             <div style={{ flexShrink: 0, marginTop: 4 }}>
               {expanded
-                ? <ChevronDown size={12} color="var(--text-faint)" />
-                : <ChevronRight size={12} color="var(--text-faint)" />}
+                ? <ChevronDown size={13} color="var(--text-faint)" />
+                : <ChevronRight size={13} color="var(--text-faint)" />}
             </div>
           )}
         </div>
 
+        {/* Expanded detail */}
         {expanded && hasDetail && (
           <div style={{
-            marginTop: 6,
+            marginTop: 8, marginLeft: 0,
             background: "var(--surface-1)", border: "1px solid var(--border)",
-            borderRadius: 7, overflow: "hidden",
+            borderRadius: 8, overflow: "hidden",
           }}>
             {step.tool_input && (
               <div style={{ borderBottom: step.tool_output ? "1px solid var(--border)" : "none" }}>
                 <div style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "5px 10px", borderBottom: "1px solid var(--border)",
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 12px", borderBottom: "1px solid var(--border)",
                   background: "var(--surface-2)",
                 }}>
-                  <Terminal size={10} color="var(--text-faint)" />
-                  <span style={{ fontSize: 9.5, fontWeight: 600, color: "var(--text-faint)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Input</span>
+                  <Terminal size={11} color="var(--text-faint)" />
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-faint)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Input</span>
                 </div>
                 <pre style={{
-                  fontSize: 10.5, color: "var(--text-secondary)", margin: 0,
-                  padding: "8px 10px", fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                  fontSize: 11.5, color: "var(--text-secondary)", margin: 0,
+                  padding: "10px 12px", fontFamily: "JetBrains Mono, ui-monospace, monospace",
                   whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6,
-                  maxHeight: 100, overflowY: "auto",
+                  maxHeight: 120, overflowY: "auto",
                 }}>
                   {step.tool_input}
                 </pre>
@@ -163,20 +172,20 @@ function StepItem({
             {step.tool_output && (
               <div>
                 <div style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "5px 10px", borderBottom: "1px solid var(--border)",
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 12px", borderBottom: "1px solid var(--border)",
                   background: "var(--surface-2)",
                 }}>
-                  <Zap size={10} color="var(--green)" />
-                  <span style={{ fontSize: 9.5, fontWeight: 600, color: "var(--text-faint)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Output</span>
+                  <Zap size={11} color="var(--green)" />
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-faint)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Output</span>
                 </div>
                 <pre style={{
-                  fontSize: 10.5, color: "var(--text-primary)", margin: 0,
-                  padding: "8px 10px", fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                  fontSize: 11.5, color: "var(--text-primary)", margin: 0,
+                  padding: "10px 12px", fontFamily: "JetBrains Mono, ui-monospace, monospace",
                   whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6,
-                  maxHeight: 140, overflowY: "auto",
+                  maxHeight: 180, overflowY: "auto",
                 }}>
-                  {step.tool_output.length > 600 ? step.tool_output.slice(0, 600) + "\n…" : step.tool_output}
+                  {step.tool_output.length > 800 ? step.tool_output.slice(0, 800) + "\n…" : step.tool_output}
                 </pre>
               </div>
             )}
@@ -187,11 +196,11 @@ function StepItem({
   );
 }
 
-// ── Sidebar panel ────────────────────────────────────────────────
+// ── Right panel tabs ──────────────────────────────────────────────
 
-type SideTab = "steps" | "artifacts" | "events" | "agents";
+type RightTab = "artifacts" | "chat" | "events" | "agents";
 
-function ArtifactsList({
+function ArtifactsPanel({
   artifacts,
   onPreview,
   previewId,
@@ -201,133 +210,90 @@ function ArtifactsList({
   previewId?: string;
 }) {
   if (!artifacts.length) return (
-    <div style={{ padding: "24px 16px", textAlign: "center" }}>
-      <FileText size={16} color="var(--text-faint)" style={{ margin: "0 auto 8px", display: "block" }} />
+    <div className="empty-state" style={{ padding: "32px 16px" }}>
+      <div className="empty-state-icon"><FileText size={16} color="var(--text-faint)" /></div>
       <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No artifacts yet</p>
     </div>
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {artifacts.map((a) => {
-        const fileName = a.name.split("/").pop() || a.name;
-        const ext = fileName.split(".").pop()?.toLowerCase() || "";
-        const fileEmoji = ext === "pptx" ? "📊" : ext === "docx" ? "📄" : ext === "pdf" ? "📕" : ext === "xlsx" ? "📈" : null;
-        const isActive = a.id === previewId;
-        return (
-          <div key={a.id} style={{
-            padding: "10px 12px",
-            background: isActive ? "var(--accent-dim)" : "var(--surface-2)",
-            border: `1px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
-            borderRadius: 8,
-            cursor: onPreview ? "pointer" : "default",
-            transition: "all 120ms",
-          }}
-            onClick={() => onPreview?.(a)}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 18, flexShrink: 0 }}>
-                {fileEmoji || <FileText size={16} color="var(--accent)" />}
+      {artifacts.map((a) => (
+        <div key={a.id} style={{
+          padding: "10px 12px", background: "var(--surface-2)",
+          border: `1px solid ${a.id === previewId ? "var(--accent)" : "var(--border)"}`,
+          borderRadius: 8,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <FileText size={13} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                letterSpacing: "-0.005em",
+              }}>
+                {a.name.split("/").pop() || a.name}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 12, fontWeight: 500, color: "var(--text-primary)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {fileName}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-                  <span className="badge-gray" style={{ fontSize: 9.5 }}>{a.type}</span>
-                  <span style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{formatBytes(a.size)}</span>
-                </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <span className="badge-gray" style={{ fontSize: 10 }}>{a.type}</span>
+                <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{formatBytes(a.size)}</span>
               </div>
-              <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+            </div>
+            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              {onPreview && (
                 <button
                   type="button"
                   className="btn-ghost btn-xs"
-                  title="Copy path"
-                  onClick={() => navigator.clipboard.writeText(a.content_path || a.name)}
+                  title={a.id === previewId ? "Close preview" : "Preview"}
+                  onClick={(e) => { e.stopPropagation(); onPreview(a); }}
+                  style={{ color: a.id === previewId ? "var(--accent)" : undefined, cursor: "pointer" }}
                 >
-                  <Copy size={11} />
+                  <PanelRight size={11} />
                 </button>
-                {a.content_path && (
-                  <a
-                    href={`http://localhost:7331/api/v1/artifacts/${a.id}/download`}
-                    download
-                    className="btn-ghost btn-xs"
-                    title="Download"
-                    style={{ display: "flex", alignItems: "center" }}
-                  >
-                    <Download size={11} />
-                  </a>
-                )}
-              </div>
+              )}
+              <button
+                type="button"
+                className="btn-ghost btn-xs"
+                title="Copy path"
+                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.content_path || a.name); }}
+                style={{ cursor: "pointer" }}
+              >
+                <Copy size={11} />
+              </button>
+              {a.content_path && (
+                <a
+                  href={`http://localhost:7331/api/v1/artifacts/${a.id}/download`}
+                  download
+                  className="btn-ghost btn-xs"
+                  title="Download file"
+                  style={{ display: "flex", alignItems: "center" }}
+                >
+                  <Download size={11} />
+                </a>
+              )}
+              {a.type === "html" && (
+                <a
+                  href={`http://localhost:7331/api/v1/artifacts/${a.id}/download`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost btn-xs"
+                  title="Open in browser"
+                  style={{ display: "flex", alignItems: "center", fontSize: 10, gap: 3 }}
+                >
+                  <Maximize2 size={10} />
+                </a>
+              )}
             </div>
           </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function EventsList({ events }: { events: TaskEvent[] }) {
-  if (!events.length) return (
-    <div style={{ padding: "24px 16px", textAlign: "center" }}>
-      <Activity size={16} color="var(--text-faint)" style={{ margin: "0 auto 8px", display: "block" }} />
-      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No events yet</p>
-    </div>
-  );
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      {[...events].reverse().slice(0, 60).map((e) => (
-        <div key={e.id} style={{
-          padding: "6px 10px", background: "var(--surface-2)",
-          border: "1px solid var(--border)", borderRadius: 6,
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-            <span className="badge-accent" style={{ fontSize: 9.5 }}>{e.type}</span>
-            <span style={{ fontSize: 10, color: "var(--text-faint)" }}>{formatTime(e.created_at)}</span>
-          </div>
-          {e.payload && (
+          {a.content_inline && (
             <pre style={{
-              fontSize: 10, color: "var(--text-muted)", margin: 0,
-              fontFamily: "JetBrains Mono, monospace",
-              whiteSpace: "pre-wrap", wordBreak: "break-all",
-              maxHeight: 40, overflow: "hidden", lineHeight: 1.5,
+              fontSize: 11, color: "var(--text-muted)", margin: "8px 0 0",
+              fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap",
+              wordBreak: "break-all", maxHeight: 60, overflow: "hidden",
+              lineHeight: 1.5,
             }}>
-              {e.payload.length > 80 ? e.payload.slice(0, 80) + "…" : e.payload}
+              {a.content_inline.slice(0, 140)}{a.content_inline.length > 140 ? "…" : ""}
             </pre>
           )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AgentsList({ agents }: { agents: SubAgent[] }) {
-  if (!agents.length) return (
-    <div style={{ padding: "24px 16px", textAlign: "center" }}>
-      <Users size={16} color="var(--text-faint)" style={{ margin: "0 auto 8px", display: "block" }} />
-      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No sub-agents spawned</p>
-    </div>
-  );
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {agents.map((a) => (
-        <div key={a.id} style={{
-          padding: "10px 12px", background: "var(--surface-2)",
-          border: "1px solid var(--border)", borderRadius: 8,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)", marginBottom: 5 }}>
-            {a.title}
-          </div>
-          <div style={{ display: "flex", gap: 5 }}>
-            <span className="badge-purple" style={{ fontSize: 9.5 }}>{a.role}</span>
-            <span className={
-              a.status === "completed" ? "badge-green" :
-              a.status === "failed" ? "badge-red" :
-              a.status === "running" ? "badge-yellow" : "badge-gray"
-            } style={{ fontSize: 9.5 }}>{a.status}</span>
-          </div>
         </div>
       ))}
     </div>
@@ -372,6 +338,7 @@ function buildChatMessages(
       } catch { question = ev.payload || ""; inputId = ev.id; }
       if (question) {
         msgs.push({ id: ev.id, kind: "agent", text: question, isQuestion: true, inputId, timestamp: ev.created_at });
+        // If already answered, add the answer as a user bubble
         if (answeredInputIds[inputId]) {
           msgs.push({ id: `answered-${inputId}`, kind: "user", text: answeredInputIds[inputId], timestamp: ev.created_at });
         }
@@ -382,6 +349,7 @@ function buildChatMessages(
         const p = JSON.parse(ev.payload || "{}");
         answer = p.answer || p.text || "";
       } catch { answer = ev.payload || ""; }
+      // Only add if not already shown via answeredInputIds
       if (answer) {
         msgs.push({ id: ev.id, kind: "user", text: answer, timestamp: ev.created_at });
       }
@@ -389,21 +357,28 @@ function buildChatMessages(
       let tool = "";
       try { tool = JSON.parse(ev.payload || "{}").tool || ""; } catch { /* noop */ }
       msgs.push({ id: ev.id, kind: "system", text: `Running ${tool || "step"}…`, timestamp: ev.created_at });
+    } else if (ev.type === "step.completed") {
+      let tool = "";
+      try { tool = JSON.parse(ev.payload || "{}").tool || ""; } catch { /* noop */ }
+      msgs.push({ id: ev.id, kind: "system", text: `${tool || "Step"} completed`, timestamp: ev.created_at });
     } else if (ev.type === "artifact.ready") {
       let name = "";
       try { name = JSON.parse(ev.payload || "{}").name || ""; } catch { /* noop */ }
       const fileName = name.split("/").pop() || name || "file";
-      msgs.push({ id: ev.id, kind: "system", text: `✅ Artifact ready: ${fileName}`, timestamp: ev.created_at });
+      msgs.push({ id: ev.id, kind: "system", text: `Artifact ready: ${fileName}`, timestamp: ev.created_at });
     }
   }
 
+  // Merge local user messages that aren't already in the list
   for (const lm of localUserMessages) {
     if (!msgs.find(m => m.id === lm.id)) {
       msgs.push({ id: lm.id, kind: "user", text: lm.text, timestamp: lm.timestamp });
     }
   }
 
+  // Sort by timestamp
   msgs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
   return msgs;
 }
 
@@ -411,14 +386,12 @@ function ChatPanel({
   events,
   pendingInputs,
   isActive,
-  taskStatus,
   onRespond,
   respondPending,
 }: {
   events: TaskEvent[];
   pendingInputs: PendingInput[];
   isActive: boolean;
-  taskStatus: TaskStatus;
   onRespond: (inputId: string, answer: string) => void;
   respondPending: boolean;
 }) {
@@ -426,33 +399,29 @@ function ChatPanel({
   const [localUserMessages, setLocalUserMessages] = useState<{ id: string; text: string; timestamp: string }[]>([]);
   const [answeredInputIds, setAnsweredInputIds] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const hasPendingInput = pendingInputs.length > 0;
   const pendingInput = pendingInputs[0];
-  const messages = buildChatMessages(events, localUserMessages, answeredInputIds);
-  const showInput = isActive || hasPendingInput;
 
+  const messages = buildChatMessages(events, localUserMessages, answeredInputIds);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages.length]);
 
-  // Auto-focus textarea when there's a pending input
-  useEffect(() => {
-    if (hasPendingInput && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [hasPendingInput]);
-
   const handleSend = () => {
     const text = inputText.trim();
     if (!text) return;
+
     if (hasPendingInput && pendingInput) {
+      // Answer the pending question
       setAnsweredInputIds(prev => ({ ...prev, [pendingInput.id]: text }));
       onRespond(pendingInput.id, text);
     } else {
+      // Store locally as a user message
       setLocalUserMessages(prev => [...prev, {
         id: `local-${Date.now()}`,
         text,
@@ -469,66 +438,42 @@ function ChatPanel({
     }
   };
 
-  // Empty state: task not started yet
-  if (taskStatus === "pending" && !events.length) {
+  if (!events.length && !isActive) {
     return (
-      <div style={{
-        flex: 1, display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        gap: 12, padding: 40, minHeight: 0,
-      }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: 16,
-          background: "var(--accent-dim)",
-          border: "1px solid var(--accent-glow)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <Bot size={24} color="var(--accent)" />
-        </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
-            Ready to start
-          </div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            Click Run to launch the agent. It will greet you and ask for preferences before starting work.
-          </div>
-        </div>
+      <div className="empty-state" style={{ padding: "32px 16px" }}>
+        <div className="empty-state-icon"><MessageSquare size={16} color="var(--text-faint)" /></div>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No messages yet. Run the task to start.</p>
       </div>
     );
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
-      {/* Messages area */}
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      {/* Messages */}
       <div
         ref={scrollRef}
-        className="selectable"
         style={{
-          flex: 1, overflowY: "auto",
-          padding: "28px 32px",
-          display: "flex", flexDirection: "column", gap: 24,
+          flex: 1, overflowY: "auto", padding: "12px 10px",
+          display: "flex", flexDirection: "column", gap: 6,
           minHeight: 0,
         }}
       >
         {messages.length === 0 && isActive && (
-          <div style={{ display: "flex", justifyContent: "center", padding: "32px 0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-faint)", fontSize: 13 }}>
-              <Loader size={14} className="animate-spin" />
-              Agent is starting up…
-            </div>
+          <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-faint)", fontSize: 12 }}>
+            <Loader size={14} className="animate-spin" style={{ margin: "0 auto 8px", display: "block" }} />
+            Agent is starting…
           </div>
         )}
 
         {messages.map((msg) => {
           if (msg.kind === "system") {
             return (
-              <div key={msg.id} style={{ display: "flex", justifyContent: "center" }}>
+              <div key={msg.id} style={{ display: "flex", justifyContent: "center", margin: "2px 0" }}>
                 <span style={{
-                  fontSize: 11, color: "var(--text-faint)",
-                  background: "var(--surface-3)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 20, padding: "3px 12px",
-                  maxWidth: "70%", textAlign: "center",
+                  fontSize: 10.5, color: "var(--text-faint)",
+                  background: "var(--surface-3)", border: "1px solid var(--border)",
+                  borderRadius: 20, padding: "2px 10px",
+                  maxWidth: "85%", textAlign: "center",
                 }}>
                   {msg.text}
                 </span>
@@ -538,166 +483,165 @@ function ChatPanel({
 
           if (msg.kind === "agent") {
             return (
-              <div key={msg.id} style={{ display: "flex", gap: 12, width: "100%" }}>
-                {/* Avatar */}
+              <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, maxWidth: "85%" }}>
                 <div style={{
-                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-                  background: "var(--accent)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  marginTop: 2,
+                  display: "flex", alignItems: "center", gap: 5,
+                  paddingLeft: 4,
                 }}>
-                  <Bot size={15} color="#fff" />
-                </div>
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)" }}>
-                    Agent {msg.isQuestion && <span style={{ color: "var(--accent)" }}>· asking</span>}
-                  </span>
                   <div style={{
-                    background: msg.isQuestion ? "var(--surface-1)" : "transparent",
-                    border: msg.isQuestion ? "1.5px solid var(--accent)" : "none",
-                    borderRadius: msg.isQuestion ? 12 : 0,
-                    padding: msg.isQuestion ? "12px 16px" : "0",
-                    boxShadow: msg.isQuestion ? "0 0 0 3px var(--accent-glow)" : "none",
-                  }}>
-                    <div className="chat-markdown">
-                      <ReactMarkdown>{msg.text || ""}</ReactMarkdown>
-                    </div>
-                  </div>
+                    width: 16, height: 16, borderRadius: "50%",
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: 10, color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.04em" }}>
+                    Agent
+                  </span>
                   {msg.isQuestion && (
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 5,
-                      fontSize: 11, color: "var(--accent)", fontWeight: 600,
-                    }}>
-                      <HelpCircle size={11} />
-                      Waiting for your reply
-                    </div>
+                    <HelpCircle size={10} color="#a78bfa" />
                   )}
                 </div>
+                <div style={{
+                  background: "#1E1B4B",
+                  border: msg.isQuestion ? "1.5px solid #7c3aed" : "1px solid rgba(99,102,241,0.25)",
+                  borderRadius: "4px 12px 12px 12px",
+                  padding: "8px 12px",
+                  fontSize: 12.5, color: "#A5B4FC", lineHeight: 1.6,
+                  wordBreak: "break-word",
+                  boxShadow: msg.isQuestion ? "0 0 0 2px rgba(124,58,237,0.15)" : "none",
+                }}>
+                  {msg.text}
+                </div>
+                {msg.isQuestion && (
+                  <div style={{ fontSize: 10, color: "#7c3aed", paddingLeft: 4, fontWeight: 500 }}>
+                    Waiting for your reply
+                  </div>
+                )}
               </div>
             );
           }
 
           // user
           return (
-            <div key={msg.id} style={{
-              display: "flex", justifyContent: "flex-end",
-            }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, maxWidth: "80%" }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", paddingRight: 2 }}>
-                  You
-                </span>
-                <div style={{
-                  background: "var(--accent)",
-                  borderRadius: "14px 4px 14px 14px",
-                  padding: "10px 14px",
-                  fontSize: 13.5, color: "#fff", lineHeight: 1.65,
-                  wordBreak: "break-word",
-                  boxShadow: "var(--shadow-sm)",
-                }}>
-                  {msg.text}
-                </div>
+            <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, maxWidth: "85%", alignSelf: "flex-end" }}>
+              <span style={{ fontSize: 10, color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.04em", paddingRight: 4 }}>
+                You
+              </span>
+              <div style={{
+                background: "var(--accent)",
+                borderRadius: "12px 4px 12px 12px",
+                padding: "8px 12px",
+                fontSize: 12.5, color: "#fff", lineHeight: 1.6,
+                wordBreak: "break-word",
+              }}>
+                {msg.text}
               </div>
             </div>
           );
         })}
-
-        {/* Typing indicator when active but waiting */}
-        {isActive && messages.length > 0 && !hasPendingInput && (
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-              background: "var(--accent)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Bot size={15} color="#fff" />
-            </div>
-            <div style={{
-              background: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              borderRadius: "4px 14px 14px 14px",
-              padding: "12px 16px",
-              display: "flex", alignItems: "center", gap: 5,
-            }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{
-                  width: 6, height: 6, borderRadius: "50%",
-                  background: "var(--accent)", opacity: 0.6,
-                  animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-                }} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Input area */}
-      <div style={{
-        flexShrink: 0,
-        padding: "12px 20px 16px",
-        borderTop: "1px solid var(--border)",
-        background: "var(--surface-1)",
-      }}>
-        {!showInput && taskStatus !== "pending" && (
-          <div style={{
-            textAlign: "center", fontSize: 12, color: "var(--text-faint)",
-            padding: "8px 0",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-          }}>
-            {taskStatus === "completed"
-              ? <><CheckCircle size={13} color="var(--green)" /> Task completed</>
-              : taskStatus === "failed"
-              ? <><XCircle size={13} color="var(--red)" /> Task failed</>
-              : "Task inactive"}
-          </div>
-        )}
+      {(isActive || hasPendingInput) && (
+        <div style={{
+          flexShrink: 0,
+          padding: "8px 10px",
+          borderTop: "1px solid var(--border)",
+          background: "var(--surface-2)",
+          display: "flex", gap: 6, alignItems: "flex-end",
+        }}>
+          <textarea
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={hasPendingInput ? "Reply to agent…" : "Send a message…"}
+            rows={1}
+            style={{
+              flex: 1, resize: "none", background: "var(--surface-3)",
+              border: `1px solid ${hasPendingInput ? "rgba(124,58,237,0.4)" : "var(--border)"}`,
+              borderRadius: 8, padding: "7px 10px",
+              fontSize: 12.5, color: "var(--text-primary)", outline: "none",
+              lineHeight: 1.5, maxHeight: 100, overflowY: "auto",
+              fontFamily: "inherit",
+            }}
+            autoFocus={hasPendingInput}
+          />
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            onClick={handleSend}
+            disabled={!inputText.trim() || respondPending}
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, height: 34 }}
+          >
+            {respondPending ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
+            Send
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
-        {showInput && (
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-            {hasPendingInput && (
-              <div style={{
-                flexShrink: 0, width: 6, height: 6, borderRadius: "50%",
-                background: "var(--accent)", marginBottom: 14,
-                boxShadow: "0 0 8px var(--accent-glow)",
-              }} />
-            )}
-            <textarea
-              ref={textareaRef}
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={hasPendingInput ? "Reply to the agent…" : "Send a message…"}
-              rows={2}
-              style={{
-                flex: 1, resize: "none",
-                background: "var(--surface-3)",
-                border: `1.5px solid ${hasPendingInput ? "var(--accent)" : "var(--border-mid)"}`,
-                borderRadius: 10, padding: "10px 14px",
-                fontSize: 13.5, color: "var(--text-primary)", outline: "none",
-                lineHeight: 1.5, maxHeight: 120, overflowY: "auto",
-                fontFamily: "inherit",
-                transition: "border-color 150ms",
-                boxShadow: hasPendingInput ? "0 0 0 3px var(--accent-glow)" : "none",
-              }}
-            />
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleSend}
-              disabled={!inputText.trim() || respondPending}
-              style={{
-                flexShrink: 0, display: "flex", alignItems: "center",
-                gap: 6, height: 44, padding: "0 16px", borderRadius: 10,
-                fontSize: 13, fontWeight: 600,
-              }}
-            >
-              {respondPending
-                ? <Loader size={14} className="animate-spin" />
-                : <Send size={14} />}
-              Send
-            </button>
+function EventsPanel({ events }: { events: TaskEvent[] }) {
+  if (!events.length) return (
+    <div className="empty-state" style={{ padding: "32px 16px" }}>
+      <div className="empty-state-icon"><Activity size={16} color="var(--text-faint)" /></div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No events yet</p>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {[...events].reverse().slice(0, 60).map((e) => (
+        <div key={e.id} style={{
+          padding: "7px 10px", background: "var(--surface-2)",
+          border: "1px solid var(--border)", borderRadius: 7,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+            <span className="badge-accent" style={{ fontSize: 10 }}>{e.type}</span>
+            <span style={{ fontSize: 10, color: "var(--text-faint)" }}>{formatTime(e.created_at)}</span>
           </div>
-        )}
-      </div>
+          {e.payload && (
+            <pre style={{
+              fontSize: 10.5, color: "var(--text-muted)", margin: 0,
+              fontFamily: "JetBrains Mono, monospace",
+              whiteSpace: "pre-wrap", wordBreak: "break-all",
+              maxHeight: 48, overflow: "hidden", lineHeight: 1.5,
+            }}>
+              {e.payload.length > 100 ? e.payload.slice(0, 100) + "…" : e.payload}
+            </pre>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgentsPanel({ agents }: { agents: SubAgent[] }) {
+  if (!agents.length) return (
+    <div className="empty-state" style={{ padding: "32px 16px" }}>
+      <div className="empty-state-icon"><Users size={16} color="var(--text-faint)" /></div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No sub-agents spawned</p>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {agents.map((a) => (
+        <div key={a.id} style={{
+          padding: "10px 12px", background: "var(--surface-2)",
+          border: "1px solid var(--border)", borderRadius: 8,
+        }}>
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)", marginBottom: 5, letterSpacing: "-0.005em" }}>
+            {a.title}
+          </div>
+          <div style={{ display: "flex", gap: 5 }}>
+            <span className="badge-purple" style={{ fontSize: 10 }}>{a.role}</span>
+            <span className={
+              a.status === "completed" ? "badge-green" :
+              a.status === "failed" ? "badge-red" :
+              a.status === "running" ? "badge-yellow" : "badge-gray"
+            } style={{ fontSize: 10 }}>{a.status}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -717,24 +661,20 @@ function JsonPreview({ downloadUrl }: { downloadUrl: string }) {
       .catch(() => setError(true));
   }, [downloadUrl]);
   if (error) return <p style={{ color: "var(--red)", fontSize: 12, padding: 16 }}>Failed to load JSON.</p>;
-  if (!content) return (
-    <div style={{ padding: 16, color: "var(--text-faint)", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
-      <Loader size={12} className="animate-spin" /> Loading…
-    </div>
-  );
+  if (!content) return <div style={{ padding: 16, color: "var(--text-faint)", fontSize: 12 }}><Loader size={12} className="animate-spin" style={{ marginRight: 6 }} />Loading…</div>;
   return (
-    <pre className="selectable" style={{
-      margin: 0, padding: "14px 18px",
-      fontSize: 11.5, color: "var(--text-secondary)",
+    <pre style={{
+      margin: 0, padding: "12px 16px",
+      fontSize: 11, color: "var(--text-secondary)",
       fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap",
-      wordBreak: "break-all", lineHeight: 1.6, overflowY: "auto", flex: 1,
+      wordBreak: "break-all", lineHeight: 1.6, overflowY: "auto",
     }}>
       {content}
     </pre>
   );
 }
 
-// ── Content preview panel ─────────────────────────────────────────
+// ── Content preview panel ────────────────────────────────────────
 
 function ContentPreviewPanel({
   artifact,
@@ -747,6 +687,7 @@ function ContentPreviewPanel({
   const [markdownContent, setMarkdownContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
 
+  // For markdown with inline content or remote fetch
   useEffect(() => {
     setMarkdownContent(null);
     setLoadError(false);
@@ -774,20 +715,18 @@ function ContentPreviewPanel({
   return (
     <div style={{
       display: "flex", flexDirection: "column", flex: 1,
-      background: "var(--surface-1)", minHeight: 0,
+      background: "var(--surface-1)", borderLeft: "1px solid var(--border)",
+      minHeight: 0,
     }}>
       {/* Header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
-        padding: "10px 16px", borderBottom: "1px solid var(--border)",
+        padding: "8px 12px", borderBottom: "1px solid var(--border)",
         flexShrink: 0, background: "var(--surface-2)",
       }}>
-        {fileEmoji
-          ? <span style={{ fontSize: 16 }}>{fileEmoji}</span>
-          : <FileText size={14} color="var(--accent)" />
-        }
+        <FileText size={13} color="var(--accent)" />
         <span style={{
-          flex: 1, fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+          flex: 1, fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {fileName}
@@ -800,7 +739,7 @@ function ContentPreviewPanel({
           title="Download"
           style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
         >
-          <Download size={13} />
+          <Download size={12} />
         </a>
         <button
           type="button"
@@ -809,27 +748,27 @@ function ContentPreviewPanel({
           title="Close preview"
           style={{ flexShrink: 0 }}
         >
-          <X size={13} />
+          <X size={12} />
         </button>
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: "auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
         {artifact.type === "markdown" && (
-          <div className="selectable" style={{
-            padding: "20px 28px", flex: 1,
-            fontSize: 13.5, lineHeight: 1.75,
+          <div style={{
+            padding: "16px 20px",
+            fontSize: 13, lineHeight: 1.7,
             color: "var(--text-primary)",
           }}>
             {markdownContent != null ? (
-              <div className="markdown-preview" style={{ maxWidth: 720, wordBreak: "break-word" }}>
+              <div className="markdown-preview" style={{ maxWidth: "100%", wordBreak: "break-word" }}>
                 <ReactMarkdown>{markdownContent}</ReactMarkdown>
               </div>
             ) : loadError ? (
-              <p style={{ color: "var(--red)", fontSize: 13 }}>Failed to load content.</p>
+              <p style={{ color: "var(--red)", fontSize: 12 }}>Failed to load content.</p>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-faint)", fontSize: 13 }}>
-                <Loader size={14} className="animate-spin" /> Loading…
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-faint)", fontSize: 12 }}>
+                <Loader size={12} className="animate-spin" /> Loading…
               </div>
             )}
           </div>
@@ -838,89 +777,85 @@ function ContentPreviewPanel({
         {artifact.type === "html" && (
           <iframe
             src={downloadUrl}
-            style={{ width: "100%", flex: 1, border: "none", background: "#fff", display: "block", minHeight: 0, height: "100%" }}
+            style={{ width: "100%", flex: 1, border: "none", background: "#fff", display: "block", height: "100%" }}
             title={fileName}
             sandbox="allow-scripts allow-same-origin"
           />
         )}
 
-        {artifact.type === "json" && <JsonPreview downloadUrl={downloadUrl} />}
-
-        {/* PPTX and DOCX: rendered preview via backend conversion */}
-        {(ext === "pptx" || ext === "docx") && artifact.type !== "markdown" && artifact.type !== "html" && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <div style={{
-              padding: "8px 16px", background: "var(--surface-2)",
-              borderBottom: "1px solid var(--border)",
-              display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
-            }}>
-              <a href={downloadUrl} download className="btn-primary btn-sm"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12 }}>
-                <Download size={13} /> Download {ext.toUpperCase()}
-              </a>
-              <a href={downloadUrl} target="_blank" rel="noreferrer"
-                className="btn-ghost btn-sm"
-                style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none", fontSize: 12 }}>
-                <Maximize2 size={12} /> Open
-              </a>
-            </div>
-            <iframe
-              src={`http://localhost:7331/api/v1/artifacts/${artifact.id}/preview`}
-              style={{ width: "100%", flex: 1, border: "none", display: "block", minHeight: 0 }}
-              title={`Preview: ${fileName}`}
-            />
-          </div>
+        {artifact.type === "json" && (
+          <JsonPreview downloadUrl={downloadUrl} />
         )}
 
-        {/* PDF: use browser native viewer */}
-        {ext === "pdf" && artifact.type !== "markdown" && artifact.type !== "html" && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <div style={{
-              padding: "8px 16px", background: "var(--surface-2)",
-              borderBottom: "1px solid var(--border)",
-              display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
-            }}>
-              <a href={downloadUrl} download className="btn-primary btn-sm"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12 }}>
-                <Download size={13} /> Download PDF
-              </a>
-            </div>
-            <iframe
-              src={downloadUrl}
-              style={{ width: "100%", flex: 1, border: "none", display: "block", minHeight: 0 }}
-              title={`Preview: ${fileName}`}
-            />
-          </div>
-        )}
-
-        {/* Other file types: download card */}
-        {ext !== "pptx" && ext !== "docx" && ext !== "pdf" &&
-         artifact.type !== "markdown" && artifact.type !== "html" && artifact.type !== "json" && (
+        {(artifact.type !== "markdown" && artifact.type !== "html" && artifact.type !== "json") && (
           <div style={{
-            flex: 1, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            gap: 20, padding: 40,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            height: "100%", gap: 20, padding: 32,
           }}>
+            {/* File type icon */}
             <div style={{
-              width: 80, height: 80, borderRadius: 20,
-              background: "var(--accent-dim)",
+              width: 72, height: 72, borderRadius: 18,
+              background: ext === "pptx"
+                ? "rgba(249,115,22,0.12)"
+                : ext === "docx"
+                ? "rgba(59,130,246,0.12)"
+                : ext === "pdf"
+                ? "rgba(239,68,68,0.12)"
+                : ext === "xlsx"
+                ? "rgba(34,197,94,0.12)"
+                : "var(--accent-dim)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 40,
+              fontSize: 36,
             }}>
-              {fileEmoji || <FileText size={36} color="var(--accent)" />}
+              {fileEmoji || <FileText size={32} color="var(--accent)" />}
             </div>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, wordBreak: "break-all" }}>
                 {fileName}
               </div>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 24 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>
                 {ext.toUpperCase()} · {formatBytes(artifact.size)}
               </div>
-              <a href={downloadUrl} download className="btn-primary"
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, textDecoration: "none", padding: "10px 24px", borderRadius: 10 }}>
-                <Download size={16} /> Download {ext.toUpperCase()}
-              </a>
+              {artifact.content_path && (
+                <div style={{
+                  fontSize: 10.5, color: "var(--text-faint)", fontFamily: "monospace",
+                  marginBottom: 20, wordBreak: "break-all",
+                  background: "var(--surface-2)", padding: "4px 10px", borderRadius: 6,
+                  border: "1px solid var(--border)",
+                }}>
+                  {artifact.content_path}
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                <a
+                  href={downloadUrl}
+                  download
+                  className="btn-primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, textDecoration: "none", padding: "8px 20px" }}
+                >
+                  <Download size={14} />
+                  Download {ext.toUpperCase()}
+                </a>
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost btn-sm"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, textDecoration: "none" }}
+                >
+                  <Maximize2 size={12} />
+                  Open with system app
+                </a>
+              </div>
             </div>
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() => navigator.clipboard.writeText(artifact.content_path || artifact.name)}
+              style={{ fontSize: 11 }}
+            >
+              <Copy size={11} /> Copy path
+            </button>
           </div>
         )}
       </div>
@@ -934,10 +869,11 @@ export function TaskRunPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [sideTab, setSideTab] = useState<SideTab>("steps");
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [rightTab, setRightTab] = useState<RightTab>("chat");
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewArtifact, setPreviewArtifact] = useState<Artifact | null>(null);
+  const [inputAnswers, setInputAnswers] = useState<Record<string, string>>({});
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const { data: task, isLoading: taskLoading } = useQuery({
     queryKey: ["tasks", taskId],
@@ -1007,7 +943,7 @@ export function TaskRunPage() {
     mutationFn: ({ inputId, answer }: { inputId: string; answer: string }) =>
       executionApi.respondToInput(taskId!, inputId, answer),
     onSuccess: (_data, vars) => {
-      void vars;
+      setInputAnswers(prev => { const n = { ...prev }; delete n[vars.inputId]; return n; });
       qc.invalidateQueries({ queryKey: ["tasks", taskId, "pending-inputs"] });
     },
   });
@@ -1015,12 +951,20 @@ export function TaskRunPage() {
   const toggleStep = (id: string) =>
     setExpandedSteps((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  // Auto-switch sidebar to artifacts when new artifact arrives
+  // Auto-preview the first artifact that can be previewed inline
   useEffect(() => {
-    if (artifacts.length > 0 && sideTab === "steps" && !isActive) {
-      setSideTab("artifacts");
+    if (!previewArtifact && artifacts.length > 0) {
+      const previewable = artifacts.find(a => a.type === "markdown" || a.type === "html");
+      if (previewable) setPreviewArtifact(previewable);
     }
   }, [artifacts.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Switch to Chat tab when task becomes active
+  useEffect(() => {
+    if (isActive && rightTab === "artifacts") {
+      setRightTab("chat");
+    }
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingApprovals = approvals.filter(
     (a) => a.task_id === taskId && a.status === "pending"
@@ -1029,6 +973,11 @@ export function TaskRunPage() {
   const completedSteps = plan?.steps.filter((s) => s.status === "completed").length ?? 0;
   const totalSteps = plan?.steps.length ?? 0;
   const progress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+
+  // Chat message count (agent messages + input.needed events)
+  const chatEventCount = events.filter(e =>
+    e.type === "agent.message" || e.type === "input.needed" || e.type === "input.answered"
+  ).length;
 
   if (taskLoading) return (
     <div style={{ padding: 24 }}>
@@ -1040,7 +989,7 @@ export function TaskRunPage() {
 
   if (!task) return (
     <div style={{ padding: 24 }}>
-      <p style={{ color: "var(--red)", fontSize: 13 }}>Task not found.</p>
+      <p style={{ color: "var(--red)", fontSize: 13 }}>Run not found.</p>
     </div>
   );
 
@@ -1065,35 +1014,28 @@ export function TaskRunPage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{
-              fontSize: 14, fontWeight: 600, color: "var(--text-primary)",
+              fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)",
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              letterSpacing: "-0.02em",
+              letterSpacing: "-0.015em",
             }}>
               {task.title}
             </span>
             <span className={TASK_BADGE[task.status] ?? "badge-gray"}>{task.status}</span>
             {isActive && (
-              <span style={{ fontSize: 11.5, color: "var(--yellow)", display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 11, color: "var(--yellow)", display: "flex", alignItems: "center", gap: 4 }}>
                 <Loader size={11} className="animate-spin" /> Working…
-              </span>
-            )}
-            {pendingInputs.length > 0 && (
-              <span style={{
-                fontSize: 11, color: "var(--accent)",
-                background: "var(--accent-dim)",
-                border: "1px solid var(--accent-glow)",
-                borderRadius: 20, padding: "2px 8px",
-                display: "flex", alignItems: "center", gap: 4,
-              }}>
-                <HelpCircle size={10} />
-                Waiting for input
               </span>
             )}
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          {totalSteps > 0 && (
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {completedSteps}/{totalSteps} steps
+            </span>
+          )}
           {task.started_at && (
-            <span style={{ fontSize: 11.5, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 11, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 4 }}>
               <Clock size={11} />
               {formatDuration(task.started_at, task.completed_at)}
             </span>
@@ -1105,43 +1047,9 @@ export function TaskRunPage() {
               disabled={runMutation.isPending}
               onClick={() => runMutation.mutate()}
             >
-              {runMutation.isPending
-                ? <><Loader size={12} className="animate-spin" />Starting…</>
-                : <><Play size={12} />Run Task</>}
+              {runMutation.isPending ? <><Loader size={12} className="animate-spin" />Starting…</> : <><Play size={12} />Run</>}
             </button>
           )}
-          {/* Panel trigger buttons */}
-          {artifacts.length > 0 && (
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => { setSideTab("artifacts"); setPanelOpen(v => !v); }}
-              style={{ gap: 5, color: panelOpen && sideTab === "artifacts" ? "var(--accent)" : undefined }}
-            >
-              <FileText size={13} />
-              Files {artifacts.length}
-            </button>
-          )}
-          {totalSteps > 0 && (
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => { setSideTab("steps"); setPanelOpen(v => !v); }}
-              style={{ gap: 5, color: panelOpen && sideTab === "steps" ? "var(--accent)" : undefined }}
-            >
-              <Activity size={13} />
-              {completedSteps}/{totalSteps}
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn-ghost btn-sm"
-            style={{ padding: "4px 6px", color: panelOpen ? "var(--accent)" : undefined }}
-            onClick={() => setPanelOpen(v => !v)}
-            title="Toggle panel"
-          >
-            <PanelRight size={15} />
-          </button>
         </div>
       </div>
 
@@ -1149,9 +1057,13 @@ export function TaskRunPage() {
       {totalSteps > 0 && (
         <div style={{ height: 2, background: "var(--surface-3)", flexShrink: 0 }}>
           <div style={{
-            height: "100%", width: `${progress}%`,
-            background: task.status === "completed" ? "var(--green)" :
-              task.status === "failed" ? "var(--red)" : "var(--accent)",
+            height: "100%",
+            width: `${progress}%`,
+            background: task.status === "completed"
+              ? "var(--green)"
+              : task.status === "failed"
+              ? "var(--red)"
+              : "var(--accent)",
             transition: "width 400ms ease",
           }} />
         </div>
@@ -1166,8 +1078,8 @@ export function TaskRunPage() {
           {pendingApprovals.map((ap) => (
             <div key={ap.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <AlertTriangle size={14} color="var(--yellow)" style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--yellow)" }}>Approval needed:</span>
-              <span style={{ fontSize: 12.5, color: "var(--text-secondary)", flex: 1 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--yellow)" }}>Approval needed:</span>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)", flex: 1 }}>
                 <code style={{ fontFamily: "monospace", background: "var(--surface-3)", padding: "1px 5px", borderRadius: 3, fontSize: 11 }}>{ap.tool_name}</code>
                 {" "}— {ap.action}
               </span>
@@ -1178,173 +1090,181 @@ export function TaskRunPage() {
         </div>
       )}
 
-      {/* ── Body: Full-width chat + slide-out panel ── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+      {/* ── Body ── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-        {/* ═══ FULL-WIDTH CHAT ═══ */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
-          {previewArtifact ? (
+        {/* Left: timeline */}
+        <div style={{ flex: previewArtifact ? "0 0 38%" : 1, minWidth: 0, overflowY: "auto", padding: "24px 24px 32px", transition: "flex 200ms ease" }}>
+
+          {/* Description */}
+          {task.description && task.description !== task.title && (
+            <div style={{
+              padding: "10px 14px", background: "var(--surface-2)",
+              border: "1px solid var(--border)", borderRadius: 9,
+              marginBottom: 24, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6,
+            }}>
+              {task.description}
+            </div>
+          )}
+
+          {/* Timeline */}
+          {plan && plan.steps.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: 16 }}>
+                Execution Plan — {plan.steps.length} step{plan.steps.length !== 1 ? "s" : ""}
+              </div>
+              <div style={{ paddingLeft: 4 }}>
+                {plan.steps.map((step, idx) => (
+                  <StepItem
+                    key={step.id}
+                    step={step}
+                    expanded={expandedSteps.has(step.id)}
+                    onToggle={() => toggleStep(step.id)}
+                    isLast={idx === plan.steps.length - 1}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* States */}
+          {task.status === "pending" && !plan && (
+            <div style={{ textAlign: "center", padding: "48px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 16 }}>
+                Ready to execute. Click Run to start the agent.
+              </div>
+              <button type="button" className="btn-primary" disabled={runMutation.isPending} onClick={() => runMutation.mutate()}>
+                <Play size={14} /> {runMutation.isPending ? "Starting…" : "Run Task"}
+              </button>
+            </div>
+          )}
+
+          {isActive && !plan && (
+            <div style={{ textAlign: "center", padding: "48px 0" }}>
+              <Loader size={24} className="animate-spin" style={{ color: "var(--accent)", margin: "0 auto 12px" }} />
+              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>Planning execution…</div>
+            </div>
+          )}
+
+          {task.status === "completed" && (
+            <div style={{
+              marginTop: plan?.steps.length ? 24 : 0,
+              padding: "12px 16px",
+              background: "rgba(52,211,153,0.06)",
+              border: "1px solid rgba(52,211,153,0.18)",
+              borderRadius: 9,
+              display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <CheckCircle size={16} color="var(--green)" />
+              <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 500 }}>
+                Completed in {formatDuration(task.started_at, task.completed_at)}
+              </span>
+              {artifacts.length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 4 }}>
+                  · {artifacts.length} artifact{artifacts.length !== 1 ? "s" : ""} produced
+                </span>
+              )}
+            </div>
+          )}
+
+          {task.status === "failed" && (
+            <div style={{
+              marginTop: 16, padding: "12px 16px",
+              background: "rgba(248,113,113,0.06)",
+              border: "1px solid rgba(248,113,113,0.2)",
+              borderRadius: 9, display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <XCircle size={16} color="var(--red)" />
+              <span style={{ fontSize: 13, color: "var(--red)", fontWeight: 500 }}>Run failed</span>
+            </div>
+          )}
+        </div>
+
+        {/* Center: content preview panel (split view) */}
+        {previewArtifact && (
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
             <ContentPreviewPanel
               artifact={previewArtifact}
               onClose={() => setPreviewArtifact(null)}
             />
-          ) : (
-            <ChatPanel
-              events={events}
-              pendingInputs={pendingInputs}
-              isActive={isActive}
-              taskStatus={task.status}
-              onRespond={(inputId, answer) => respondMutation.mutate({ inputId, answer })}
-              respondPending={respondMutation.isPending}
-            />
-          )}
-        </div>
-
-        {/* ═══ SLIDE-OUT PANEL (overlay) ═══ */}
-        {panelOpen && (
-          <div style={{
-            position: "absolute", right: 0, top: 0, bottom: 0,
-            width: 380, background: "var(--surface-1)",
-            borderLeft: "1px solid var(--border)",
-            display: "flex", flexDirection: "column",
-            boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
-            zIndex: 20,
-          }}>
-            {/* Panel header + tabs */}
-            <div style={{
-              display: "flex", alignItems: "center",
-              borderBottom: "1px solid var(--border)",
-              padding: "0 6px 0 4px",
-              flexShrink: 0, background: "var(--surface-1)",
-            }}>
-              {([
-                { id: "steps" as SideTab,     icon: Activity,  label: "Steps",  count: totalSteps },
-                { id: "artifacts" as SideTab, icon: FileText,  label: "Files",  count: artifacts.length },
-                { id: "events" as SideTab,    icon: Terminal,  label: "Events", count: events.length },
-                { id: "agents" as SideTab,    icon: Users,     label: "Agents", count: agents.length },
-              ]).map(({ id, icon: Icon, label, count }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setSideTab(id)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 5,
-                    padding: "10px 10px 9px",
-                    background: "transparent", border: "none", cursor: "pointer",
-                    borderBottom: `2px solid ${sideTab === id ? "var(--accent)" : "transparent"}`,
-                    color: sideTab === id ? "var(--accent)" : "var(--text-muted)",
-                    fontSize: 12, fontWeight: 600,
-                    transition: "all 120ms", marginBottom: -1,
-                  }}
-                >
-                  <Icon size={13} />
-                  {label}
-                  {count > 0 && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700,
-                      color: sideTab === id ? "var(--accent)" : "var(--text-faint)",
-                      background: "var(--surface-3)",
-                      borderRadius: 8, padding: "1px 5px",
-                    }}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              ))}
-              <div style={{ flex: 1 }} />
-              <button
-                type="button"
-                className="btn-ghost btn-sm"
-                style={{ padding: "4px 6px" }}
-                onClick={() => setPanelOpen(false)}
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {/* Panel content */}
-            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-              {sideTab === "steps" && (
-                <>
-                  {plan && plan.steps.length > 0 ? (
-                    <div>
-                      <div style={{
-                        fontSize: 10.5, fontWeight: 600, letterSpacing: "0.07em",
-                        textTransform: "uppercase", color: "var(--text-faint)", marginBottom: 14,
-                      }}>
-                        {plan.steps.length} step{plan.steps.length !== 1 ? "s" : ""} · {completedSteps} done
-                      </div>
-                      {plan.steps.map((step, idx) => (
-                        <StepItem
-                          key={step.id}
-                          step={step}
-                          expanded={expandedSteps.has(step.id)}
-                          onToggle={() => toggleStep(step.id)}
-                          isLast={idx === plan.steps.length - 1}
-                        />
-                      ))}
-                    </div>
-                  ) : isActive ? (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "40px 0" }}>
-                      <Loader size={20} className="animate-spin" style={{ color: "var(--accent)" }} />
-                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Planning…</div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: "32px 0", textAlign: "center", fontSize: 12, color: "var(--text-faint)" }}>
-                      No steps recorded.
-                    </div>
-                  )}
-                  {task.status === "completed" && (
-                    <div style={{
-                      marginTop: 16, padding: "10px 14px",
-                      background: "var(--green-dim)", border: "1px solid rgba(34,197,94,0.2)",
-                      borderRadius: 9, display: "flex", alignItems: "center", gap: 8,
-                    }}>
-                      <CheckCircle size={14} color="var(--green)" />
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--green)" }}>Completed</div>
-                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                          {formatDuration(task.started_at, task.completed_at)} · {artifacts.length} file{artifacts.length !== 1 ? "s" : ""}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {task.status === "failed" && (
-                    <div style={{
-                      marginTop: 16, padding: "10px 14px",
-                      background: "var(--red-dim)", border: "1px solid rgba(239,68,68,0.2)",
-                      borderRadius: 9, display: "flex", alignItems: "center", gap: 8,
-                    }}>
-                      <XCircle size={14} color="var(--red)" />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--red)" }}>Run failed</span>
-                    </div>
-                  )}
-                </>
-              )}
-              {sideTab === "artifacts" && (
-                <ArtifactsList
-                  artifacts={artifacts}
-                  onPreview={(a) => { setPreviewArtifact(previewArtifact?.id === a.id ? null : a); setPanelOpen(false); }}
-                  previewId={previewArtifact?.id}
-                />
-              )}
-              {sideTab === "events" && <EventsList events={events} />}
-              {sideTab === "agents" && <AgentsList agents={agents} />}
-            </div>
           </div>
         )}
-      </div>
 
-      <style>{`
-        @keyframes bounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30% { transform: translateY(-4px); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
+        {/* Right panel */}
+        <div className="right-panel" style={{ display: "flex", flexDirection: "column" }}>
+          {/* Tabs */}
+          <div style={{
+            display: "flex", borderBottom: "1px solid var(--border)", flexShrink: 0,
+          }}>
+            {([
+              { id: "chat",      icon: MessageSquare, label: "Chat",      count: chatEventCount + pendingInputs.length },
+              { id: "artifacts", icon: FileText,      label: "Artifacts", count: artifacts.length },
+              { id: "events",    icon: Activity,      label: "Events",    count: events.length },
+              { id: "agents",    icon: Users,         label: "Agents",    count: agents.length },
+            ] as { id: RightTab; icon: React.ElementType; label: string; count: number }[]).map(({ id, icon: Icon, label, count }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setRightTab(id)}
+                style={{
+                  flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+                  gap: 3, padding: "9px 4px",
+                  background: "transparent", border: "none", cursor: "pointer",
+                  borderBottom: `2px solid ${rightTab === id ? "var(--accent)" : "transparent"}`,
+                  color: rightTab === id ? "#a5b4fc" : "var(--text-faint)",
+                  transition: "all 120ms", marginBottom: -1,
+                  position: "relative",
+                }}
+              >
+                <Icon size={13} />
+                <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em" }}>
+                  {label}{count > 0 ? ` (${count})` : ""}
+                </span>
+                {/* Red dot for pending inputs on Chat tab */}
+                {id === "chat" && pendingInputs.length > 0 && (
+                  <div style={{
+                    position: "absolute", top: 5, right: 8,
+                    width: 7, height: 7, borderRadius: "50%",
+                    background: "#7c3aed",
+                  }} />
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Panel content */}
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
+            {rightTab === "chat" && (
+              <ChatPanel
+                events={events}
+                pendingInputs={pendingInputs}
+                isActive={isActive}
+                onRespond={(inputId, answer) => respondMutation.mutate({ inputId, answer })}
+                respondPending={respondMutation.isPending}
+              />
+            )}
+            {rightTab === "artifacts" && (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <ArtifactsPanel
+                  artifacts={artifacts}
+                  onPreview={(a) => setPreviewArtifact(previewArtifact?.id === a.id ? null : a)}
+                  previewId={previewArtifact?.id}
+                />
+              </div>
+            )}
+            {rightTab === "events" && (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <EventsPanel events={events} />
+              </div>
+            )}
+            {rightTab === "agents" && (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <AgentsPanel agents={agents} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
