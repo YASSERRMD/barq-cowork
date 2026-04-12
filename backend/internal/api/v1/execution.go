@@ -7,7 +7,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -338,51 +337,7 @@ func (h *ExecutionHandler) previewArtifact(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Find the preview script
-	scriptPath := ""
-	for _, base := range []string{"scripts/preview_doc.py"} {
-		// Next to exe
-		if exe, err2 := os.Executable(); err2 == nil {
-			p := filepath.Join(filepath.Dir(exe), base)
-			if _, err2 := os.Stat(p); err2 == nil {
-				scriptPath = p
-				break
-			}
-		}
-		// CWD
-		if wd, err2 := os.Getwd(); err2 == nil {
-			p := filepath.Join(wd, base)
-			if _, err2 := os.Stat(p); err2 == nil {
-				scriptPath = p
-				break
-			}
-		}
-		// Walk up
-		if wd, err2 := os.Getwd(); err2 == nil {
-			dir := wd
-			for i := 0; i < 5; i++ {
-				p := filepath.Join(dir, base)
-				if _, err2 := os.Stat(p); err2 == nil {
-					scriptPath = p
-					break
-				}
-				parent := filepath.Dir(dir)
-				if parent == dir {
-					break
-				}
-				dir = parent
-			}
-		}
-	}
-
-	if scriptPath == "" {
-		http.Error(w, "preview script not found", http.StatusInternalServerError)
-		return
-	}
-
-	ctx := r.Context()
-	cmd := exec.CommandContext(ctx, "python3", scriptPath, fullPath)
-	out, err := cmd.Output()
+	out, err := tools.PreviewOfficeArtifact(fullPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("preview failed: %v", err), http.StatusInternalServerError)
 		return
@@ -392,7 +347,7 @@ func (h *ExecutionHandler) previewArtifact(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(out)
+	_, _ = w.Write([]byte(out))
 }
 
 // respondToInput POST /api/v1/tasks/{id}/respond

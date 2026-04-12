@@ -1,21 +1,18 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
-// DocxTool generates a professional Word document via a Python subprocess (python-docx).
+// DocxTool generates a professional Word document via a native Go OOXML builder.
 type DocxTool struct{}
 
-func (DocxTool) Name() string        { return "write_docx" }
+func (DocxTool) Name() string { return "write_docx" }
 func (DocxTool) Description() string {
 	return "Create a professional Word document (.docx) with headings, body text, bullet lists, and tables. " +
 		"Use this for reports, proposals, briefs, papers, and any formal document request."
@@ -84,10 +81,10 @@ func (DocxTool) InputSchema() map[string]any {
 }
 
 type docxArgs struct {
-	Filename string       `json:"filename"`
-	Title    string       `json:"title"`
-	Subtitle string       `json:"subtitle"`
-	Author   string       `json:"author"`
+	Filename string        `json:"filename"`
+	Title    string        `json:"title"`
+	Subtitle string        `json:"subtitle"`
+	Author   string        `json:"author"`
 	Sections []docxSection `json:"sections"`
 }
 
@@ -143,22 +140,9 @@ func (t DocxTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON 
 		return Err("create documents directory: %v", err)
 	}
 
-	// Build payload for Python script
-	payload, err := json.Marshal(map[string]any{
-		"title":    args.Title,
-		"subtitle": args.Subtitle,
-		"author":   args.Author,
-		"date":     time.Now().UTC().Format("January 2, 2006"),
-		"sections": args.Sections,
-	})
+	data, err := buildDOCX(args)
 	if err != nil {
-		return Err("marshal payload: %v", err)
-	}
-
-	// Try Python subprocess first
-	data, pyErr := buildDocxViaPython(ctx, payload)
-	if pyErr != nil {
-		return Err("docx generation failed: %v", pyErr)
+		return Err("docx generation failed: %v", err)
 	}
 
 	if err := os.WriteFile(absPath, data, 0o644); err != nil {
@@ -169,49 +153,4 @@ func (t DocxTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON 
 		fmt.Sprintf("Word document written to %s (%d bytes)", relPath, len(data)),
 		map[string]any{"path": relPath, "size": int64(len(data))},
 	)
-}
-
-func buildDocxViaPython(ctx context.Context, payload []byte) ([]byte, error) {
-	scriptPath, err := findDocxScript()
-	if err != nil {
-		return nil, fmt.Errorf("script not found: %w", err)
-	}
-
-	cmd := exec.CommandContext(ctx, "python3", scriptPath)
-	cmd.Stdin = bytes.NewReader(payload)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("python error: %v — %s", err, stderr.String())
-	}
-	if len(out) < 100 {
-		return nil, fmt.Errorf("python returned too-small output (%d bytes); stderr: %s", len(out), stderr.String())
-	}
-	return out, nil
-}
-
-func findDocxScript() (string, error) {
-	exe, _ := os.Executable()
-	candidates := []string{
-		filepath.Join(filepath.Dir(exe), "scripts", "gen_docx.py"),
-		filepath.Join("scripts", "gen_docx.py"),
-	}
-	// Walk up directories looking for scripts/gen_docx.py
-	dir, _ := os.Getwd()
-	for i := 0; i < 5; i++ {
-		candidates = append(candidates, filepath.Join(dir, "scripts", "gen_docx.py"))
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c, nil
-		}
-	}
-	return "", fmt.Errorf("gen_docx.py not found in any candidate path")
 }
