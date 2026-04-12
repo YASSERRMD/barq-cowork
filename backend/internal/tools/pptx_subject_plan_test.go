@@ -80,10 +80,13 @@ func TestPlanPPTXPresentation_PrefersExplicitDeckDesign(t *testing.T) {
 		"Guide for families",
 		[]pptxSlide{{Heading: "Why it matters", Type: "bullets", Points: []string{"Creativity tools are everywhere", "Families need practical guidance", "Children need safe exploration"}}},
 		pptxDeckDesignInput{
+			Subject:     "Kids and AI",
 			Audience:    "parents and educators",
+			Narrative:   "Context -> opportunities -> safeguards",
 			Theme:       "education",
 			VisualStyle: "playful classroom collage",
 			CoverStyle:  "playful",
+			ColorStory:  "bright classroom tones with soft contrast",
 			Motif:       "learning",
 			Kicker:      "A visual guide for curious learners",
 			Palette: &pptxPaletteInput{
@@ -106,6 +109,18 @@ func TestPlanPPTXPresentation_PrefersExplicitDeckDesign(t *testing.T) {
 	}
 	if planned.Palette.bg != "FFF6E5" || planned.Palette.accent != "F59E0B" {
 		t.Fatalf("expected explicit palette override, got %+v", planned.Palette)
+	}
+}
+
+func TestResolveDeckPalette_KeepsChosenVisualFamilyAccent(t *testing.T) {
+	palette := resolveDeckPalette("education", pptxDeckDesignInput{
+		VisualStyle: "bold studio poster",
+		CoverStyle:  "poster",
+		ColorStory:  "electric cobalt and rose",
+	}, "creative students")
+
+	if palette.accent != "4F46E5" || palette.accent2 != "A5B4FC" {
+		t.Fatalf("expected studio-light palette accents, got %+v", palette)
 	}
 }
 

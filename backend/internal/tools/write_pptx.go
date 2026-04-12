@@ -19,7 +19,7 @@ type WritePPTXTool struct{}
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
 	return "Create a professional PowerPoint presentation (.pptx) powered by the Barq PPTX Engine. " +
-		"Plans the full deck theme and layout first, then audits each slide for content fit, layout fit, and visual fit before rendering. " +
+		"Requires a complete deck design brief chosen by the model, then audits each slide for content fit, layout fit, and visual fit before rendering. " +
 		"Supports 10 rich slide types: bullets, stats, steps, cards, chart, timeline, compare, table, title, blank. " +
 		"Use this for ALL presentation, slides, deck, or slideshow requests. " +
 		"Saves to slides/<filename>.pptx."
@@ -88,10 +88,11 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"muted":      map[string]any{"type": "string", "description": "Optional custom muted text hex color"},
 			"border":     map[string]any{"type": "string", "description": "Optional custom border hex color"},
 		},
+		"required": []string{"background", "card", "accent", "accent2", "text", "muted", "border"},
 	}
 	deckSchema := map[string]any{
 		"type":        "object",
-		"description": "Deck-level design plan chosen by the model. Use this so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults.",
+		"description": "Required deck-level design plan chosen by the model. Fill this completely so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults.",
 		"properties": map[string]any{
 			"subject":      map[string]any{"type": "string", "description": "Explicit subject framing if it should differ from the title"},
 			"audience":     map[string]any{"type": "string", "description": "Who this presentation is for, e.g. 'parents and educators' or 'board members'"},
@@ -104,6 +105,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"kicker":       map[string]any{"type": "string", "description": "Optional short cover kicker shown above the title"},
 			"palette":      paletteSchema,
 		},
+		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "palette"},
 	}
 
 	return map[string]any{
@@ -189,7 +191,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 				},
 			},
 		},
-		"required": []string{"filename", "title", "slides"},
+		"required": []string{"filename", "title", "deck", "slides"},
 	}
 }
 
@@ -323,10 +325,6 @@ func resolveDeckPalette(themeName string, design pptxDeckDesignInput, audience s
 	if !ok {
 		pal = themepalettes["editorial-light"]
 	}
-
-	accent, accent2 := themeAccentColors(themeName)
-	pal.accent = accent
-	pal.accent2 = accent2
 	pal = overlayPaletteInput(pal, design.Palette)
 	return pal
 }
@@ -438,6 +436,59 @@ func normalizePaletteHex(value string) string {
 	return strings.ToUpper(value)
 }
 
+func missingDeckDesignFields(deck pptxDeckDesignInput) []string {
+	var missing []string
+	if strings.TrimSpace(deck.Subject) == "" {
+		missing = append(missing, "deck.subject")
+	}
+	if strings.TrimSpace(deck.Audience) == "" {
+		missing = append(missing, "deck.audience")
+	}
+	if strings.TrimSpace(deck.Narrative) == "" {
+		missing = append(missing, "deck.narrative")
+	}
+	if strings.TrimSpace(deck.Theme) == "" {
+		missing = append(missing, "deck.theme")
+	}
+	if strings.TrimSpace(deck.VisualStyle) == "" {
+		missing = append(missing, "deck.visual_style")
+	}
+	if strings.TrimSpace(deck.CoverStyle) == "" {
+		missing = append(missing, "deck.cover_style")
+	}
+	if strings.TrimSpace(deck.ColorStory) == "" {
+		missing = append(missing, "deck.color_story")
+	}
+	if strings.TrimSpace(deck.Motif) == "" {
+		missing = append(missing, "deck.motif")
+	}
+	if deck.Palette == nil {
+		missing = append(missing, "deck.palette")
+	} else {
+		missing = append(missing, missingPaletteFields(*deck.Palette)...)
+	}
+	return missing
+}
+
+func missingPaletteFields(palette pptxPaletteInput) []string {
+	var missing []string
+	fields := map[string]string{
+		"background": palette.Background,
+		"card":       palette.Card,
+		"accent":     palette.Accent,
+		"accent2":    palette.Accent2,
+		"text":       palette.Text,
+		"muted":      palette.Muted,
+		"border":     palette.Border,
+	}
+	for key, value := range fields {
+		if normalizePaletteHex(value) == "" {
+			missing = append(missing, "deck.palette."+key)
+		}
+	}
+	return missing
+}
+
 func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON string) Result {
 	var args pptxArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
@@ -448,6 +499,12 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	}
 	if args.Title == "" {
 		args.Title = strings.ReplaceAll(args.Filename, "-", " ")
+	}
+	if missing := missingDeckDesignFields(args.Deck); len(missing) > 0 {
+		return Err(
+			"deck design brief is required for write_pptx; missing or invalid: %s",
+			strings.Join(missing, ", "),
+		)
 	}
 
 	relPath := filepath.Join("slides", args.Filename+".pptx")

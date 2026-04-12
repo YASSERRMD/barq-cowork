@@ -21,12 +21,24 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 		"title":"AI in Healthcare: Operational Rollout",
 		"subtitle":"Executive presentation",
 		"deck":{
+			"subject":"AI in Healthcare: Operational Rollout",
 			"audience":"operations leaders",
+			"narrative":"Pressure points -> measured impact -> rollout decision",
 			"theme":"healthcare",
 			"visual_style":"editorial clinical",
 			"cover_style":"editorial",
+			"color_story":"cool clinical tones with calm contrast",
 			"motif":"health",
-			"kicker":"Operational care briefing"
+			"kicker":"Operational care briefing",
+			"palette":{
+				"background":"F5FAFE",
+				"card":"FFFFFF",
+				"accent":"0EA5E9",
+				"accent2":"67E8F9",
+				"text":"0F172A",
+				"muted":"64748B",
+				"border":"D6EAF4"
+			}
 		},
 		"slides":[
 			{"heading":"Current pressure points","type":"bullets","points":["Fragmented data across teams","Manual triage slows response","Leaders lack real-time visibility"]},
@@ -115,6 +127,23 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	}
 	if !strings.Contains(html, `data-layout="chart"`) || !strings.Contains(html, `data-layout="timeline"`) || !strings.Contains(html, `barq-preview-card-icon`) {
 		t.Fatalf("pptx preview did not render structured slide layouts: %s", html)
+	}
+}
+
+func TestWritePPTXTool_RejectsIncompleteDeckBrief(t *testing.T) {
+	ictx, _ := newTestCtx(t)
+	result := tools.WritePPTXTool{}.Execute(context.Background(), ictx, `{
+		"filename":"missing-design-brief",
+		"title":"Kids and AI",
+		"slides":[
+			{"heading":"Why it matters","type":"bullets","points":["Tools are everywhere","Families need guidance","Children need safe exploration"]}
+		]
+	}`)
+	if result.Status == tools.ResultOK {
+		t.Fatalf("expected incomplete deck brief to fail")
+	}
+	if !strings.Contains(result.Error, "deck design brief is required") {
+		t.Fatalf("expected deck brief validation error, got %q", result.Error)
 	}
 }
 
