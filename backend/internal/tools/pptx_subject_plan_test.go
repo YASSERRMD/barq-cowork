@@ -63,3 +63,13 @@ func TestPlanPPTXPresentation_FillsSubjectAwareFallbacks(t *testing.T) {
 		t.Fatalf("expected fallback table, got %+v", planned.Slides[2].Slide.Table)
 	}
 }
+
+func TestPickThemeName_PrefersEducationForKidsAudience(t *testing.T) {
+	theme := pickThemeName(
+		"Generative AI: Amazing Creativity for Kids!",
+		"Classroom introduction for children",
+	)
+	if theme != "education" {
+		t.Fatalf("expected education theme, got %q", theme)
+	}
+}

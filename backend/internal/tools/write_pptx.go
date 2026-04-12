@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // WritePPTXTool creates a real .pptx PowerPoint file.
@@ -37,7 +38,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 	cardItemSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"icon":  map[string]any{"type": "string", "description": "Emoji or symbol icon, e.g. '⚡'"},
+			"icon":  map[string]any{"type": "string", "description": "Semantic icon name, e.g. 'automation', 'shield', 'chart', or 'people'"},
 			"title": map[string]any{"type": "string", "description": "Card title (short, under 40 chars)"},
 			"desc":  map[string]any{"type": "string", "description": "One-sentence description"},
 		},
@@ -302,7 +303,7 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	if err := validatePPTXPresentation(planned); err != nil {
 		return Err("plan pptx: %v", err)
 	}
-	data, err := buildPPTX(args.Title, args.Subtitle, planned.Slides, planned.ThemeName)
+	data, err := buildPPTX(args.Title, args.Subtitle, planned)
 	if err != nil {
 		return Err("build pptx: %v", err)
 	}
@@ -338,144 +339,147 @@ func (g *idg) next() int { g.n++; return g.n }
 // pickThemeName selects a coordinated color theme for the entire presentation
 // based on keywords in the title/subtitle. Returns a theme name string.
 
-// hasWord checks if keyword appears as a whole word in text (space-delimited).
 func hasWord(text string, keywords ...string) bool {
-	padded := " " + text + " "
+	padded := normalizeThemeText(text)
 	for _, k := range keywords {
-		// For multi-word phrases, check substring; for single words, check word boundary.
-		if strings.Contains(k, " ") {
-			if strings.Contains(padded, k) {
-				return true
-			}
-		} else {
-			// Single word — must be surrounded by non-alpha characters.
-			idx := strings.Index(padded, k)
-			for idx != -1 {
-				before := idx > 0 && !isAlpha(padded[idx-1])
-				after := idx+len(k) < len(padded) && !isAlpha(padded[idx+len(k)])
-				if before && after {
-					return true
-				}
-				idx = strings.Index(padded[idx+1:], k)
-				if idx == -1 {
-					break
-				}
-				idx += strings.Index(padded, k) + 1 // re-anchor; simpler to just use Contains above
-				break                               // avoid infinite loop; substring found, not whole-word
-			}
-			// Simpler fallback: just prefix/suffix word check
-			if strings.Contains(padded, " "+k+" ") ||
-				strings.HasPrefix(padded, k+" ") ||
-				strings.HasSuffix(padded, " "+k) {
-				return true
-			}
+		if containsThemePhrase(padded, k) {
+			return true
 		}
 	}
 	return false
 }
 
-func isAlpha(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+type themeKeyword struct {
+	phrase string
+	weight int
+}
+
+func normalizeThemeText(text string) string {
+	var b strings.Builder
+	needsSpace := false
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			needsSpace = true
+			continue
+		}
+		if needsSpace {
+			b.WriteByte(' ')
+			needsSpace = false
+		}
+	}
+	return " " + strings.Join(strings.Fields(b.String()), " ") + " "
+}
+
+func containsThemePhrase(text, phrase string) bool {
+	normalizedPhrase := strings.TrimSpace(normalizeThemeText(phrase))
+	if normalizedPhrase == "" {
+		return false
+	}
+	return strings.Contains(text, " "+normalizedPhrase+" ")
+}
+
+func scoreTheme(text string, keywords []themeKeyword) int {
+	score := 0
+	for _, keyword := range keywords {
+		if containsThemePhrase(text, keyword.phrase) {
+			score += keyword.weight
+		}
+	}
+	return score
 }
 
 func pickThemeName(title, subtitle string) string {
-	c := strings.ToLower(title + " " + subtitle)
+	c := normalizeThemeText(title + " " + subtitle)
+	themeSignals := map[string][]themeKeyword{
+		"healthcare": {
+			{phrase: "health", weight: 2}, {phrase: "healthcare", weight: 3}, {phrase: "medical", weight: 3},
+			{phrase: "doctor", weight: 2}, {phrase: "hospital", weight: 3}, {phrase: "wellness", weight: 2},
+			{phrase: "biotech", weight: 2}, {phrase: "pharma", weight: 2}, {phrase: "clinical", weight: 3},
+			{phrase: "patient", weight: 3}, {phrase: "biology", weight: 2},
+		},
+		"education": {
+			{phrase: "education", weight: 3}, {phrase: "learning", weight: 2}, {phrase: "school", weight: 3},
+			{phrase: "student", weight: 3}, {phrase: "teacher", weight: 3}, {phrase: "training", weight: 2},
+			{phrase: "course", weight: 2}, {phrase: "curriculum", weight: 3}, {phrase: "university", weight: 2},
+			{phrase: "college", weight: 2}, {phrase: "classroom", weight: 3}, {phrase: "kid", weight: 4},
+			{phrase: "kids", weight: 4}, {phrase: "child", weight: 4}, {phrase: "children", weight: 4},
+			{phrase: "teen", weight: 3}, {phrase: "teens", weight: 3},
+		},
+		"environment": {
+			{phrase: "environment", weight: 3}, {phrase: "sustainability", weight: 3}, {phrase: "climate", weight: 3},
+			{phrase: "renewable", weight: 3}, {phrase: "solar", weight: 2}, {phrase: "carbon", weight: 2},
+			{phrase: "eco", weight: 1}, {phrase: "nature", weight: 2}, {phrase: "planet", weight: 2},
+		},
+		"finance": {
+			{phrase: "finance", weight: 3}, {phrase: "financial", weight: 3}, {phrase: "revenue", weight: 2},
+			{phrase: "business", weight: 2}, {phrase: "market", weight: 2}, {phrase: "investment", weight: 3},
+			{phrase: "startup", weight: 2}, {phrase: "profit", weight: 2}, {phrase: "sales", weight: 2},
+			{phrase: "economics", weight: 2}, {phrase: "budget", weight: 2}, {phrase: "investor", weight: 3},
+			{phrase: "funding", weight: 2}, {phrase: "bank", weight: 3},
+		},
+		"creative": {
+			{phrase: "design", weight: 3}, {phrase: "creative", weight: 3}, {phrase: "art", weight: 2},
+			{phrase: "brand", weight: 2}, {phrase: "marketing", weight: 2}, {phrase: "media", weight: 2},
+			{phrase: "visual", weight: 2}, {phrase: "photography", weight: 2}, {phrase: "film", weight: 2},
+			{phrase: "music", weight: 2}, {phrase: "fashion", weight: 2},
+		},
+		"security": {
+			{phrase: "security", weight: 3}, {phrase: "cyber", weight: 3}, {phrase: "cybersecurity", weight: 4},
+			{phrase: "threat", weight: 2}, {phrase: "hack", weight: 2}, {phrase: "ransomware", weight: 4},
+			{phrase: "firewall", weight: 3}, {phrase: "privacy", weight: 2}, {phrase: "compliance", weight: 2},
+			{phrase: "risk", weight: 2}, {phrase: "breach", weight: 3}, {phrase: "malware", weight: 4},
+			{phrase: "phishing", weight: 4}, {phrase: "government", weight: 1}, {phrase: "policy", weight: 1},
+			{phrase: "law", weight: 1}, {phrase: "regulation", weight: 2}, {phrase: "civic", weight: 1},
+		},
+		"data": {
+			{phrase: "data", weight: 3}, {phrase: "analytics", weight: 3}, {phrase: "bi", weight: 2},
+			{phrase: "warehouse", weight: 2}, {phrase: "databricks", weight: 3}, {phrase: "snowflake", weight: 3},
+			{phrase: "insight", weight: 2}, {phrase: "dashboard", weight: 2}, {phrase: "intelligence", weight: 2},
+		},
+		"logistics": {
+			{phrase: "logistics", weight: 3}, {phrase: "supply chain", weight: 4}, {phrase: "supply", weight: 2},
+			{phrase: "shipping", weight: 3}, {phrase: "transport", weight: 2}, {phrase: "fleet", weight: 3},
+			{phrase: "delivery", weight: 2}, {phrase: "warehouse", weight: 2},
+		},
+		"retail": {
+			{phrase: "retail", weight: 3}, {phrase: "shop", weight: 2}, {phrase: "ecommerce", weight: 3},
+			{phrase: "consumer", weight: 2}, {phrase: "merchandise", weight: 2}, {phrase: "store", weight: 2},
+		},
+		"hr": {
+			{phrase: "hr", weight: 3}, {phrase: "human resources", weight: 4}, {phrase: "human resource", weight: 4},
+			{phrase: "talent", weight: 3}, {phrase: "recruit", weight: 3}, {phrase: "employee", weight: 2},
+			{phrase: "workforce", weight: 3}, {phrase: "people ops", weight: 4},
+		},
+		"tech": {
+			{phrase: "ai", weight: 2}, {phrase: "technology", weight: 2}, {phrase: "software", weight: 3},
+			{phrase: "code", weight: 2}, {phrase: "developer", weight: 2}, {phrase: "digital", weight: 2},
+			{phrase: "data science", weight: 3}, {phrase: "neural", weight: 3}, {phrase: "cloud", weight: 2},
+			{phrase: "blockchain", weight: 3}, {phrase: "api", weight: 2}, {phrase: "programming", weight: 2},
+			{phrase: "artificial intelligence", weight: 4}, {phrase: "machine learning", weight: 4},
+			{phrase: "deep learning", weight: 4}, {phrase: "large language", weight: 4},
+			{phrase: "computer vision", weight: 4}, {phrase: "natural language", weight: 4},
+		},
+	}
+	themePriority := []string{"healthcare", "education", "environment", "finance", "creative", "security", "data", "logistics", "retail", "hr", "tech"}
 
-	// Tech multi-word phrases checked FIRST to avoid "machine learning" → education
-	if strings.Contains(c, "machine learning") || strings.Contains(c, "deep learning") ||
-		strings.Contains(c, "artificial intelligence") || strings.Contains(c, "large language") ||
-		strings.Contains(c, "neural network") || strings.Contains(c, "data science") ||
-		strings.Contains(c, "computer vision") || strings.Contains(c, "natural language") {
-		return "tech"
+	bestTheme := ""
+	bestScore := 0
+	for _, theme := range themePriority {
+		score := scoreTheme(c, themeSignals[theme])
+		if score > bestScore {
+			bestScore = score
+			bestTheme = theme
+		}
 	}
-	// Health / Medical — checked before generic tech because "healthcare technology" → Cyan
-	if hasWord(c, "health", "healthcare", "medical", "doctor", "hospital", "wellness",
-		"biotech", "pharma", "clinical", "patient", "covid", "biology") {
-		return "healthcare"
+	if bestTheme != "" {
+		return bestTheme
 	}
-	// Education / Learning / Kids — before generic "tech"
-	if hasWord(c, "education", "learning", "school", "student", "teacher", "training",
-		"course", "curriculum", "university", "college", "classroom", "kids", "children") {
-		return "education"
-	}
-	// Environment / Sustainability / Climate
-	if hasWord(c, "environment", "sustainability", "climate", "renewable", "solar",
-		"carbon", "eco", "nature", "planet") {
-		return "environment"
-	}
-	// Finance / Business / Revenue
-	if hasWord(c, "finance", "financial", "revenue", "business", "market", "investment",
-		"startup", "profit", "sales", "economics", "budget", "investor", "funding", "bank") {
-		return "finance"
-	}
-	// Creative / Design / Art / Brand
-	if hasWord(c, "design", "creative", "art", "brand", "marketing", "media",
-		"visual", "photography", "film", "music", "fashion") {
-		return "creative"
-	}
-	// Security / Cyber / Risk
-	if hasWord(c, "security", "cyber", "cybersecurity", "threat", "hack", "ransomware", "firewall",
-		"privacy", "compliance", "risk", "breach", "malware", "phishing") {
-		return "security"
-	}
-	// Data / Analytics / BI / Warehouse
-	if hasWord(c, "data", "analytics", "bi", "warehouse", "databrick", "snowflake",
-		"insight", "dashboard", "intelligence") {
-		return "data"
-	}
-	// Logistics / Supply Chain / Shipping
-	if hasWord(c, "logistics", "supply", "shipping", "transport", "fleet", "delivery",
-		"warehouse") {
-		return "logistics"
-	}
-	// Retail / E-commerce / Consumer
-	if hasWord(c, "retail", "shop", "ecommerce", "consumer", "merchandise", "store") {
-		return "retail"
-	}
-	// HR / Human Resources / Talent
-	if hasWord(c, "hr", "human resource", "talent", "recruit", "employee", "workforce",
-		"people ops") {
-		return "hr"
-	}
-	// Politics / Government / Policy
-	if hasWord(c, "politic", "government", "policy", "election", "vote", "congress",
-		"senate", "legislation", "democrat", "republican", "law", "regulation", "civic") {
-		return "security"
-	}
-	// Security / Cyber / Risk
-	if hasWord(c, "security", "cyber", "threat", "hack", "ransomware", "firewall",
-		"privacy", "compliance", "risk") {
-		return "security"
-	}
-	// Data / Analytics / BI / Warehouse
-	if hasWord(c, "data", "analytics", "bi", "warehouse", "databrick", "snowflake",
-		"insight", "dashboard", "intelligence") {
-		return "data"
-	}
-	// Logistics / Supply Chain / Shipping
-	if hasWord(c, "logistics", "supply", "shipping", "transport", "fleet", "delivery",
-		"warehouse") {
-		return "logistics"
-	}
-	// Retail / E-commerce / Consumer
-	if hasWord(c, "retail", "shop", "ecommerce", "consumer", "merchandise", "store") {
-		return "retail"
-	}
-	// HR / Human Resources / Talent
-	if hasWord(c, "hr", "human resource", "talent", "recruit", "employee", "workforce",
-		"people ops") {
-		return "hr"
-	}
-	// Technology / AI / Digital / Software — checked last as most generic
-	if hasWord(c, "ai", "technology", "software", "code", "developer", "digital",
-		"data science", "neural", "cloud", "cybersecurity", "blockchain", "api",
-		"programming", "artificial intelligence", "machine learning", "deep learning") {
-		return "tech"
-	}
+
 	// Default: pick based on hash for variety
 	themes := []string{"tech", "creative", "data", "logistics", "finance"}
 	idx := 0
-	for _, ch := range c {
+	for _, ch := range strings.TrimSpace(c) {
 		idx += int(ch)
 	}
 	return themes[idx%len(themes)]
@@ -1000,15 +1004,12 @@ func pptxContentSlide(s pptxSlide, pal pptxPalette) string {
 
 // ── PPTX builder ──────────────────────────────────────────────────────────────
 
-func buildPPTX(title, subtitle string, slides []plannedPPTXSlide, themeName string) ([]byte, error) {
+func buildPPTX(title, subtitle string, planned plannedPPTXPresentation) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	pal := paletteFor(themeName)
-	manifest, err := buildPPTXPreviewManifest(title, subtitle, plannedPPTXPresentation{
-		ThemeName: themeName,
-		Slides:    slides,
-	})
+	pal := paletteFor(planned.ThemeName)
+	manifest, err := buildPPTXPreviewManifest(title, subtitle, planned)
 	if err != nil {
 		return nil, fmt.Errorf("build pptx manifest: %w", err)
 	}
@@ -1018,7 +1019,7 @@ func buildPPTX(title, subtitle string, slides []plannedPPTXSlide, themeName stri
 		content string
 	}
 
-	totalSlides := len(slides) + 1
+	totalSlides := len(planned.Slides) + 1
 
 	entries := []entry{
 		{"[Content_Types].xml", pptxContentTypes(totalSlides)},
@@ -1042,10 +1043,10 @@ func buildPPTX(title, subtitle string, slides []plannedPPTXSlide, themeName stri
 		entry{"ppt/slides/_rels/slide1.xml.rels", pptxSlideRels("../slideLayouts/slideLayout1.xml")},
 	)
 
-	for i, planned := range slides {
+	for i, slide := range planned.Slides {
 		idx := i + 2
 		entries = append(entries,
-			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), renderDeckSlide(planned.Slide, pal, pptxDeckContext{Title: title, SlideCount: len(slides)}, i)},
+			entry{fmt.Sprintf("ppt/slides/slide%d.xml", idx), renderDeckSlide(slide.Slide, pal, pptxDeckContext{Title: title, SlideCount: len(planned.Slides)}, i)},
 			entry{fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", idx), pptxSlideRels("../slideLayouts/slideLayout2.xml")},
 		)
 	}
