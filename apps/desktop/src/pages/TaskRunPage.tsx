@@ -5,7 +5,7 @@ import {
   Play, FileText, Activity, Users, ChevronDown, ChevronRight,
   Clock, CheckCircle, XCircle, Loader, Circle, ArrowLeft,
   AlertTriangle, Download, Copy, Zap, Terminal, Maximize2, X,
-  MessageSquare, Send, HelpCircle, Bot,
+  Send, HelpCircle, Bot, PanelRight,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -935,6 +935,7 @@ export function TaskRunPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [sideTab, setSideTab] = useState<SideTab>("steps");
+  const [panelOpen, setPanelOpen] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewArtifact, setPreviewArtifact] = useState<Artifact | null>(null);
 
@@ -1090,12 +1091,7 @@ export function TaskRunPage() {
             )}
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-          {totalSteps > 0 && (
-            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-              {completedSteps}/{totalSteps} steps
-            </span>
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {task.started_at && (
             <span style={{ fontSize: 11.5, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 4 }}>
               <Clock size={11} />
@@ -1114,6 +1110,38 @@ export function TaskRunPage() {
                 : <><Play size={12} />Run Task</>}
             </button>
           )}
+          {/* Panel trigger buttons */}
+          {artifacts.length > 0 && (
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() => { setSideTab("artifacts"); setPanelOpen(v => !v); }}
+              style={{ gap: 5, color: panelOpen && sideTab === "artifacts" ? "var(--accent)" : undefined }}
+            >
+              <FileText size={13} />
+              Files {artifacts.length}
+            </button>
+          )}
+          {totalSteps > 0 && (
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() => { setSideTab("steps"); setPanelOpen(v => !v); }}
+              style={{ gap: 5, color: panelOpen && sideTab === "steps" ? "var(--accent)" : undefined }}
+            >
+              <Activity size={13} />
+              {completedSteps}/{totalSteps}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            style={{ padding: "4px 6px", color: panelOpen ? "var(--accent)" : undefined }}
+            onClick={() => setPanelOpen(v => !v)}
+            title="Toggle panel"
+          >
+            <PanelRight size={15} />
+          </button>
         </div>
       </div>
 
@@ -1150,177 +1178,161 @@ export function TaskRunPage() {
         </div>
       )}
 
-      {/* ── Body: Chat (main) + Sidebar ── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      {/* ── Body: Full-width chat + slide-out panel ── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
-        {/* ═══ MAIN AREA: Chat or Preview ═══ */}
-        <div style={{
-          flex: 1, minWidth: 0,
-          display: "flex", flexDirection: "column",
-          background: "var(--bg)",
-          borderRight: "1px solid var(--border)",
-        }}>
+        {/* ═══ FULL-WIDTH CHAT ═══ */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
           {previewArtifact ? (
             <ContentPreviewPanel
               artifact={previewArtifact}
               onClose={() => setPreviewArtifact(null)}
             />
           ) : (
-            <>
-              <ChatPanel
-                events={events}
-                pendingInputs={pendingInputs}
-                isActive={isActive}
-                taskStatus={task.status}
-                onRespond={(inputId, answer) => respondMutation.mutate({ inputId, answer })}
-                respondPending={respondMutation.isPending}
-              />
-            </>
+            <ChatPanel
+              events={events}
+              pendingInputs={pendingInputs}
+              isActive={isActive}
+              taskStatus={task.status}
+              onRespond={(inputId, answer) => respondMutation.mutate({ inputId, answer })}
+              respondPending={respondMutation.isPending}
+            />
           )}
         </div>
 
-        {/* ═══ RIGHT SIDEBAR ═══ */}
-        <div style={{
-          width: 340, flexShrink: 0,
-          display: "flex", flexDirection: "column",
-          background: "var(--surface-1)",
-        }}>
-          {/* Sidebar tabs */}
+        {/* ═══ SLIDE-OUT PANEL (overlay) ═══ */}
+        {panelOpen && (
           <div style={{
-            display: "flex", flexShrink: 0,
-            borderBottom: "1px solid var(--border)",
-            background: "var(--surface-2)",
+            position: "absolute", right: 0, top: 0, bottom: 0,
+            width: 380, background: "var(--surface-1)",
+            borderLeft: "1px solid var(--border)",
+            display: "flex", flexDirection: "column",
+            boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
+            zIndex: 20,
           }}>
-            {([
-              { id: "steps" as SideTab,     icon: Activity,     label: "Steps",     count: totalSteps },
-              { id: "artifacts" as SideTab, icon: FileText,     label: "Files",     count: artifacts.length },
-              { id: "events" as SideTab,    icon: Terminal,     label: "Events",    count: events.length },
-              { id: "agents" as SideTab,    icon: Users,        label: "Agents",    count: agents.length },
-            ]).map(({ id, icon: Icon, label, count }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setSideTab(id)}
-                style={{
-                  flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-                  gap: 3, padding: "9px 4px",
-                  background: "transparent", border: "none", cursor: "pointer",
-                  borderBottom: `2px solid ${sideTab === id ? "var(--accent)" : "transparent"}`,
-                  color: sideTab === id ? "var(--accent)" : "var(--text-muted)",
-                  transition: "all 120ms", marginBottom: -1,
-                  position: "relative",
-                }}
-              >
-                <Icon size={13} />
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em" }}>
+            {/* Panel header + tabs */}
+            <div style={{
+              display: "flex", alignItems: "center",
+              borderBottom: "1px solid var(--border)",
+              padding: "0 6px 0 4px",
+              flexShrink: 0, background: "var(--surface-1)",
+            }}>
+              {([
+                { id: "steps" as SideTab,     icon: Activity,  label: "Steps",  count: totalSteps },
+                { id: "artifacts" as SideTab, icon: FileText,  label: "Files",  count: artifacts.length },
+                { id: "events" as SideTab,    icon: Terminal,  label: "Events", count: events.length },
+                { id: "agents" as SideTab,    icon: Users,     label: "Agents", count: agents.length },
+              ]).map(({ id, icon: Icon, label, count }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setSideTab(id)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 5,
+                    padding: "10px 10px 9px",
+                    background: "transparent", border: "none", cursor: "pointer",
+                    borderBottom: `2px solid ${sideTab === id ? "var(--accent)" : "transparent"}`,
+                    color: sideTab === id ? "var(--accent)" : "var(--text-muted)",
+                    fontSize: 12, fontWeight: 600,
+                    transition: "all 120ms", marginBottom: -1,
+                  }}
+                >
+                  <Icon size={13} />
                   {label}
-                </span>
-                {count > 0 && (
-                  <span style={{
-                    position: "absolute", top: 5, right: 6,
-                    fontSize: 9, fontWeight: 700, color: sideTab === id ? "var(--accent)" : "var(--text-muted)",
-                    background: "var(--surface-3)",
-                    borderRadius: 10, padding: "0 4px", minWidth: 14, textAlign: "center",
-                    lineHeight: "14px",
-                  }}>
-                    {count}
-                  </span>
-                )}
-                {/* dot for artifacts new arrivals */}
-                {id === "artifacts" && artifacts.length > 0 && sideTab !== "artifacts" && (
-                  <div style={{
-                    position: "absolute", top: 5, right: 4,
-                    width: 6, height: 6, borderRadius: "50%",
-                    background: "var(--green)",
-                  }} />
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Sidebar content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
-            {sideTab === "steps" && (
-              <>
-                {plan && plan.steps.length > 0 ? (
-                  <div>
-                    <div style={{
-                      fontSize: 10.5, fontWeight: 600, letterSpacing: "0.07em",
-                      textTransform: "uppercase", color: "var(--text-faint)",
-                      marginBottom: 14,
+                  {count > 0 && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700,
+                      color: sideTab === id ? "var(--accent)" : "var(--text-faint)",
+                      background: "var(--surface-3)",
+                      borderRadius: 8, padding: "1px 5px",
                     }}>
-                      {plan.steps.length} step{plan.steps.length !== 1 ? "s" : ""} · {completedSteps} done
-                    </div>
-                    {plan.steps.map((step, idx) => (
-                      <StepItem
-                        key={step.id}
-                        step={step}
-                        expanded={expandedSteps.has(step.id)}
-                        onToggle={() => toggleStep(step.id)}
-                        isLast={idx === plan.steps.length - 1}
-                      />
-                    ))}
-                  </div>
-                ) : isActive ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "32px 0" }}>
-                    <Loader size={20} className="animate-spin" style={{ color: "var(--accent)" }} />
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Planning…</div>
-                  </div>
-                ) : task.status === "pending" ? (
-                  <div style={{ padding: "32px 0", textAlign: "center" }}>
-                    <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 16 }}>
-                      Steps will appear once the agent starts.
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ padding: "24px 0", textAlign: "center" }}>
-                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No steps recorded.</div>
-                  </div>
-                )}
+                      {count}
+                    </span>
+                  )}
+                </button>
+              ))}
+              <div style={{ flex: 1 }} />
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                style={{ padding: "4px 6px" }}
+                onClick={() => setPanelOpen(false)}
+              >
+                <X size={14} />
+              </button>
+            </div>
 
-                {/* Completion/failure banner */}
-                {task.status === "completed" && (
-                  <div style={{
-                    marginTop: 16, padding: "10px 14px",
-                    background: "rgba(52,211,153,0.06)",
-                    border: "1px solid rgba(52,211,153,0.2)",
-                    borderRadius: 9, display: "flex", alignItems: "center", gap: 8,
-                  }}>
-                    <CheckCircle size={14} color="var(--green)" />
+            {/* Panel content */}
+            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+              {sideTab === "steps" && (
+                <>
+                  {plan && plan.steps.length > 0 ? (
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--green)" }}>Completed</div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                        {formatDuration(task.started_at, task.completed_at)} · {artifacts.length} artifact{artifacts.length !== 1 ? "s" : ""}
+                      <div style={{
+                        fontSize: 10.5, fontWeight: 600, letterSpacing: "0.07em",
+                        textTransform: "uppercase", color: "var(--text-faint)", marginBottom: 14,
+                      }}>
+                        {plan.steps.length} step{plan.steps.length !== 1 ? "s" : ""} · {completedSteps} done
+                      </div>
+                      {plan.steps.map((step, idx) => (
+                        <StepItem
+                          key={step.id}
+                          step={step}
+                          expanded={expandedSteps.has(step.id)}
+                          onToggle={() => toggleStep(step.id)}
+                          isLast={idx === plan.steps.length - 1}
+                        />
+                      ))}
+                    </div>
+                  ) : isActive ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "40px 0" }}>
+                      <Loader size={20} className="animate-spin" style={{ color: "var(--accent)" }} />
+                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Planning…</div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: "32px 0", textAlign: "center", fontSize: 12, color: "var(--text-faint)" }}>
+                      No steps recorded.
+                    </div>
+                  )}
+                  {task.status === "completed" && (
+                    <div style={{
+                      marginTop: 16, padding: "10px 14px",
+                      background: "var(--green-dim)", border: "1px solid rgba(34,197,94,0.2)",
+                      borderRadius: 9, display: "flex", alignItems: "center", gap: 8,
+                    }}>
+                      <CheckCircle size={14} color="var(--green)" />
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--green)" }}>Completed</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {formatDuration(task.started_at, task.completed_at)} · {artifacts.length} file{artifacts.length !== 1 ? "s" : ""}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                {task.status === "failed" && (
-                  <div style={{
-                    marginTop: 16, padding: "10px 14px",
-                    background: "rgba(248,113,113,0.06)",
-                    border: "1px solid rgba(248,113,113,0.2)",
-                    borderRadius: 9, display: "flex", alignItems: "center", gap: 8,
-                  }}>
-                    <XCircle size={14} color="var(--red)" />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--red)" }}>Run failed</span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {sideTab === "artifacts" && (
-              <ArtifactsList
-                artifacts={artifacts}
-                onPreview={(a) => setPreviewArtifact(previewArtifact?.id === a.id ? null : a)}
-                previewId={previewArtifact?.id}
-              />
-            )}
-
-            {sideTab === "events" && <EventsList events={events} />}
-            {sideTab === "agents" && <AgentsList agents={agents} />}
+                  )}
+                  {task.status === "failed" && (
+                    <div style={{
+                      marginTop: 16, padding: "10px 14px",
+                      background: "var(--red-dim)", border: "1px solid rgba(239,68,68,0.2)",
+                      borderRadius: 9, display: "flex", alignItems: "center", gap: 8,
+                    }}>
+                      <XCircle size={14} color="var(--red)" />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--red)" }}>Run failed</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {sideTab === "artifacts" && (
+                <ArtifactsList
+                  artifacts={artifacts}
+                  onPreview={(a) => { setPreviewArtifact(previewArtifact?.id === a.id ? null : a); setPanelOpen(false); }}
+                  previewId={previewArtifact?.id}
+                />
+              )}
+              {sideTab === "events" && <EventsList events={events} />}
+              {sideTab === "agents" && <AgentsList agents={agents} />}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <style>{`
