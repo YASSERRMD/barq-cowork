@@ -41,28 +41,14 @@ Required fields: "filename", "title", "slides" (6-10 slides).
 Each slide MUST have: "heading" (≤60 chars) and "type".
 
 PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
-1. Plan the full presentation first: subject, audience, narrative arc, theme, and the mix of slide layouts.
+1. Plan the full presentation first: subject, audience, narrative arc, theme, visual style, cover style, color story, motif, and the mix of slide layouts.
 2. Only then plan each slide individually: choose the most suitable type, verify the slide has enough content, and check whether it needs icons, charts, diagrams, timelines, comparisons, or tables.
 3. Do not use a fixed deck template or the same layout repeatedly. The structure must come from the user's subject and explicit instructions.
 4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
-
-COLOR THEME — the engine auto-detects a theme from the title, but you should
-pick titles that clearly signal the topic domain for best color matching:
-  healthcare/medical → cyan/teal palette
-  tech/AI/software   → indigo/purple palette
-  education/learning → amber/gold palette
-  finance/business   → green palette
-  environment/climate→ teal/emerald palette
-  creative/design    → purple palette
-  security/cyber     → red palette
-  data/analytics     → teal palette
-  logistics/supply   → blue palette
-  retail/ecommerce   → orange palette
-  hr/talent          → pink palette
-Use descriptive titles like "AI in Healthcare: Transforming Patient Care"
-rather than vague ones like "Presentation about stuff".
+7. Use the optional "deck" object in the write_pptx tool call whenever possible. Set audience, theme, visual_style, cover_style, color_story, motif, and palette if you want the design to follow your plan exactly instead of using defaults.
+8. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
 
 TYPE REFERENCE — choose the right type per slide:
 
@@ -78,10 +64,22 @@ TYPE "steps"  → numbered process flow with arrows
   "steps": ["Define requirements","Design architecture","Build MVP","Test & iterate","Deploy"]
 
 TYPE "cards"  → icon feature grid (4-6 cards)
-  "cards": [{"icon":"⚡","title":"Speed","desc":"Sub-50ms response time"},
-            {"icon":"🔒","title":"Security","desc":"SOC2 Type II certified"},
-            {"icon":"🔌","title":"Integrations","desc":"200+ native connectors"},
-            {"icon":"📊","title":"Analytics","desc":"Real-time dashboards"}]
+  "cards": [{"icon":"automation","title":"Speed","desc":"Sub-50ms response time"},
+            {"icon":"shield","title":"Security","desc":"SOC2 Type II certified"},
+            {"icon":"integration","title":"Integrations","desc":"200+ native connectors"},
+            {"icon":"chart","title":"Analytics","desc":"Real-time dashboards"}]
+
+DECK OBJECT — use this to control the final presentation design directly:
+  "deck": {
+    "audience":"parents and educators",
+    "theme":"education",
+    "visual_style":"playful classroom collage",
+    "cover_style":"playful",
+    "color_story":"warm daylight tones with soft contrast",
+    "motif":"learning",
+    "kicker":"A visual guide for curious learners",
+    "palette":{"background":"FFF6E5","card":"FFFDF7","accent":"F59E0B","accent2":"FCD34D","text":"1F2937","muted":"6B7280","border":"E8D8B8"}
+  }
 
 TYPE "chart"  → full-slide native PowerPoint chart
   "chart_type": "column" | "bar" | "line" | "pie" | "doughnut" | "area"
