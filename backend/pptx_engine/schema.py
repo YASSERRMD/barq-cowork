@@ -201,6 +201,7 @@ class SlideContent(BaseModel):
     left_column: Optional[CompareColumn] = Field(default=None, description="Compare left column")
     right_column: Optional[CompareColumn] = Field(default=None, description="Compare right column")
     table: Optional[TableData] = Field(default=None, description="Table data")
+    y_label: Optional[str] = Field(default=None, description="Y-axis label for chart slides")
     image_url: Optional[str] = Field(default=None, description="Optional background/inset image URL")
     body_text: Optional[str] = Field(default=None, description="Free-form body text for blank slides")
 
