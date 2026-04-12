@@ -78,6 +78,18 @@ def _card_from_theme(theme: DeckTheme) -> RGBColor:
     return _h(theme.colors.surface)
 
 
+def _muted_from_theme(theme: DeckTheme) -> RGBColor:
+    return _h(theme.colors.text_muted)
+
+
+def _text_from_theme(theme: DeckTheme) -> RGBColor:
+    return _h(theme.colors.text)
+
+
+def _line_from_theme(theme: DeckTheme) -> RGBColor:
+    return _h(theme.colors.border)
+
+
 # ── Low-level XML primitives (mirror gen_pptx.py) ────────────────────────────
 
 def _spPr(shape):
@@ -821,16 +833,21 @@ class ChartSlideRenderer:
         ch_obj = gf.chart
         _chart_dark_bg(ch_obj, card, bg)
 
+        muted = _muted_from_theme(theme)
+        text_color = _text_from_theme(theme)
+        line_color = _line_from_theme(theme)
+
         if content.chart_title:
             ch_obj.has_title = True
             ch_obj.chart_title.text_frame.text = content.chart_title
             try:
-                ch_obj.chart_title.text_frame.paragraphs[0].runs[0].font.color.rgb = _WHITE
+                ch_obj.chart_title.text_frame.paragraphs[0].runs[0].font.color.rgb = text_color
                 ch_obj.chart_title.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
+                ch_obj.chart_title.text_frame.paragraphs[0].runs[0].font.bold = True
             except Exception:
                 pass
 
-        # Style series
+        # Style series with theme accent colors
         for i, ser in enumerate(ch_obj.series):
             try:
                 clr = accent_colors[i % len(accent_colors)]
@@ -843,15 +860,26 @@ class ChartSlideRenderer:
         if ch_obj.has_legend:
             ch_obj.legend.position = XL_LEGEND_POSITION.BOTTOM
             try:
-                ch_obj.legend.font.color.rgb = _MUTED
+                ch_obj.legend.font.color.rgb = muted
+                ch_obj.legend.font.size = Pt(10)
             except Exception:
                 pass
 
         try:
-            _style_axis(ch_obj.category_axis, _MUTED, _LINE)
-            _style_axis(ch_obj.value_axis, _MUTED, _LINE)
+            _style_axis(ch_obj.category_axis, muted, line_color)
+            _style_axis(ch_obj.value_axis, muted, line_color)
         except Exception:
             pass
+
+        # Y-axis label if provided
+        if content.y_label:
+            try:
+                ch_obj.value_axis.axis_title.text_frame.text = content.y_label
+                ch_obj.value_axis.axis_title.text_frame.paragraphs[0].runs[0].font.color.rgb = muted
+                ch_obj.value_axis.axis_title.text_frame.paragraphs[0].runs[0].font.size = Pt(9)
+                ch_obj.value_axis.has_title = True
+            except Exception:
+                pass
 
 
 class TimelineSlideRenderer:
