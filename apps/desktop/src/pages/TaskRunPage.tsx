@@ -5,7 +5,7 @@ import {
   Play, FileText, Activity, Users, ChevronDown, ChevronRight,
   Clock, CheckCircle, XCircle, Loader, Circle, ArrowLeft,
   AlertTriangle, Download, Copy, Zap, Terminal, Maximize2, X,
-  PanelRight, MessageSquare, Send,
+  PanelRight, MessageSquare, Send, HelpCircle,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -198,7 +198,7 @@ function StepItem({
 
 // ── Right panel tabs ──────────────────────────────────────────────
 
-type RightTab = "artifacts" | "events" | "agents";
+type RightTab = "artifacts" | "chat" | "events" | "agents";
 
 function ArtifactsPanel({
   artifacts,
@@ -241,18 +241,21 @@ function ArtifactsPanel({
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
               {onPreview && (
                 <button
+                  type="button"
                   className="btn-ghost btn-xs"
                   title={a.id === previewId ? "Close preview" : "Preview"}
-                  onClick={() => onPreview(a)}
-                  style={{ color: a.id === previewId ? "var(--accent)" : undefined }}
+                  onClick={(e) => { e.stopPropagation(); onPreview(a); }}
+                  style={{ color: a.id === previewId ? "var(--accent)" : undefined, cursor: "pointer" }}
                 >
                   <PanelRight size={11} />
                 </button>
               )}
               <button
+                type="button"
                 className="btn-ghost btn-xs"
                 title="Copy path"
-                onClick={() => navigator.clipboard.writeText(a.content_path || a.name)}
+                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.content_path || a.name); }}
+                style={{ cursor: "pointer" }}
               >
                 <Copy size={11} />
               </button>
@@ -293,6 +296,287 @@ function ArtifactsPanel({
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Chat UI ───────────────────────────────────────────────────────
+
+interface ChatMessage {
+  id: string;
+  kind: "agent" | "user" | "system";
+  text: string;
+  isQuestion?: boolean;
+  inputId?: string;
+  timestamp: string;
+}
+
+function buildChatMessages(
+  events: TaskEvent[],
+  localUserMessages: { id: string; text: string; timestamp: string }[],
+  answeredInputIds: Record<string, string>,
+): ChatMessage[] {
+  const msgs: ChatMessage[] = [];
+
+  for (const ev of events) {
+    if (ev.type === "agent.message") {
+      let text = "";
+      try {
+        const p = JSON.parse(ev.payload || "{}");
+        text = p.text || "";
+      } catch { text = ev.payload || ""; }
+      if (text) {
+        msgs.push({ id: ev.id, kind: "agent", text, timestamp: ev.created_at });
+      }
+    } else if (ev.type === "input.needed") {
+      let question = "";
+      let inputId = "";
+      try {
+        const p = JSON.parse(ev.payload || "{}");
+        question = p.question || p.message || ev.payload || "";
+        inputId = p.input_id || p.id || ev.id;
+      } catch { question = ev.payload || ""; inputId = ev.id; }
+      if (question) {
+        msgs.push({ id: ev.id, kind: "agent", text: question, isQuestion: true, inputId, timestamp: ev.created_at });
+        // If already answered, add the answer as a user bubble
+        if (answeredInputIds[inputId]) {
+          msgs.push({ id: `answered-${inputId}`, kind: "user", text: answeredInputIds[inputId], timestamp: ev.created_at });
+        }
+      }
+    } else if (ev.type === "input.answered") {
+      let answer = "";
+      try {
+        const p = JSON.parse(ev.payload || "{}");
+        answer = p.answer || p.text || "";
+      } catch { answer = ev.payload || ""; }
+      // Only add if not already shown via answeredInputIds
+      if (answer) {
+        msgs.push({ id: ev.id, kind: "user", text: answer, timestamp: ev.created_at });
+      }
+    } else if (ev.type === "step.started") {
+      let tool = "";
+      try { tool = JSON.parse(ev.payload || "{}").tool || ""; } catch { /* noop */ }
+      msgs.push({ id: ev.id, kind: "system", text: `Running ${tool || "step"}…`, timestamp: ev.created_at });
+    } else if (ev.type === "step.completed") {
+      let tool = "";
+      try { tool = JSON.parse(ev.payload || "{}").tool || ""; } catch { /* noop */ }
+      msgs.push({ id: ev.id, kind: "system", text: `${tool || "Step"} completed`, timestamp: ev.created_at });
+    } else if (ev.type === "artifact.ready") {
+      let name = "";
+      try { name = JSON.parse(ev.payload || "{}").name || ""; } catch { /* noop */ }
+      const fileName = name.split("/").pop() || name || "file";
+      msgs.push({ id: ev.id, kind: "system", text: `Artifact ready: ${fileName}`, timestamp: ev.created_at });
+    }
+  }
+
+  // Merge local user messages that aren't already in the list
+  for (const lm of localUserMessages) {
+    if (!msgs.find(m => m.id === lm.id)) {
+      msgs.push({ id: lm.id, kind: "user", text: lm.text, timestamp: lm.timestamp });
+    }
+  }
+
+  // Sort by timestamp
+  msgs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  return msgs;
+}
+
+function ChatPanel({
+  events,
+  pendingInputs,
+  isActive,
+  onRespond,
+  respondPending,
+}: {
+  events: TaskEvent[];
+  pendingInputs: PendingInput[];
+  isActive: boolean;
+  onRespond: (inputId: string, answer: string) => void;
+  respondPending: boolean;
+}) {
+  const [inputText, setInputText] = useState("");
+  const [localUserMessages, setLocalUserMessages] = useState<{ id: string; text: string; timestamp: string }[]>([]);
+  const [answeredInputIds, setAnsweredInputIds] = useState<Record<string, string>>({});
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const hasPendingInput = pendingInputs.length > 0;
+  const pendingInput = pendingInputs[0];
+
+  const messages = buildChatMessages(events, localUserMessages, answeredInputIds);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  const handleSend = () => {
+    const text = inputText.trim();
+    if (!text) return;
+
+    if (hasPendingInput && pendingInput) {
+      // Answer the pending question
+      setAnsweredInputIds(prev => ({ ...prev, [pendingInput.id]: text }));
+      onRespond(pendingInput.id, text);
+    } else {
+      // Store locally as a user message
+      setLocalUserMessages(prev => [...prev, {
+        id: `local-${Date.now()}`,
+        text,
+        timestamp: new Date().toISOString(),
+      }]);
+    }
+    setInputText("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  if (!events.length && !isActive) {
+    return (
+      <div className="empty-state" style={{ padding: "32px 16px" }}>
+        <div className="empty-state-icon"><MessageSquare size={16} color="var(--text-faint)" /></div>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No messages yet. Run the task to start.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      {/* Messages */}
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1, overflowY: "auto", padding: "12px 10px",
+          display: "flex", flexDirection: "column", gap: 6,
+          minHeight: 0,
+        }}
+      >
+        {messages.length === 0 && isActive && (
+          <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-faint)", fontSize: 12 }}>
+            <Loader size={14} className="animate-spin" style={{ margin: "0 auto 8px", display: "block" }} />
+            Agent is starting…
+          </div>
+        )}
+
+        {messages.map((msg) => {
+          if (msg.kind === "system") {
+            return (
+              <div key={msg.id} style={{ display: "flex", justifyContent: "center", margin: "2px 0" }}>
+                <span style={{
+                  fontSize: 10.5, color: "var(--text-faint)",
+                  background: "var(--surface-3)", border: "1px solid var(--border)",
+                  borderRadius: 20, padding: "2px 10px",
+                  maxWidth: "85%", textAlign: "center",
+                }}>
+                  {msg.text}
+                </span>
+              </div>
+            );
+          }
+
+          if (msg.kind === "agent") {
+            return (
+              <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, maxWidth: "85%" }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  paddingLeft: 4,
+                }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: "50%",
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: 10, color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.04em" }}>
+                    Agent
+                  </span>
+                  {msg.isQuestion && (
+                    <HelpCircle size={10} color="#a78bfa" />
+                  )}
+                </div>
+                <div style={{
+                  background: "#1E1B4B",
+                  border: msg.isQuestion ? "1.5px solid #7c3aed" : "1px solid rgba(99,102,241,0.25)",
+                  borderRadius: "4px 12px 12px 12px",
+                  padding: "8px 12px",
+                  fontSize: 12.5, color: "#A5B4FC", lineHeight: 1.6,
+                  wordBreak: "break-word",
+                  boxShadow: msg.isQuestion ? "0 0 0 2px rgba(124,58,237,0.15)" : "none",
+                }}>
+                  {msg.text}
+                </div>
+                {msg.isQuestion && (
+                  <div style={{ fontSize: 10, color: "#7c3aed", paddingLeft: 4, fontWeight: 500 }}>
+                    Waiting for your reply
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // user
+          return (
+            <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, maxWidth: "85%", alignSelf: "flex-end" }}>
+              <span style={{ fontSize: 10, color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.04em", paddingRight: 4 }}>
+                You
+              </span>
+              <div style={{
+                background: "var(--accent)",
+                borderRadius: "12px 4px 12px 12px",
+                padding: "8px 12px",
+                fontSize: 12.5, color: "#fff", lineHeight: 1.6,
+                wordBreak: "break-word",
+              }}>
+                {msg.text}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Input area */}
+      {(isActive || hasPendingInput) && (
+        <div style={{
+          flexShrink: 0,
+          padding: "8px 10px",
+          borderTop: "1px solid var(--border)",
+          background: "var(--surface-2)",
+          display: "flex", gap: 6, alignItems: "flex-end",
+        }}>
+          <textarea
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={hasPendingInput ? "Reply to agent…" : "Send a message…"}
+            rows={1}
+            style={{
+              flex: 1, resize: "none", background: "var(--surface-3)",
+              border: `1px solid ${hasPendingInput ? "rgba(124,58,237,0.4)" : "var(--border)"}`,
+              borderRadius: 8, padding: "7px 10px",
+              fontSize: 12.5, color: "var(--text-primary)", outline: "none",
+              lineHeight: 1.5, maxHeight: 100, overflowY: "auto",
+              fontFamily: "inherit",
+            }}
+            autoFocus={hasPendingInput}
+          />
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            onClick={handleSend}
+            disabled={!inputText.trim() || respondPending}
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, height: 34 }}
+          >
+            {respondPending ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
+            Send
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -420,6 +704,13 @@ function ContentPreviewPanel({
   }, [artifact.id, artifact.type, artifact.content_inline, artifact.content_path, downloadUrl]);
 
   const fileName = artifact.name.split("/").pop() || artifact.name;
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+
+  const fileEmoji =
+    ext === "pptx" ? "📊" :
+    ext === "docx" ? "📄" :
+    ext === "pdf"  ? "📕" :
+    ext === "xlsx" ? "📈" : null;
 
   return (
     <div style={{
@@ -451,6 +742,7 @@ function ContentPreviewPanel({
           <Download size={12} />
         </a>
         <button
+          type="button"
           className="btn-ghost btn-xs"
           onClick={onClose}
           title="Close preview"
@@ -469,10 +761,7 @@ function ContentPreviewPanel({
             color: "var(--text-primary)",
           }}>
             {markdownContent != null ? (
-              <div className="markdown-preview" style={{
-                maxWidth: "100%",
-                wordBreak: "break-word",
-              }}>
+              <div className="markdown-preview" style={{ maxWidth: "100%", wordBreak: "break-word" }}>
                 <ReactMarkdown>{markdownContent}</ReactMarkdown>
               </div>
             ) : loadError ? (
@@ -488,7 +777,7 @@ function ContentPreviewPanel({
         {artifact.type === "html" && (
           <iframe
             src={downloadUrl}
-            style={{ width: "100%", flex: 1, border: "none", background: "#fff", display: "block" }}
+            style={{ width: "100%", flex: 1, border: "none", background: "#fff", display: "block", height: "100%" }}
             title={fileName}
             sandbox="allow-scripts allow-same-origin"
           />
@@ -501,52 +790,66 @@ function ContentPreviewPanel({
         {(artifact.type !== "markdown" && artifact.type !== "html" && artifact.type !== "json") && (
           <div style={{
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            height: "100%", gap: 16, padding: 32,
+            height: "100%", gap: 20, padding: 32,
           }}>
             {/* File type icon */}
             <div style={{
-              width: 64, height: 64, borderRadius: 16,
-              background: artifact.type === "file" && fileName.endsWith(".pptx")
+              width: 72, height: 72, borderRadius: 18,
+              background: ext === "pptx"
                 ? "rgba(249,115,22,0.12)"
-                : artifact.type === "file" && fileName.endsWith(".docx")
+                : ext === "docx"
                 ? "rgba(59,130,246,0.12)"
+                : ext === "pdf"
+                ? "rgba(239,68,68,0.12)"
+                : ext === "xlsx"
+                ? "rgba(34,197,94,0.12)"
                 : "var(--accent-dim)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 28,
+              fontSize: 36,
             }}>
-              {fileName.endsWith(".pptx") ? "📊"
-                : fileName.endsWith(".docx") ? "📄"
-                : fileName.endsWith(".pdf")  ? "📕"
-                : fileName.endsWith(".xlsx") ? "📈"
-                : <FileText size={28} color="var(--accent)" />}
+              {fileEmoji || <FileText size={32} color="var(--accent)" />}
             </div>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, wordBreak: "break-all" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, wordBreak: "break-all" }}>
                 {fileName}
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
-                {artifact.type.toUpperCase()} · {formatBytes(artifact.size)}
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>
+                {ext.toUpperCase()} · {formatBytes(artifact.size)}
               </div>
               {artifact.content_path && (
                 <div style={{
                   fontSize: 10.5, color: "var(--text-faint)", fontFamily: "monospace",
-                  marginBottom: 16, wordBreak: "break-all",
-                  background: "var(--surface-2)", padding: "4px 8px", borderRadius: 5,
+                  marginBottom: 20, wordBreak: "break-all",
+                  background: "var(--surface-2)", padding: "4px 10px", borderRadius: 6,
+                  border: "1px solid var(--border)",
                 }}>
                   {artifact.content_path}
                 </div>
               )}
-              <a
-                href={downloadUrl}
-                download
-                className="btn-primary"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, textDecoration: "none" }}
-              >
-                <Download size={13} />
-                Download {fileName.split(".").pop()?.toUpperCase()}
-              </a>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                <a
+                  href={downloadUrl}
+                  download
+                  className="btn-primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, textDecoration: "none", padding: "8px 20px" }}
+                >
+                  <Download size={14} />
+                  Download {ext.toUpperCase()}
+                </a>
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost btn-sm"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, textDecoration: "none" }}
+                >
+                  <Maximize2 size={12} />
+                  Open with system app
+                </a>
+              </div>
             </div>
             <button
+              type="button"
               className="btn-ghost btn-sm"
               onClick={() => navigator.clipboard.writeText(artifact.content_path || artifact.name)}
               style={{ fontSize: 11 }}
@@ -566,7 +869,7 @@ export function TaskRunPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [rightTab, setRightTab] = useState<RightTab>("artifacts");
+  const [rightTab, setRightTab] = useState<RightTab>("chat");
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewArtifact, setPreviewArtifact] = useState<Artifact | null>(null);
   const [inputAnswers, setInputAnswers] = useState<Record<string, string>>({});
@@ -656,6 +959,13 @@ export function TaskRunPage() {
     }
   }, [artifacts.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Switch to Chat tab when task becomes active
+  useEffect(() => {
+    if (isActive && rightTab === "artifacts") {
+      setRightTab("chat");
+    }
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const pendingApprovals = approvals.filter(
     (a) => a.task_id === taskId && a.status === "pending"
   );
@@ -663,6 +973,11 @@ export function TaskRunPage() {
   const completedSteps = plan?.steps.filter((s) => s.status === "completed").length ?? 0;
   const totalSteps = plan?.steps.length ?? 0;
   const progress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+
+  // Chat message count (agent messages + input.needed events)
+  const chatEventCount = events.filter(e =>
+    e.type === "agent.message" || e.type === "input.needed" || e.type === "input.answered"
+  ).length;
 
   if (taskLoading) return (
     <div style={{ padding: 24 }}>
@@ -688,6 +1003,7 @@ export function TaskRunPage() {
         flexShrink: 0, background: "var(--surface-1)",
       }}>
         <button
+          type="button"
           className="btn-ghost btn-sm"
           style={{ padding: "4px 6px" }}
           onClick={() => navigate(task.project_id ? `/projects/${task.project_id}/tasks` : "/runs")}
@@ -726,6 +1042,7 @@ export function TaskRunPage() {
           )}
           {task.status === "pending" && (
             <button
+              type="button"
               className="btn-primary btn-sm"
               disabled={runMutation.isPending}
               onClick={() => runMutation.mutate()}
@@ -766,60 +1083,8 @@ export function TaskRunPage() {
                 <code style={{ fontFamily: "monospace", background: "var(--surface-3)", padding: "1px 5px", borderRadius: 3, fontSize: 11 }}>{ap.tool_name}</code>
                 {" "}— {ap.action}
               </span>
-              <button className="btn-primary btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "approved" })}>Approve</button>
-              <button className="btn-danger btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "rejected" })}>Reject</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Ask-user input banner ── */}
-      {pendingInputs.length > 0 && (
-        <div style={{
-          background: "rgba(139,92,246,0.07)",
-          borderBottom: "1px solid rgba(139,92,246,0.22)",
-          padding: "12px 20px", flexShrink: 0,
-          display: "flex", flexDirection: "column", gap: 10,
-        }}>
-          {pendingInputs.map((pi) => (
-            <div key={pi.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                <MessageSquare size={14} color="#a78bfa" style={{ flexShrink: 0, marginTop: 2 }} />
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa" }}>Agent is asking: </span>
-                  <span style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.5 }}>{pi.question}</span>
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 8, paddingLeft: 22 }}>
-                <input
-                  ref={el => { inputRefs.current[pi.id] = el; }}
-                  type="text"
-                  placeholder="Type your answer…"
-                  value={inputAnswers[pi.id] ?? ""}
-                  onChange={e => setInputAnswers(prev => ({ ...prev, [pi.id]: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      respondMutation.mutate({ inputId: pi.id, answer: inputAnswers[pi.id] ?? "" });
-                    }
-                  }}
-                  style={{
-                    flex: 1, background: "var(--surface-2)", border: "1px solid rgba(139,92,246,0.35)",
-                    borderRadius: 7, padding: "6px 10px", fontSize: 12,
-                    color: "var(--text-primary)", outline: "none",
-                  }}
-                  autoFocus
-                />
-                <button
-                  className="btn-primary btn-sm"
-                  disabled={respondMutation.isPending}
-                  onClick={() => respondMutation.mutate({ inputId: pi.id, answer: inputAnswers[pi.id] ?? "" })}
-                  style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: 10, paddingRight: 10 }}
-                >
-                  {respondMutation.isPending ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
-                  Send
-                </button>
-              </div>
+              <button type="button" className="btn-primary btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "approved" })}>Approve</button>
+              <button type="button" className="btn-danger btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "rejected" })}>Reject</button>
             </div>
           ))}
         </div>
@@ -868,7 +1133,7 @@ export function TaskRunPage() {
               <div style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 16 }}>
                 Ready to execute. Click Run to start the agent.
               </div>
-              <button className="btn-primary" disabled={runMutation.isPending} onClick={() => runMutation.mutate()}>
+              <button type="button" className="btn-primary" disabled={runMutation.isPending} onClick={() => runMutation.mutate()}>
                 <Play size={14} /> {runMutation.isPending ? "Starting…" : "Run Task"}
               </button>
             </div>
@@ -932,12 +1197,14 @@ export function TaskRunPage() {
             display: "flex", borderBottom: "1px solid var(--border)", flexShrink: 0,
           }}>
             {([
-              { id: "artifacts", icon: FileText, label: "Artifacts", count: artifacts.length },
-              { id: "events",    icon: Activity, label: "Events",    count: events.length },
-              { id: "agents",    icon: Users,    label: "Agents",    count: agents.length },
+              { id: "chat",      icon: MessageSquare, label: "Chat",      count: chatEventCount + pendingInputs.length },
+              { id: "artifacts", icon: FileText,      label: "Artifacts", count: artifacts.length },
+              { id: "events",    icon: Activity,      label: "Events",    count: events.length },
+              { id: "agents",    icon: Users,         label: "Agents",    count: agents.length },
             ] as { id: RightTab; icon: React.ElementType; label: string; count: number }[]).map(({ id, icon: Icon, label, count }) => (
               <button
                 key={id}
+                type="button"
                 onClick={() => setRightTab(id)}
                 style={{
                   flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
@@ -946,27 +1213,55 @@ export function TaskRunPage() {
                   borderBottom: `2px solid ${rightTab === id ? "var(--accent)" : "transparent"}`,
                   color: rightTab === id ? "#a5b4fc" : "var(--text-faint)",
                   transition: "all 120ms", marginBottom: -1,
+                  position: "relative",
                 }}
               >
                 <Icon size={13} />
                 <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em" }}>
                   {label}{count > 0 ? ` (${count})` : ""}
                 </span>
+                {/* Red dot for pending inputs on Chat tab */}
+                {id === "chat" && pendingInputs.length > 0 && (
+                  <div style={{
+                    position: "absolute", top: 5, right: 8,
+                    width: 7, height: 7, borderRadius: "50%",
+                    background: "#7c3aed",
+                  }} />
+                )}
               </button>
             ))}
           </div>
 
           {/* Panel content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            {rightTab === "artifacts" && (
-              <ArtifactsPanel
-                artifacts={artifacts}
-                onPreview={(a) => setPreviewArtifact(previewArtifact?.id === a.id ? null : a)}
-                previewId={previewArtifact?.id}
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
+            {rightTab === "chat" && (
+              <ChatPanel
+                events={events}
+                pendingInputs={pendingInputs}
+                isActive={isActive}
+                onRespond={(inputId, answer) => respondMutation.mutate({ inputId, answer })}
+                respondPending={respondMutation.isPending}
               />
             )}
-            {rightTab === "events"    && <EventsPanel events={events} />}
-            {rightTab === "agents"    && <AgentsPanel agents={agents} />}
+            {rightTab === "artifacts" && (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <ArtifactsPanel
+                  artifacts={artifacts}
+                  onPreview={(a) => setPreviewArtifact(previewArtifact?.id === a.id ? null : a)}
+                  previewId={previewArtifact?.id}
+                />
+              </div>
+            )}
+            {rightTab === "events" && (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <EventsPanel events={events} />
+              </div>
+            )}
+            {rightTab === "agents" && (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <AgentsPanel agents={agents} />
+              </div>
+            )}
           </div>
         </div>
       </div>
