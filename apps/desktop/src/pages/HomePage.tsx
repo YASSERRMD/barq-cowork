@@ -516,9 +516,7 @@ export function HomePage() {
     refetchInterval: (query) => {
       const list = query.state.data as Task[] | undefined;
       if (!list) return 5000;
-      const hasActive = list.some(
-        (t) => t.status === "planning" || t.status === "running"
-      );
+      const hasActive = list.some((t) => t.status === "planning" || t.status === "running");
       return hasActive ? 2000 : 5000;
     },
   });
@@ -529,219 +527,153 @@ export function HomePage() {
     enabled: backendReachable,
   });
 
-  const activeTask = tasks.find(
-    (t) => t.status === "planning" || t.status === "running"
-  );
-
+  const activeTask = tasks.find((t) => t.status === "planning" || t.status === "running");
+  const recentTasks = tasks.slice(0, 8);
   const goToRun = (taskId: string) => navigate(`/tasks/${taskId}/run`);
 
   return (
-    <div
-      className="page-enter"
-      style={{
-        height: "100%",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        background: "var(--bg)",
-      }}
-    >
-      {/* Top bar */}
-      <div
-        style={{
-          height: "var(--topbar-h)",
-          borderBottom: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 24px",
-          flexShrink: 0,
-          background: "var(--surface-1)",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--text-primary)",
-            letterSpacing: "-0.015em",
-          }}
-        >
-          Home
-        </span>
+    <div className="page-enter" style={{ height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
+
+      {/* ── Slim top bar ── */}
+      <div style={{
+        height: "var(--topbar-h)", borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", padding: "0 24px",
+        flexShrink: 0, background: "var(--surface-1)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: 6,
+            background: "var(--accent)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Zap size={11} color="#fff" strokeWidth={2.5} />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+            Barq
+          </span>
+        </div>
         <div style={{ flex: 1 }} />
-        <button className="btn-ghost btn-sm" onClick={() => navigate("/runs")}>
-          All runs
+        {activeTask && (
+          <button
+            className="btn-ghost btn-sm"
+            onClick={() => goToRun(activeTask.id)}
+            style={{ gap: 6, color: "var(--yellow)" }}
+          >
+            <Loader size={12} className="animate-spin" />
+            Running…
+          </button>
+        )}
+        <button className="btn-ghost btn-sm" style={{ marginLeft: 4 }} onClick={() => navigate("/runs")}>
+          History
           <ChevronRight size={12} />
         </button>
       </div>
 
-      {/* Scrollable content */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "32px 0",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 740,
-            margin: "0 auto",
-            padding: "0 24px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 32,
-          }}
-        >
-          {/* Header */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <h1
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                letterSpacing: "-0.03em",
-                margin: 0,
-                lineHeight: 1.2,
-              }}
-            >
-              What do you want to do?
-            </h1>
-            <p
-              style={{
-                fontSize: 13.5,
-                color: "var(--text-secondary)",
-                margin: 0,
-              }}
-            >
-              Describe a task — summarize, transform, organize, or generate files and documents.
-            </p>
+      {/* ── Main: two-column layout ── */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+
+        {/* Left: Composer + suggestions (centered) */}
+        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+
+          {/* Hero area */}
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            padding: "48px 40px 32px",
+            minHeight: 340,
+          }}>
+            <div style={{ width: "100%", maxWidth: 680 }}>
+              {/* Greeting */}
+              <div style={{ marginBottom: 28, textAlign: "center" }}>
+                <h1 style={{
+                  fontSize: 30, fontWeight: 700, color: "var(--text-primary)",
+                  letterSpacing: "-0.04em", margin: "0 0 8px",
+                  lineHeight: 1.15,
+                }}>
+                  What can I help you with?
+                </h1>
+                <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
+                  Describe a task and your AI agent will take care of it.
+                </p>
+              </div>
+
+              {/* Composer */}
+              {!backendReachable ? (
+                <div style={{
+                  padding: "18px 20px", background: "var(--surface-2)",
+                  border: "1px solid var(--border)", borderRadius: 14,
+                  textAlign: "center", color: "var(--text-muted)", fontSize: 13,
+                }}>
+                  Connecting to backend…
+                </div>
+              ) : (
+                <TaskComposer onRunCreated={goToRun} profiles={profiles} />
+              )}
+            </div>
           </div>
 
-          {/* Active run banner */}
-          {activeTask && (
-            <ActiveRunBanner task={activeTask} onClick={() => goToRun(activeTask.id)} />
-          )}
-
-          {/* Composer */}
-          {!backendReachable ? (
-            <div
-              style={{
-                padding: "20px",
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-                textAlign: "center",
-                color: "var(--text-muted)",
-                fontSize: 13,
-              }}
-            >
-              Connecting to backend…
-            </div>
-          ) : (
-            <TaskComposer onRunCreated={goToRun} profiles={profiles} />
-          )}
-
-          {/* Recent runs */}
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
+          {/* Recent runs — horizontal scroll row */}
+          {!tasksLoading && recentTasks.length > 0 && (
+            <div style={{ padding: "0 40px 32px", flexShrink: 0 }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
                 marginBottom: 12,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: "0.07em",
-                  textTransform: "uppercase",
-                  color: "var(--text-faint)",
-                }}
-              >
-                Recent Runs
-              </span>
-              <button
-                className="btn-ghost btn-xs"
-                onClick={() => navigate("/runs")}
-                style={{ gap: 3 }}
-              >
-                View all
-                <ChevronRight size={11} />
-              </button>
-            </div>
-
-            {tasksLoading ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {[1, 2, 3].map((i) => (
+              }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+                  textTransform: "uppercase", color: "var(--text-faint)",
+                }}>
+                  Recent
+                </span>
+                <button className="btn-ghost btn-xs" onClick={() => navigate("/runs")} style={{ gap: 3 }}>
+                  All <ChevronRight size={10} />
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+                {recentTasks.map((task) => (
                   <div
-                    key={i}
-                    className="skeleton"
-                    style={{ height: 52, borderRadius: 9 }}
-                  />
+                    key={task.id}
+                    onClick={() => goToRun(task.id)}
+                    style={{
+                      padding: "11px 14px",
+                      background: "var(--surface-1)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      transition: "all 120ms",
+                      display: "flex", flexDirection: "column", gap: 6,
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-mid)"; (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <StatusDot status={task.status} />
+                      <span className={STATUS_BADGE[task.status] ?? "badge-gray"} style={{ fontSize: 10 }}>
+                        {task.status}
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      lineHeight: 1.4,
+                    }}>
+                      {task.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 3 }}>
+                      <Clock size={9} />
+                      {elapsed(task)}
+                    </div>
+                  </div>
                 ))}
               </div>
-            ) : (
-              <RecentRuns tasks={tasks} onSelect={goToRun} />
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Quick links */}
-          {!tasksLoading && tasks.length === 0 && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 10,
-              }}
-            >
-              {[
-                { icon: Sparkles, label: "Browse Skills", to: "/skills" },
-                { icon: FolderOpen, label: "View Projects", to: "/projects" },
-              ].map(({ icon: Icon, label, to }) => (
-                <div
-                  key={to}
-                  className="card-hover"
-                  onClick={() => navigate(to)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "12px 16px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 8,
-                      background: "var(--accent-dim)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Icon size={14} color="var(--accent)" />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    {label}
-                  </span>
-                  <ChevronRight
-                    size={13}
-                    color="var(--text-faint)"
-                    style={{ marginLeft: "auto" }}
-                  />
-                </div>
-              ))}
+          {tasksLoading && (
+            <div style={{ padding: "0 40px 32px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+                {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 72, borderRadius: 10 }} />)}
+              </div>
             </div>
           )}
         </div>
