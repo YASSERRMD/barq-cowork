@@ -40,6 +40,13 @@ WRITE_PPTX — 10 SLIDE TYPES
 Required fields: "filename", "title", "slides" (6-10 slides).
 Each slide MUST have: "heading" (≤60 chars) and "type".
 
+PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
+1. Plan the full presentation first: subject, audience, narrative arc, theme, and the mix of slide layouts.
+2. Only then plan each slide individually: choose the most suitable type, verify the slide has enough content, and check whether it needs icons, charts, diagrams, timelines, comparisons, or tables.
+3. Do not use a fixed deck template or the same layout repeatedly. The structure must come from the user's subject and explicit instructions.
+4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
+5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
+
 COLOR THEME — the engine auto-detects a theme from the title, but you should
 pick titles that clearly signal the topic domain for best color matching:
   healthcare/medical → cyan/teal palette
@@ -111,6 +118,9 @@ LAYOUT STRATEGY — MIX TYPES
 - Use "timeline" for roadmap, milestones, history.
 - Use "compare" for before/after, legacy vs new, pros/cons.
 - Use "table" for pricing, feature matrix, structured comparisons.
+- Use icons on cards and capability slides.
+- Use charts, diagrams, timelines, and comparison views when the content actually benefits from them.
+- Avoid repeating the same type or visual structure unless the subject truly requires it.
 - AIM for at least 4 different types in an 8+ slide deck.
 - Add "speaker_notes" to any slide for presenter guidance.
 
