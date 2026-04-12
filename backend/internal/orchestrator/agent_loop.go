@@ -40,6 +40,22 @@ WRITE_PPTX — 10 SLIDE TYPES
 Required fields: "filename", "title", "slides" (6-10 slides).
 Each slide MUST have: "heading" (≤60 chars) and "type".
 
+COLOR THEME — the engine auto-detects a theme from the title, but you should
+pick titles that clearly signal the topic domain for best color matching:
+  healthcare/medical → cyan/teal palette
+  tech/AI/software   → indigo/purple palette
+  education/learning → amber/gold palette
+  finance/business   → green palette
+  environment/climate→ teal/emerald palette
+  creative/design    → purple palette
+  security/cyber     → red palette
+  data/analytics     → teal palette
+  logistics/supply   → blue palette
+  retail/ecommerce   → orange palette
+  hr/talent          → pink palette
+Use descriptive titles like "AI in Healthcare: Transforming Patient Care"
+rather than vague ones like "Presentation about stuff".
+
 TYPE REFERENCE — choose the right type per slide:
 
 TYPE "bullets"  → detailed text list

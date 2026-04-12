@@ -267,8 +267,8 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 
 	// Try the pptx_engine bridge first (full 10-layout professional renderer).
 	// Falls back to the raw Go XML generator if Python is unavailable.
-	accent := pickThemeAccent(args.Title, args.Subtitle)
-	data, genErr := buildPPTXviaPython(ctx, args, accent)
+	themeName := pickThemeName(args.Title, args.Subtitle)
+	data, genErr := buildPPTXviaPython(ctx, args, themeName)
 	if genErr != nil {
 		// Python unavailable or failed — fall back to Go XML generator
 		data, err = buildPPTX(args.Title, args.Subtitle, args.Slides)
@@ -291,7 +291,7 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 // It translates the tool's JSON payload into a full Deck schema and renders
 // using the engine's 10-layout slide registry (charts, timeline, compare, etc.).
 // Falls back to gen_pptx.py if the bridge is not found.
-func buildPPTXviaPython(ctx context.Context, args pptxArgs, accent string) ([]byte, error) {
+func buildPPTXviaPython(ctx context.Context, args pptxArgs, themeName string) ([]byte, error) {
 	// Prefer the new engine bridge; fall back to legacy gen_pptx.py
 	scriptPath := findScript("scripts/pptx_bridge.py")
 	if scriptPath == "" {
@@ -307,14 +307,14 @@ func buildPPTXviaPython(ctx context.Context, args pptxArgs, accent string) ([]by
 		Title    string      `json:"title"`
 		Subtitle string      `json:"subtitle"`
 		Author   string      `json:"author,omitempty"`
-		Accent   string      `json:"accent"`
+		Theme    string      `json:"theme"`
 		Slides   []pptxSlide `json:"slides"`
 	}
 	payload, err := json.Marshal(pyPayload{
 		Title:    args.Title,
 		Subtitle: args.Subtitle,
 		Author:   args.Author,
-		Accent:   accent,
+		Theme:    themeName,
 		Slides:   args.Slides,
 	})
 	if err != nil {
@@ -389,8 +389,8 @@ type idg struct{ n int }
 func (g *idg) next() int { g.n++; return g.n }
 
 // ── Theme accent ──────────────────────────────────────────────────────────────
-// pickThemeAccent selects ONE consistent accent color for the entire presentation
-// based on keywords in the title/subtitle. All slides use this single color.
+// pickThemeName selects a coordinated color theme for the entire presentation
+// based on keywords in the title/subtitle. Returns a theme name string.
 
 // hasWord checks if keyword appears as a whole word in text (space-delimited).
 func hasWord(text string, keywords ...string) bool {
@@ -432,7 +432,7 @@ func isAlpha(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
-func pickThemeAccent(title, subtitle string) string {
+func pickThemeName(title, subtitle string) string {
 	c := strings.ToLower(title + " " + subtitle)
 
 	// Tech multi-word phrases checked FIRST to avoid "machine learning" → education
@@ -440,65 +440,75 @@ func pickThemeAccent(title, subtitle string) string {
 		strings.Contains(c, "artificial intelligence") || strings.Contains(c, "large language") ||
 		strings.Contains(c, "neural network") || strings.Contains(c, "data science") ||
 		strings.Contains(c, "computer vision") || strings.Contains(c, "natural language") {
-		return "6366F1"
+		return "tech"
 	}
 	// Health / Medical — checked before generic tech because "healthcare technology" → Cyan
 	if hasWord(c, "health", "healthcare", "medical", "doctor", "hospital", "wellness",
 		"biotech", "pharma", "clinical", "patient", "covid", "biology") {
-		return "06B6D4"
+		return "healthcare"
 	}
 	// Education / Learning / Kids — before generic "tech"
 	if hasWord(c, "education", "learning", "school", "student", "teacher", "training",
 		"course", "curriculum", "university", "college", "classroom", "kids", "children") {
-		return "F59E0B"
+		return "education"
 	}
 	// Environment / Sustainability / Climate
 	if hasWord(c, "environment", "sustainability", "climate", "renewable", "solar",
 		"carbon", "eco", "nature", "planet") {
-		return "14B8A6"
+		return "environment"
 	}
 	// Finance / Business / Revenue
 	if hasWord(c, "finance", "financial", "revenue", "business", "market", "investment",
 		"startup", "profit", "sales", "economics", "budget", "investor", "funding", "bank") {
-		return "10B981"
+		return "finance"
 	}
 	// Creative / Design / Art / Brand
 	if hasWord(c, "design", "creative", "art", "brand", "marketing", "media",
 		"visual", "photography", "film", "music", "fashion") {
-		return "8B5CF6"
+		return "creative"
 	}
 	// Security / Cyber / Risk
 	if hasWord(c, "security", "cyber", "threat", "hack", "ransomware", "firewall",
 		"privacy", "compliance", "risk") {
-		return "EF4444"
+		return "security"
 	}
 	// Data / Analytics / BI / Warehouse
 	if hasWord(c, "data", "analytics", "bi", "warehouse", "databrick", "snowflake",
 		"insight", "dashboard", "intelligence") {
-		return "14B8A6"
+		return "data"
 	}
 	// Logistics / Supply Chain / Shipping
 	if hasWord(c, "logistics", "supply", "shipping", "transport", "fleet", "delivery",
 		"warehouse") {
-		return "3B82F6"
+		return "logistics"
 	}
 	// Retail / E-commerce / Consumer
 	if hasWord(c, "retail", "shop", "ecommerce", "consumer", "merchandise", "store") {
-		return "F97316"
+		return "retail"
 	}
 	// HR / Human Resources / Talent
 	if hasWord(c, "hr", "human resource", "talent", "recruit", "employee", "workforce",
 		"people ops") {
-		return "EC4899"
+		return "hr"
+	}
+	// Politics / Government / Policy
+	if hasWord(c, "politic", "government", "policy", "election", "vote", "congress",
+		"senate", "legislation", "democrat", "republican", "law", "regulation", "civic") {
+		return "security"
 	}
 	// Technology / AI / Digital / Software — checked last as most generic
 	if hasWord(c, "ai", "technology", "software", "code", "developer", "digital",
 		"data science", "neural", "cloud", "cybersecurity", "blockchain", "api",
 		"programming", "artificial intelligence", "machine learning", "deep learning") {
-		return "6366F1"
+		return "tech"
 	}
-	// Default: Indigo
-	return "6366F1"
+	// Default: pick based on hash for variety
+	themes := []string{"tech", "creative", "data", "logistics", "finance"}
+	idx := 0
+	for _, ch := range c {
+		idx += int(ch)
+	}
+	return themes[idx%len(themes)]
 }
 
 // ── Auto-layout detection ─────────────────────────────────────────────────────
@@ -1009,7 +1019,17 @@ func buildPPTX(title, subtitle string, slides []pptxSlide) ([]byte, error) {
 	zw := zip.NewWriter(&buf)
 
 	// Pick ONE consistent accent color for the entire presentation based on topic.
-	accent := pickThemeAccent(title, subtitle)
+	themeAccentMap := map[string]string{
+		"tech": "6366F1", "healthcare": "06B6D4", "education": "F59E0B",
+		"environment": "14B8A6", "finance": "10B981", "creative": "8B5CF6",
+		"security": "EF4444", "data": "14B8A6", "logistics": "3B82F6",
+		"retail": "F97316", "hr": "EC4899",
+	}
+	tn := pickThemeName(title, subtitle)
+	accent := themeAccentMap[tn]
+	if accent == "" {
+		accent = "6366F1"
+	}
 
 	type entry struct {
 		name    string
