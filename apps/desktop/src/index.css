@@ -10,20 +10,20 @@
     --panel-w: 352px;
 
     /* ── Surface palette ── */
-    --bg:           #0e0e14;
-    --surface-1:    #13131a;
-    --surface-2:    #18181f;
-    --surface-3:    #1e1e28;
-    --surface-4:    #252535;
-    --border:       rgba(255,255,255,0.06);
-    --border-mid:   rgba(255,255,255,0.09);
-    --border-hi:    rgba(255,255,255,0.14);
+    --bg:           #0c0c12;
+    --surface-1:    #111118;
+    --surface-2:    #1a1a24;
+    --surface-3:    #242432;
+    --surface-4:    #2e2e40;
+    --border:       rgba(255,255,255,0.08);
+    --border-mid:   rgba(255,255,255,0.12);
+    --border-hi:    rgba(255,255,255,0.18);
 
-    /* ── Text ── */
-    --text-primary:  #e8e8f0;
-    --text-secondary:#9090a8;
-    --text-muted:    #5a5a70;
-    --text-faint:    #35354a;
+    /* ── Text — improved contrast for readability ── */
+    --text-primary:  #f0f0f8;
+    --text-secondary:#b0b0c8;
+    --text-muted:    #8080a0;
+    --text-faint:    #585878;
 
     /* ── Accent (Indigo) ── */
     --accent:       #6366f1;
