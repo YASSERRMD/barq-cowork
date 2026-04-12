@@ -70,6 +70,14 @@ def _accent2_from_theme(theme: DeckTheme) -> RGBColor:
     return _h(theme.colors.accent2)
 
 
+def _bg_from_theme(theme: DeckTheme) -> RGBColor:
+    return _h(theme.colors.background)
+
+
+def _card_from_theme(theme: DeckTheme) -> RGBColor:
+    return _h(theme.colors.surface)
+
+
 # ── Low-level XML primitives (mirror gen_pptx.py) ────────────────────────────
 
 def _spPr(shape):
@@ -278,7 +286,11 @@ def label(slide, x, y, w, h, text: str, size_pt: float, color: RGBColor,
 
 # ── Chart dark-background helper (uses chart._element = chartSpace) ──────────
 
-def _chart_dark_bg(chart, bg_color: RGBColor = _CARD, area_color: RGBColor = _BG):
+def _chart_dark_bg(chart, bg_color: RGBColor = None, area_color: RGBColor = None):
+    if bg_color is None:
+        bg_color = _CARD
+    if area_color is None:
+        area_color = _BG
     cs = chart._element  # chartSpace in python-pptx 1.x
     spPr = _get_or_add(cs, qn("c:spPr"))
     _set_solid_fill(spPr, _v(area_color))
@@ -316,8 +328,10 @@ def _style_axis(axis, label_color: RGBColor = _MUTED, gridline_color: RGBColor =
 
 # ── Shared header / background ────────────────────────────────────────────────
 
-def paint_bg(slide, accent: RGBColor):
-    rect(slide, 0, 0, W, H, _BG)
+def paint_bg(slide, accent: RGBColor, bg: RGBColor = None):
+    if bg is None:
+        bg = _BG
+    rect(slide, 0, 0, W, H, bg)
     c1 = ellipse(slide, 6900000, -800000, 3000000, 3000000)
     xml_solid_alpha(c1, accent, 4)
     xml_stroke_alpha(c1, accent, 14, 2.5)
@@ -340,11 +354,61 @@ def paint_header(slide, heading: str, accent: RGBColor, font_name: str = "Calibr
     return 660000  # content_top_y
 
 
-def card_bg(slide, x, y, w, h, accent: RGBColor, adj: int = 22000):
-    c = rrect(slide, x, y, w, h, _CARD, adj)
+def card_bg(slide, x, y, w, h, accent: RGBColor, adj: int = 22000, card_color: RGBColor = None):
+    if card_color is None:
+        card_color = _CARD
+    c = rrect(slide, x, y, w, h, card_color, adj)
     xml_stroke_alpha(c, accent, 18, 1.0)
     xml_shadow(c, blur_pt=10, dist_pt=5, dir_deg=315, alpha=45)
     return c
+
+
+# ── Semantic icon selection ───────────────────────────────────────────────────
+
+# Maps keyword patterns to semantically relevant emoji icons
+_ICON_MAP = [
+    (["speed","fast","perform","quick","rapid","latency"],         "⚡"),
+    (["secur","safe","protect","privacy","trust","compliance"],    "🔒"),
+    (["integrat","connect","api","plugin","sync","webhook"],       "🔌"),
+    (["data","analyt","insight","dashboard","metric","report"],    "📊"),
+    (["growth","scale","expand","revenue","sales","profit"],       "📈"),
+    (["ai","intelligence","smart","ml","neural","model","llm"],    "🧠"),
+    (["cloud","infra","server","deploy","host","devops"],          "☁️"),
+    (["team","people","talent","hire","human","collabor","user"],  "👥"),
+    (["money","cost","financ","budget","invest","price","saving"], "💰"),
+    (["global","world","internat","region","market","geo"],        "🌍"),
+    (["innovat","pioneer","launch","new","creat","ideate"],        "🚀"),
+    (["mobile","app","device","phone","tablet"],                   "📱"),
+    (["time","schedul","deadline","calendar","sprint"],            "⏱️"),
+    (["health","medical","patient","clinic","doctor","care"],      "🏥"),
+    (["learn","educate","train","course","skill","certif"],        "📚"),
+    (["automat","workflow","process","pipeline","bot","rpa"],      "⚙️"),
+    (["support","help","customer","service","assist","success"],   "🎯"),
+    (["green","sustain","eco","climate","carbon","renewable"],     "🌱"),
+    (["award","quality","excel","best","top","leader","certif"],   "🏆"),
+    (["search","discover","find","explor","research","audit"],     "🔍"),
+    (["design","ui","ux","visual","brand","creative","art"],       "🎨"),
+    (["document","report","write","content","publish"],            "📄"),
+    (["network","connect","partner","ecosyst","alliance"],         "🤝"),
+    (["robot","autonom","agent","bot","rpa"],                      "🤖"),
+    (["shield","defend","threat","risk","mitigat","firewall"],     "🛡️"),
+    (["notify","alert","monitor","observ","watch"],                "🔔"),
+    (["code","develop","engineer","program","software","git"],     "💻"),
+    (["test","qa","quality","debug","review","audit"],             "🧪"),
+    (["key","access","auth","login","sso","identity"],             "🔑"),
+    (["chart","graph","visual","trend","forecast"],                "📉"),
+]
+
+
+def _smart_icon(title: str, desc: str = "") -> str:
+    text = (title + " " + desc).lower()
+    for keywords, icon in _ICON_MAP:
+        for kw in keywords:
+            if kw in text:
+                return icon
+    # Generate a varied fallback based on title hash so same slide always gets same icon
+    fallbacks = ["✦", "◆", "▸", "●", "★", "◉", "⬟", "⬡"]
+    return fallbacks[hash(title) % len(fallbacks)]
 
 
 # ── Protocol ──────────────────────────────────────────────────────────────────
@@ -366,17 +430,18 @@ class TitleSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
+        bg = _bg_from_theme(theme)
         font_h = theme.fonts.heading
 
         # Full dark background
-        rect(slide, 0, 0, W, H, _BG)
+        rect(slide, 0, 0, W, H, bg)
 
         # Large decorative gradient overlay
         overlay = rect(slide, 0, 0, W, H)
         xml_grad(overlay, [
             (0, _darker(accent, 60)),
-            (50, _BG),
-            (100, _BG),
+            (50, bg),
+            (100, bg),
         ], angle_deg=135)
 
         # Decorative circles
@@ -407,7 +472,7 @@ class TitleSlideRenderer:
 
         # Decorative line below title
         ln = rect(slide, W // 2 - 1000000, 3300000, 2000000, 8000)
-        xml_grad(ln, [(0, _BG), (50, accent), (100, _BG)], 0)
+        xml_grad(ln, [(0, bg), (50, accent), (100, bg)], 0)
 
 
 class BulletsSlideRenderer:
@@ -415,7 +480,9 @@ class BulletsSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        card = _card_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -444,7 +511,7 @@ class BulletsSlideRenderer:
             cx, cy = col_xs[col], sy + row * (ch + gap)
             cw = col_w
 
-            card_bg(slide, cx, cy, cw, ch, accent)
+            card_bg(slide, cx, cy, cw, ch, accent, card_color=card)
 
             strip = rect(slide, cx, cy + ch // 8, 11000, ch * 3 // 4)
             xml_grad(strip, [(0, _lighter(accent, 60)), (50, accent),
@@ -470,7 +537,9 @@ class StatsSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        card = _card_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -497,7 +566,7 @@ class StatsSlideRenderer:
 
         for i, it in enumerate(items):
             cx = sx + i * (cw + gap)
-            card_bg(slide, cx, sy, cw, ch, accent)
+            card_bg(slide, cx, sy, cw, ch, accent, card_color=card)
             ts = rect(slide, cx, sy, cw, ch // 9)
             xml_grad(ts, [(0, accent), (100, _lighter(accent, 50))], 0)
 
@@ -543,7 +612,7 @@ class StatsSlideRenderer:
         )
         ch_obj = gf.chart
         ch_obj.has_legend = False
-        _chart_dark_bg(ch_obj, _CARD, _BG)
+        _chart_dark_bg(ch_obj, card, bg)
 
         try:
             ser = ch_obj.series[0]
@@ -567,7 +636,8 @@ class StepsSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -627,7 +697,9 @@ class CardsSlideRenderer:
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
         accent2 = _accent2_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        card_clr = _card_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -659,7 +731,7 @@ class CardsSlideRenderer:
             ac = accent_cycle[i % len(accent_cycle)]
 
             # Card background
-            c = card_bg(slide, cx, cy, cw, ch, ac)
+            c = card_bg(slide, cx, cy, cw, ch, ac, card_color=card_clr)
 
             # Top accent bar
             tb = rect(slide, cx, cy, cw, ch // 10)
@@ -672,7 +744,13 @@ class CardsSlideRenderer:
             ic = ellipse(slide, ix, iy, icon_r, icon_r)
             xml_grad(ic, [(0, _lighter(ac, 40)), (100, ac)], 135)
             xml_shadow(ic, 4, 2, 315, 40)
-            icon_text = card.icon if card.icon else "★"
+            # Use smart icon selection: replace missing or generic fallback icons
+            _generic_icons = {"★", "●", "◈", "⬡", "◎", "✦", "◆", "▸", "◉", "⬟"}
+            raw_icon = card.icon if card.icon else ""
+            if not raw_icon or raw_icon in _generic_icons:
+                icon_text = _smart_icon(card.title, card.desc)
+            else:
+                icon_text = raw_icon
             label(slide, ix, iy, icon_r, icon_r, icon_text,
                   min(18, icon_r // 30000), _WHITE, font="Segoe UI Symbol")
 
@@ -708,7 +786,9 @@ class ChartSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        card = _card_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -739,7 +819,7 @@ class ChartSlideRenderer:
             cd,
         )
         ch_obj = gf.chart
-        _chart_dark_bg(ch_obj, _CARD, _BG)
+        _chart_dark_bg(ch_obj, card, bg)
 
         if content.chart_title:
             ch_obj.has_title = True
@@ -779,7 +859,8 @@ class TimelineSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -859,7 +940,9 @@ class CompareSlideRenderer:
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
         accent2 = _accent2_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        card = _card_from_theme(theme)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -892,7 +975,7 @@ class CompareSlideRenderer:
             (right_x, right, _h(right.color) if getattr(right, "color", None) else accent2),
         ]:
             # Column card
-            c = card_bg(slide, col_x, col_top, col_w, avail_h, col_accent)
+            c = card_bg(slide, col_x, col_top, col_w, avail_h, col_accent, card_color=card)
             # Header bar
             hb = rect(slide, col_x, col_top, col_w, 380000)
             xml_grad(hb, [(0, col_accent), (100, _darker(col_accent, 30))], 0)
@@ -927,7 +1010,10 @@ class TableSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        card = _card_from_theme(theme)
+        card2 = _darker(card, 20)
+        paint_bg(slide, accent, bg)
         top = paint_header(slide, getattr(content, "_heading_override", ""), accent,
                            theme.fonts.heading)
 
@@ -964,7 +1050,7 @@ class TableSlideRenderer:
         # Data rows
         for i, row in enumerate(rows[:12]):
             ry = table_top + header_h + i * row_h
-            row_color = _CARD if i % 2 == 0 else _CARD2
+            row_color = card if i % 2 == 0 else card2
 
             for j, cell in enumerate(row[:ncols]):
                 cx = 457200 + j * col_w
@@ -981,7 +1067,8 @@ class BlankSlideRenderer:
 
     def render(self, slide, content: SlideContent, theme: DeckTheme) -> None:
         accent = _accent_from_theme(theme)
-        paint_bg(slide, accent)
+        bg = _bg_from_theme(theme)
+        paint_bg(slide, accent, bg)
 
         heading = getattr(content, "_heading_override", "")
         if heading:

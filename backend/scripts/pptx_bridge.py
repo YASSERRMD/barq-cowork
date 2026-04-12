@@ -104,44 +104,86 @@ _LAYOUT_MAP: dict[str, SlideType] = {
 _CARD_ICONS = ["⚡", "🔒", "🔌", "📊", "🚀", "🎯", "🌐", "🧠", "📱", "🔑"]
 
 
-# ── Keyword-based accent colour picker (mirrors write_pptx.go logic) ──────────
-def _pick_accent(title: str, subtitle: str = "") -> str:
+# ── Full visual theme builder (replaces _pick_accent) ─────────────────────────
+
+# Each theme tuple: (background, surface, accent, accent2, border)
+_THEME_PRESETS = {
+    "tech":        ("#0F172A", "#1E293B", "#6366F1", "#A5B4FC", "#2D3F55"),
+    "healthcare":  ("#061B2E", "#0E2D45", "#06B6D4", "#67E8F9", "#1A4060"),
+    "education":   ("#1A1100", "#2D1E00", "#F59E0B", "#FCD34D", "#4A3500"),
+    "environment": ("#071A10", "#0F2B1C", "#10B981", "#6EE7B7", "#1A4A30"),
+    "finance":     ("#061A0E", "#102B1A", "#22C55E", "#86EFAC", "#1A4A28"),
+    "creative":    ("#140A2A", "#221545", "#8B5CF6", "#C4B5FD", "#3A2060"),
+    "security":    ("#1A0808", "#2E1010", "#EF4444", "#FCA5A5", "#4A1818"),
+    "data":        ("#061A1E", "#0E2B30", "#14B8A6", "#5EEAD4", "#1A4048"),
+    "logistics":   ("#0A1020", "#162035", "#3B82F6", "#93C5FD", "#203050"),
+    "retail":      ("#1A0C00", "#2E1800", "#F97316", "#FDBA74", "#4A2800"),
+    "hr":          ("#1A0A18", "#2E1530", "#EC4899", "#F9A8D4", "#4A1840"),
+}
+
+
+def _build_full_theme(title: str, subtitle: str = "") -> DeckTheme:
+    """Pick a complete visual theme based on topic keywords."""
     c = (title + " " + subtitle).lower()
 
-    def has(*words: str) -> bool:
-        for w in words:
-            # simple word-boundary check
-            idx = c.find(w)
-            while idx != -1:
-                before = c[idx - 1] if idx > 0 else " "
-                after  = c[idx + len(w)] if idx + len(w) < len(c) else " "
-                if not before.isalpha() and not after.isalpha():
-                    return True
-                idx = c.find(w, idx + 1)
-        return False
+    def has(*words):
+        return any(w in c for w in words)
 
-    # Multi-word tech phrases first
-    if any(p in c for p in ("machine learning", "deep learning", "neural network",
-                             "artificial intelligence", "large language model")):
-        return "6366F1"  # indigo
+    # Detect category
+    if has("machine learning", "deep learning", "artificial intelligence",
+           "neural", "llm", "gpt", "claude", "openai"):
+        preset_key = "tech"
+    elif has("health", "healthcare", "medical", "clinical", "hospital", "pharma",
+             "doctor", "patient"):
+        preset_key = "healthcare"
+    elif has("education", "school", "university", "learning", "course", "student",
+             "teach", "curriculum", "kids"):
+        preset_key = "education"
+    elif has("environment", "climate", "sustainable", "green", "carbon",
+             "renewable", "eco", "solar"):
+        preset_key = "environment"
+    elif has("finance", "banking", "investment", "revenue", "budget", "portfolio",
+             "fund", "wealth", "stock"):
+        preset_key = "finance"
+    elif has("design", "creative", "art", "brand", "marketing", "media",
+             "visual", "photo", "film", "fashion"):
+        preset_key = "creative"
+    elif has("security", "cyber", "threat", "hack", "ransomware", "firewall",
+             "privacy", "compliance", "risk"):
+        preset_key = "security"
+    elif has("data", "analytics", "intelligence", "bi ", "databrick", "snowflake",
+             "warehouse", "insight"):
+        preset_key = "data"
+    elif has("logistics", "supply chain", "shipping", "warehouse", "delivery",
+             "transport", "fleet"):
+        preset_key = "logistics"
+    elif has("retail", "ecommerce", "shop", "consumer", "product", "merchandise",
+             "store", "fashion"):
+        preset_key = "retail"
+    elif has("hr", "human resource", "talent", "recruit", "employee", "workforce",
+             "people ops"):
+        preset_key = "hr"
+    elif has("tech", "software", "platform", "cloud", "api", "developer",
+             "engineering", "saas", "devops"):
+        preset_key = "tech"
+    else:
+        # Pick based on hash of title for variety even on generic topics
+        keys = list(_THEME_PRESETS.keys())
+        preset_key = keys[hash(title.lower()) % len(keys)]
 
-    if has("health", "healthcare", "medical", "clinical", "hospital", "pharma"):
-        return "06B6D4"  # cyan
-    if has("education", "school", "learning", "kids", "student", "university"):
-        return "F59E0B"  # amber
-    if has("environment", "green", "sustainable", "climate", "ecology", "solar"):
-        return "10B981"  # emerald
-    if has("finance", "investment", "banking", "revenue", "budget", "wealth"):
-        return "8B5CF6"  # violet
-    if has("creative", "design", "art", "brand", "marketing", "media"):
-        return "EC4899"  # pink
-    if has("security", "cyber", "privacy", "compliance", "risk", "trust"):
-        return "EF4444"  # red
-    if has("data", "analytics", "insight", "dashboard", "bi", "intelligence"):
-        return "14B8A6"  # teal
-    if has("tech", "software", "platform", "cloud", "api", "developer", "engineering"):
-        return "6366F1"  # indigo (default tech)
-    return "6366F1"  # fallback indigo
+    bg, surface, accent, accent2, border = _THEME_PRESETS[preset_key]
+    return DeckTheme(
+        colors=ThemeColors(
+            background=bg,
+            surface=surface,
+            accent=accent,
+            accent2=accent2,
+            text="#F8FAFC",
+            text_muted="#94A3B8",
+            border=border,
+        ),
+        fonts=ThemeFonts(heading="Calibri Light", body="Calibri", size_heading=31, size_body=15),
+    )
 
 
 # ── Slide translation ─────────────────────────────────────────────────────────
@@ -333,31 +375,17 @@ def translate_to_deck(data: dict) -> Deck:
     """Convert the Go tool's extended JSON to a full pptx_engine Deck."""
     title    = str(data.get("title", "Presentation"))
     subtitle = str(data.get("subtitle", ""))
-    accent   = str(data.get("accent",  _pick_accent(title, subtitle))).lstrip("#")
     author   = str(data.get("author",  "Barq Cowork"))
 
-    # Ensure 6-char hex
-    if len(accent) == 3:
-        accent = "".join(c * 2 for c in accent)
-    accent = accent.upper()
-
-    theme = DeckTheme(
-        colors=ThemeColors(
-            accent=f"#{accent}",
-            background="#0F172A",
-            surface="#1E293B",
-            accent2="#A5B4FC",
-            text="#F8FAFC",
-            text_muted="#94A3B8",
-            border="#2D3F55",
-        ),
-        fonts=ThemeFonts(
-            heading="Calibri Light",
-            body="Calibri",
-            size_heading=31,
-            size_body=15,
-        ),
-    )
+    # Build full theme from topic keywords; if caller passed an explicit accent,
+    # honour it by overriding just the accent color on the theme.
+    theme = _build_full_theme(title, subtitle)
+    if "accent" in data:
+        raw_accent = str(data["accent"]).lstrip("#")
+        if len(raw_accent) == 3:
+            raw_accent = "".join(c * 2 for c in raw_accent)
+        raw_accent = raw_accent.upper()
+        theme.colors.accent = f"#{raw_accent}"
 
     # ── Build slides ──────────────────────────────────────────────────────────
     raw_slides = data.get("slides") or []
