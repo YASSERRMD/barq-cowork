@@ -505,8 +505,8 @@ function ChatPanel({
         className="selectable"
         style={{
           flex: 1, overflowY: "auto",
-          padding: "20px 24px",
-          display: "flex", flexDirection: "column", gap: 16,
+          padding: "28px 32px",
+          display: "flex", flexDirection: "column", gap: 24,
           minHeight: 0,
         }}
       >
@@ -538,38 +538,35 @@ function ChatPanel({
 
           if (msg.kind === "agent") {
             return (
-              <div key={msg.id} style={{ display: "flex", gap: 10, maxWidth: "80%" }}>
+              <div key={msg.id} style={{ display: "flex", gap: 12, width: "100%" }}>
                 {/* Avatar */}
                 <div style={{
-                  width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
                   background: "var(--accent)",
-                  border: "1px solid var(--accent-glow)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   marginTop: 2,
                 }}>
                   <Bot size={15} color="#fff" />
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", paddingLeft: 2 }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)" }}>
                     Agent {msg.isQuestion && <span style={{ color: "var(--accent)" }}>· asking</span>}
                   </span>
                   <div style={{
-                    background: "var(--surface-2)",
-                    border: msg.isQuestion
-                      ? "1.5px solid var(--accent)"
-                      : "1px solid var(--border)",
-                    borderRadius: "4px 14px 14px 14px",
-                    padding: "10px 14px",
-                    fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.65,
-                    wordBreak: "break-word",
+                    background: msg.isQuestion ? "var(--surface-1)" : "transparent",
+                    border: msg.isQuestion ? "1.5px solid var(--accent)" : "none",
+                    borderRadius: msg.isQuestion ? 12 : 0,
+                    padding: msg.isQuestion ? "12px 16px" : "0",
                     boxShadow: msg.isQuestion ? "0 0 0 3px var(--accent-glow)" : "none",
                   }}>
-                    {msg.text}
+                    <div className="chat-markdown">
+                      <ReactMarkdown>{msg.text || ""}</ReactMarkdown>
+                    </div>
                   </div>
                   {msg.isQuestion && (
                     <div style={{
                       display: "flex", alignItems: "center", gap: 5,
-                      paddingLeft: 2, fontSize: 11, color: "var(--accent)", fontWeight: 600,
+                      fontSize: 11, color: "var(--accent)", fontWeight: 600,
                     }}>
                       <HelpCircle size={11} />
                       Waiting for your reply
@@ -606,11 +603,10 @@ function ChatPanel({
 
         {/* Typing indicator when active but waiting */}
         {isActive && messages.length > 0 && !hasPendingInput && (
-          <div style={{ display: "flex", gap: 10, maxWidth: "80%" }}>
+          <div style={{ display: "flex", gap: 12 }}>
             <div style={{
-              width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+              width: 32, height: 32, borderRadius: 10, flexShrink: 0,
               background: "var(--accent)",
-              border: "1px solid var(--accent-glow)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               <Bot size={15} color="#fff" />
@@ -1171,27 +1167,6 @@ export function TaskRunPage() {
             />
           ) : (
             <>
-              {/* Chat header */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "0 20px", height: 42, flexShrink: 0,
-                borderBottom: "1px solid var(--border)",
-                background: "var(--surface-1)",
-              }}>
-                <MessageSquare size={13} color="var(--text-faint)" />
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                  Conversation
-                </span>
-                {pendingInputs.length > 0 && (
-                  <div style={{
-                    width: 7, height: 7, borderRadius: "50%",
-                    background: "var(--accent)",
-                    boxShadow: "0 0 6px var(--accent-glow)",
-                    marginLeft: 2,
-                    animation: "pulse 2s ease-in-out infinite",
-                  }} />
-                )}
-              </div>
               <ChatPanel
                 events={events}
                 pendingInputs={pendingInputs}
