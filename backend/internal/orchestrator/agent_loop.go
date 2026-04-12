@@ -47,8 +47,9 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
-7. Use the optional "deck" object in the write_pptx tool call whenever possible. Set audience, theme, visual_style, cover_style, color_story, motif, and palette if you want the design to follow your plan exactly instead of using defaults.
-8. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
+7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, and a full palette.
+8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
+9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
 
 TYPE REFERENCE — choose the right type per slide:
 
@@ -69,16 +70,18 @@ TYPE "cards"  → icon feature grid (4-6 cards)
             {"icon":"integration","title":"Integrations","desc":"200+ native connectors"},
             {"icon":"chart","title":"Analytics","desc":"Real-time dashboards"}]
 
-DECK OBJECT — use this to control the final presentation design directly:
+DECK OBJECT — REQUIRED on every write_pptx call:
   "deck": {
-    "audience":"parents and educators",
-    "theme":"education",
-    "visual_style":"playful classroom collage",
-    "cover_style":"playful",
-    "color_story":"warm daylight tones with soft contrast",
-    "motif":"learning",
-    "kicker":"A visual guide for curious learners",
-    "palette":{"background":"FFF6E5","card":"FFFDF7","accent":"F59E0B","accent2":"FCD34D","text":"1F2937","muted":"6B7280","border":"E8D8B8"}
+    "subject":"<subject framing>",
+    "audience":"<who this deck is for>",
+    "narrative":"<story arc>",
+    "theme":"<domain theme>",
+    "visual_style":"<chosen visual direction>",
+    "cover_style":"<editorial|orbit|mosaic|poster|playful>",
+    "color_story":"<chosen color mood>",
+    "motif":"<semantic motif token>",
+    "kicker":"<short cover line>",
+    "palette":{"background":"<hex>","card":"<hex>","accent":"<hex>","accent2":"<hex>","text":"<hex>","muted":"<hex>","border":"<hex>"}
   }
 
 TYPE "chart"  → full-slide native PowerPoint chart
@@ -215,7 +218,7 @@ func (a *AgentLoop) Run(
 			Model:       a.cfg.Model,
 			Stream:      true,
 			MaxTokens:   2048,
-			Temperature: 0.3,
+			Temperature: taskTemperature(task),
 			Messages:    messages,
 			Tools:       toolDefs,
 		}
@@ -433,6 +436,13 @@ func requiredOutputTool(task *domain.Task) string {
 	default:
 		return ""
 	}
+}
+
+func taskTemperature(task *domain.Task) float64 {
+	if requiredOutputTool(task) == "write_pptx" {
+		return 0.55
+	}
+	return 0.3
 }
 
 func containsTaskKeyword(text string, keywords ...string) bool {
