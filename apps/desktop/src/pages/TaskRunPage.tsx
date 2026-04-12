@@ -850,7 +850,56 @@ function ContentPreviewPanel({
 
         {artifact.type === "json" && <JsonPreview downloadUrl={downloadUrl} />}
 
-        {(artifact.type !== "markdown" && artifact.type !== "html" && artifact.type !== "json") && (
+        {/* PPTX and DOCX: rendered preview via backend conversion */}
+        {(ext === "pptx" || ext === "docx") && artifact.type !== "markdown" && artifact.type !== "html" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div style={{
+              padding: "8px 16px", background: "var(--surface-2)",
+              borderBottom: "1px solid var(--border)",
+              display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+            }}>
+              <a href={downloadUrl} download className="btn-primary btn-sm"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12 }}>
+                <Download size={13} /> Download {ext.toUpperCase()}
+              </a>
+              <a href={downloadUrl} target="_blank" rel="noreferrer"
+                className="btn-ghost btn-sm"
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none", fontSize: 12 }}>
+                <Maximize2 size={12} /> Open
+              </a>
+            </div>
+            <iframe
+              src={`http://localhost:7331/api/v1/artifacts/${artifact.id}/preview`}
+              style={{ width: "100%", flex: 1, border: "none", display: "block", minHeight: 0 }}
+              title={`Preview: ${fileName}`}
+            />
+          </div>
+        )}
+
+        {/* PDF: use browser native viewer */}
+        {ext === "pdf" && artifact.type !== "markdown" && artifact.type !== "html" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div style={{
+              padding: "8px 16px", background: "var(--surface-2)",
+              borderBottom: "1px solid var(--border)",
+              display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+            }}>
+              <a href={downloadUrl} download className="btn-primary btn-sm"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12 }}>
+                <Download size={13} /> Download PDF
+              </a>
+            </div>
+            <iframe
+              src={downloadUrl}
+              style={{ width: "100%", flex: 1, border: "none", display: "block", minHeight: 0 }}
+              title={`Preview: ${fileName}`}
+            />
+          </div>
+        )}
+
+        {/* Other file types: download card */}
+        {ext !== "pptx" && ext !== "docx" && ext !== "pdf" &&
+         artifact.type !== "markdown" && artifact.type !== "html" && artifact.type !== "json" && (
           <div style={{
             flex: 1, display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
@@ -858,62 +907,24 @@ function ContentPreviewPanel({
           }}>
             <div style={{
               width: 80, height: 80, borderRadius: 20,
-              background: ext === "pptx" ? "rgba(249,115,22,0.12)" :
-                ext === "docx" ? "rgba(59,130,246,0.12)" :
-                ext === "pdf"  ? "rgba(239,68,68,0.12)" :
-                ext === "xlsx" ? "rgba(34,197,94,0.12)" : "var(--accent-dim)",
+              background: "var(--accent-dim)",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 40,
             }}>
               {fileEmoji || <FileText size={36} color="var(--accent)" />}
             </div>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, wordBreak: "break-all" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
                 {fileName}
               </div>
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 24 }}>
                 {ext.toUpperCase()} · {formatBytes(artifact.size)}
               </div>
-              {artifact.content_path && (
-                <div style={{
-                  fontSize: 11, color: "var(--text-faint)", fontFamily: "monospace",
-                  marginBottom: 24, wordBreak: "break-all",
-                  background: "var(--surface-2)", padding: "6px 12px", borderRadius: 7,
-                  border: "1px solid var(--border)",
-                }}>
-                  {artifact.content_path}
-                </div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-                <a
-                  href={downloadUrl}
-                  download
-                  className="btn-primary"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, textDecoration: "none", padding: "10px 24px", borderRadius: 10 }}
-                >
-                  <Download size={16} />
-                  Download {ext.toUpperCase()}
-                </a>
-                <a
-                  href={downloadUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-ghost btn-sm"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, textDecoration: "none" }}
-                >
-                  <Maximize2 size={13} />
-                  Open with system app
-                </a>
-              </div>
+              <a href={downloadUrl} download className="btn-primary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, textDecoration: "none", padding: "10px 24px", borderRadius: 10 }}>
+                <Download size={16} /> Download {ext.toUpperCase()}
+              </a>
             </div>
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => navigator.clipboard.writeText(artifact.content_path || artifact.name)}
-              style={{ fontSize: 11.5 }}
-            >
-              <Copy size={11} /> Copy path
-            </button>
           </div>
         )}
       </div>
