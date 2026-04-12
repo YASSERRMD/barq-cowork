@@ -59,12 +59,12 @@ export function Sidebar() {
             width: 26,
             height: 26,
             borderRadius: 7,
-            background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+            background: "linear-gradient(135deg, #f97316 0%, #ea6c0a 100%)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            boxShadow: "0 2px 8px rgba(99,102,241,0.4)",
+            boxShadow: "0 2px 8px var(--accent-glow)",
           }}
         >
           <Zap size={13} color="#fff" strokeWidth={2.5} />

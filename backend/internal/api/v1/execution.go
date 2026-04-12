@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -110,6 +111,7 @@ func (h *ExecutionHandler) Register(r chi.Router) {
 	r.Get("/artifacts", h.listArtifactsRecent)
 	r.Get("/artifacts/{id}", h.getArtifact)
 	r.Get("/artifacts/{id}/download", h.downloadArtifact)
+	r.Get("/artifacts/{id}/preview", h.previewArtifact)
 
 	// Global event log
 	r.Get("/events", h.listEventsRecent)
@@ -306,6 +308,91 @@ func (h *ExecutionHandler) downloadArtifact(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// previewArtifact GET /api/v1/artifacts/{id}/preview
+// Converts PPTX/DOCX files to HTML for inline preview in the frontend.
+func (h *ExecutionHandler) previewArtifact(w http.ResponseWriter, r *http.Request) {
+	a, err := h.artifacts.GetByID(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+
+	root := h.workspaceRoot
+	if root == "" {
+		http.Error(w, "workspace root not configured", http.StatusInternalServerError)
+		return
+	}
+
+	fullPath := filepath.Join(root, filepath.FromSlash(a.ContentPath))
+	if !strings.HasPrefix(fullPath, filepath.Clean(root)) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	if ext != ".pptx" && ext != ".docx" {
+		// For non-convertible files, redirect to download
+		http.Redirect(w, r, fmt.Sprintf("/api/v1/artifacts/%s/download", a.ID), http.StatusTemporaryRedirect)
+		return
+	}
+
+	// Find the preview script
+	scriptPath := ""
+	for _, base := range []string{"scripts/preview_doc.py"} {
+		// Next to exe
+		if exe, err2 := os.Executable(); err2 == nil {
+			p := filepath.Join(filepath.Dir(exe), base)
+			if _, err2 := os.Stat(p); err2 == nil {
+				scriptPath = p
+				break
+			}
+		}
+		// CWD
+		if wd, err2 := os.Getwd(); err2 == nil {
+			p := filepath.Join(wd, base)
+			if _, err2 := os.Stat(p); err2 == nil {
+				scriptPath = p
+				break
+			}
+		}
+		// Walk up
+		if wd, err2 := os.Getwd(); err2 == nil {
+			dir := wd
+			for i := 0; i < 5; i++ {
+				p := filepath.Join(dir, base)
+				if _, err2 := os.Stat(p); err2 == nil {
+					scriptPath = p
+					break
+				}
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
+			}
+		}
+	}
+
+	if scriptPath == "" {
+		http.Error(w, "preview script not found", http.StatusInternalServerError)
+		return
+	}
+
+	ctx := r.Context()
+	cmd := exec.CommandContext(ctx, "python3", scriptPath, fullPath)
+	out, err := cmd.Output()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("preview failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(out)
 }
 
 // respondToInput POST /api/v1/tasks/{id}/respond

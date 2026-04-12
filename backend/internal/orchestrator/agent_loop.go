@@ -31,12 +31,30 @@ RULES:
 3. Stop after the file is written. Max 15 tool calls total.
 4. Use ask_user when you need clarification, preference, or feedback mid-task. The user will respond in real-time via the UI. Keep questions short and specific.
 
+INTERACTION: Only use ask_user when you genuinely need clarification — do NOT ask questions just to be polite. If the task is clear enough, start working immediately. After completing the task, tell the user what you did and that you are available if they want changes — do NOT end the conversation abruptly. The user can ask follow-up questions at any time.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WRITE_PPTX — 10 SLIDE TYPES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Required fields: "filename", "title", "slides" (6-10 slides).
 Each slide MUST have: "heading" (≤60 chars) and "type".
+
+COLOR THEME — the engine auto-detects a theme from the title, but you should
+pick titles that clearly signal the topic domain for best color matching:
+  healthcare/medical → cyan/teal palette
+  tech/AI/software   → indigo/purple palette
+  education/learning → amber/gold palette
+  finance/business   → green palette
+  environment/climate→ teal/emerald palette
+  creative/design    → purple palette
+  security/cyber     → red palette
+  data/analytics     → teal palette
+  logistics/supply   → blue palette
+  retail/ecommerce   → orange palette
+  hr/talent          → pink palette
+Use descriptive titles like "AI in Healthcare: Transforming Patient Care"
+rather than vague ones like "Presentation about stuff".
 
 TYPE REFERENCE — choose the right type per slide:
 
@@ -218,6 +236,13 @@ func (a *AgentLoop) Run(
 			"tool_calls", len(toolCalls),
 			"content_snippet", truncate(content, 200),
 		)
+
+		// Emit agent message event if there is meaningful text content
+		if len(content) > 5 {
+			a.emitAgentEvent(ctx, task.ID, domain.EventTypeAgentMessage, map[string]any{
+				"text": content,
+			})
+		}
 
 		// No tool calls → agent decided it is done
 		if len(toolCalls) == 0 {

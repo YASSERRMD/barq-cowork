@@ -112,8 +112,8 @@ export function LogsPage() {
               padding: "3px 10px", borderRadius: 5, fontSize: 12, fontWeight: 500,
               cursor: "pointer", border: "1px solid",
               background: filterType === cat.value ? "var(--accent-dim)" : "transparent",
-              borderColor: filterType === cat.value ? "rgba(99,102,241,0.3)" : "transparent",
-              color: filterType === cat.value ? "#a5b4fc" : "var(--text-faint)",
+              borderColor: filterType === cat.value ? "var(--accent)" : "transparent",
+              color: filterType === cat.value ? "var(--accent)" : "var(--text-faint)",
               transition: "all 120ms",
             }}
           >
@@ -213,7 +213,7 @@ function EventLine({ event: ev }: { event: TaskEvent }) {
           textDecoration: "none", transition: "color 100ms",
         }}
         title={ev.task_id}
-        onMouseEnter={(e) => (e.currentTarget.style.color = "#a5b4fc")}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
         onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-faint)")}
       >
         {ev.task_id.slice(0, 8)}

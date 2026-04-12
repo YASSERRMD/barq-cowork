@@ -378,15 +378,26 @@ def translate_to_deck(data: dict) -> Deck:
     subtitle = str(data.get("subtitle", ""))
     author   = str(data.get("author",  "Barq Cowork"))
 
-    # Build full theme from topic keywords; if caller passed an explicit accent,
-    # honour it by overriding just the accent color on the theme.
-    theme = _build_full_theme(title, subtitle)
-    if "accent" in data:
-        raw_accent = str(data["accent"]).lstrip("#")
-        if len(raw_accent) == 3:
-            raw_accent = "".join(c * 2 for c in raw_accent)
-        raw_accent = raw_accent.upper()
-        theme.colors.accent = f"#{raw_accent}"
+    # If Go passed an explicit theme name, use that preset directly for the
+    # full coordinated palette (background, surface, accent, border — all matched).
+    # Falls back to keyword detection if no theme name is provided.
+    explicit_theme = str(data.get("theme", "")).strip().lower()
+    if explicit_theme and explicit_theme in _THEME_PRESETS:
+        bg, surface, accent, accent2, border = _THEME_PRESETS[explicit_theme]
+        theme = DeckTheme(
+            colors=ThemeColors(
+                background=bg,
+                surface=surface,
+                accent=accent,
+                accent2=accent2,
+                text="#F8FAFC",
+                text_muted="#94A3B8",
+                border=border,
+            ),
+            fonts=ThemeFonts(heading="Calibri Light", body="Calibri", size_heading=31, size_body=15),
+        )
+    else:
+        theme = _build_full_theme(title, subtitle)
 
     # ── Build slides ──────────────────────────────────────────────────────────
     raw_slides = data.get("slides") or []

@@ -160,7 +160,7 @@ export function SchedulesPage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(0,0,0,0.4)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -299,7 +299,7 @@ function ScheduleRow({
       <span
         style={{
           fontSize: 11,
-          color: schedule.enabled ? "#a5b4fc" : "var(--text-faint)",
+          color: schedule.enabled ? "var(--accent)" : "var(--text-faint)",
         }}
       >
         {schedule.enabled ? formatDate(schedule.next_run_at) : "Paused"}
@@ -318,7 +318,7 @@ function ScheduleRow({
           className="btn-ghost btn-sm"
           style={{
             padding: "2px 4px",
-            color: schedule.enabled ? "#a5b4fc" : "var(--text-faint)",
+            color: schedule.enabled ? "var(--accent)" : "var(--text-faint)",
           }}
           onClick={onToggle}
           disabled={toggling}

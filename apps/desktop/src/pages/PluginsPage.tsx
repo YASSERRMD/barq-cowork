@@ -220,10 +220,10 @@ function PluginDetail({ plugin }: { plugin: Plugin }) {
                 style={{
                   fontSize: 12,
                   background: "var(--accent-dim)",
-                  color: "#a5b4fc",
+                  color: "var(--accent)",
                   borderRadius: 5,
                   padding: "3px 10px",
-                  border: "1px solid rgba(99,102,241,0.2)",
+                  border: "1px solid var(--accent-glow)",
                 }}
               >
                 {s}

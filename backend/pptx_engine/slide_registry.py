@@ -90,6 +90,7 @@ def _line_from_theme(theme: DeckTheme) -> RGBColor:
     return _h(theme.colors.border)
 
 
+
 # ── Low-level XML primitives (mirror gen_pptx.py) ────────────────────────────
 
 def _spPr(shape):
@@ -872,12 +873,16 @@ class ChartSlideRenderer:
             pass
 
         # Y-axis label if provided
-        if content.y_label:
+        y_label = getattr(content, "y_label", None)
+        if y_label:
             try:
-                ch_obj.value_axis.axis_title.text_frame.text = content.y_label
-                ch_obj.value_axis.axis_title.text_frame.paragraphs[0].runs[0].font.color.rgb = muted
-                ch_obj.value_axis.axis_title.text_frame.paragraphs[0].runs[0].font.size = Pt(9)
                 ch_obj.value_axis.has_title = True
+                ch_obj.value_axis.axis_title.text_frame.text = y_label
+                try:
+                    ch_obj.value_axis.axis_title.text_frame.paragraphs[0].runs[0].font.color.rgb = muted
+                    ch_obj.value_axis.axis_title.text_frame.paragraphs[0].runs[0].font.size = Pt(9)
+                except Exception:
+                    pass
             except Exception:
                 pass
 

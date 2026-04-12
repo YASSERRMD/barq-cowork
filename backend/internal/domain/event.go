@@ -19,6 +19,7 @@ const (
 	EventTypeLogLine        EventType = "log.line"
 	EventTypeInputNeeded    EventType = "input.needed"
 	EventTypeInputAnswered  EventType = "input.answered"
+	EventTypeAgentMessage   EventType = "agent.message"
 )
 
 // Event is an immutable audit record of something that happened during
