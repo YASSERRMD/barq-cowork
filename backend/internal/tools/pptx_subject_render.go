@@ -230,6 +230,8 @@ func renderCoverMosaicGrid(g *idg, sb *strings.Builder, deck pptxDeckContext, pa
 
 func renderCoverStudioPoster(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
 	titleSize, titleHeight := coverTitleMetrics(deck.Title, 3600)
+	subtitle := coverLead(deck)
+	subtitleSize, subtitleHeight := coverSubtitleMetrics(subtitle, 1500)
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
 	sb.WriteString(spRect(g, "posterBand", 0, 0, 2480000, 6858000, pal.accent))
 	sb.WriteString(spRect(g, "posterRail", 2480000, 0, 300000, 6858000, pal.accent2))
@@ -240,11 +242,13 @@ func renderCoverStudioPoster(g *idg, sb *strings.Builder, deck pptxDeckContext, 
 	renderCoverMotif(g, sb, "posterMotif", 6740000, 1160000, 960000, pal, coverMotifToken(deck), 24)
 	sb.WriteString(spTextLeft(g, "titleKicker", 2980000, 900000, 2600000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent2, 1120, true, "t", "Calibri"))
 	sb.WriteString(spTextLeft(g, "title", 2980000, 1460000, 3200000, titleHeight, firstNonEmpty(deck.Title, "Presentation"), pal.text, titleSize, true, "t", "Calibri Light"))
-	if subtitle := coverLead(deck); subtitle != "" {
-		sb.WriteString(spTextLeft(g, "subtitle", 2980000, 1460000+titleHeight+220000, 2800000, 340000, subtitle, pal.accent2, 1500, true, "t", "Calibri"))
+	subtitleY := 1460000 + titleHeight + 220000
+	if subtitle != "" {
+		sb.WriteString(spTextLeft(g, "subtitle", 2980000, subtitleY, 2800000, subtitleHeight, subtitle, pal.accent2, subtitleSize, true, "t", "Calibri"))
 	}
+	supportY := subtitleY + subtitleHeight + 140000
 	if support := coverSupportLine(deck); support != "" {
-		sb.WriteString(spTextLeft(g, "support", 2980000, 1460000+titleHeight+640000, 2600000, 380000, support, pal.muted, 1180, false, "t", "Calibri"))
+		sb.WriteString(spTextLeft(g, "support", 2980000, supportY, 2600000, 420000, support, pal.muted, 1180, false, "t", "Calibri"))
 	}
 	sb.WriteString(spTextLeft(g, "subjectLine", 2980000, 5860000, 2200000, 180000, coverSubjectLine(deck), pal.muted, 960, true, "t", "Calibri"))
 }
@@ -350,6 +354,18 @@ func coverTitleMetrics(title string, base int) (int, int) {
 		return base - 450, 1120000
 	default:
 		return base, 860000
+	}
+}
+
+func coverSubtitleMetrics(subtitle string, base int) (int, int) {
+	length := len([]rune(strings.TrimSpace(subtitle)))
+	switch {
+	case length > 72:
+		return base - 260, 820000
+	case length > 48:
+		return base - 140, 620000
+	default:
+		return base, 340000
 	}
 }
 
