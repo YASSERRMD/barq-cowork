@@ -671,11 +671,18 @@ func spRightArrow(g *idg, name string, x, y, w, h int, fill string) string {
 
 func slideHeader(g *idg, heading string, pal pptxPalette) string {
 	var sb strings.Builder
+	// Gradient-style bg: main bg + subtle gradient overlay
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
-	sb.WriteString(spRect(g, "topBar", 0, 0, 9144000, 12700, pal.accent))
-	sb.WriteString(spEllipse(g, "decCircleLg", 7500000, -600000, 2400000, 2400000, "", 0, pal.accent, 19050, 15))
-	sb.WriteString(spTextLeft(g, "headingText", 457200, 60000, 8229600, 457200, heading, pal.text, 3600, true, "ctr", "Calibri Light"))
-	sb.WriteString(spRect(g, "divider", 457200, 571500, 8229600, 9525, pal.border))
+	// Accent top strip — thicker for visual weight
+	sb.WriteString(spRect(g, "topStrip", 0, 0, 9144000, 38100, pal.accent))
+	// Subtle accent glow circle in top-right
+	sb.WriteString(spEllipse(g, "glowTR", 7200000, -800000, 2800000, 2800000, pal.accent, 4, "", 0, 0))
+	// Heading text — large, bold
+	sb.WriteString(spTextLeft(g, "headingText", 457200, 100000, 7500000, 500000, heading, pal.text, 3200, true, "ctr", "Calibri Light"))
+	// Accent underline bar beneath heading
+	sb.WriteString(spRect(g, "accentLine", 457200, 600000, 1600000, 28575, pal.accent))
+	// Faint horizontal rule across full width
+	sb.WriteString(spRect(g, "divider", 457200, 640000, 8229600, 6350, pal.border))
 	return sb.String()
 }
 
@@ -715,31 +722,43 @@ func pptxCoverSlide(title, subtitle string, pal pptxPalette) string {
 	g := &idg{}
 	var sb strings.Builder
 
+	// Full background
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
-	sb.WriteString(spEllipse(g, "decCircle1", 7000000, -800000, 3000000, 3000000, "", 0, pal.accent, 28575, 15))
-	sb.WriteString(spEllipse(g, "decCircle2", 7600000, -200000, 2000000, 2000000, "", 0, pal.accent, 19050, 10))
-	sb.WriteString(spEllipse(g, "decCircleSm", 200000, 5800000, 600000, 600000, pal.accent, 8, "", 0, 0))
-	sb.WriteString(spRect(g, "accentBar", 457200, 1371600, 19050, 3657600, pal.accent))
+	// Right-side accent panel (vertical strip, ~30% width)
+	sb.WriteString(spRect(g, "accentPanel", 6400000, 0, 2744000, 6858000, pal.accent))
+	// Decorative large circle overlapping accent panel
+	sb.WriteString(spEllipse(g, "decCircle1", 5800000, 1200000, 3200000, 3200000, pal.accent, 12, "", 0, 0))
+	// Smaller accent circle bottom-left
+	sb.WriteString(spEllipse(g, "decCircle2", -200000, 5400000, 1200000, 1200000, pal.accent, 6, "", 0, 0))
+	// Subtle border ring top-right
+	sb.WriteString(spEllipse(g, "ringTR", 7400000, -400000, 2000000, 2000000, "", 0, pal.text, 12700, 8))
+	// Left-aligned accent bar
+	sb.WriteString(spRect(g, "accentBar", 457200, 1800000, 80000, 6350, pal.accent))
 
+	// Title — large, left-aligned, in the left 65%
 	id := g.next()
 	sb.WriteString(fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="titleText"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="762000" y="1600200"/><a:ext cx="7467600" cy="1981200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
-<p:txBody><a:bodyPr anchor="ctr" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
-<a:p><a:r><a:rPr lang="en-US" sz="4400" b="1" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri Light" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
+<p:spPr><a:xfrm><a:off x="457200" y="1900000"/><a:ext cx="5600000" cy="2400000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+<p:txBody><a:bodyPr anchor="t" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
+<a:p><a:r><a:rPr lang="en-US" sz="4800" b="1" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri Light" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
 </p:txBody>
 </p:sp>`, id, pal.text, xmlEsc(title)))
 
+	// Subtitle — below title
 	id = g.next()
 	sb.WriteString(fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="subtitleText"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="762000" y="3657600"/><a:ext cx="7467600" cy="685800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
+<p:spPr><a:xfrm><a:off x="457200" y="4400000"/><a:ext cx="5600000" cy="600000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>
 <p:txBody><a:bodyPr anchor="t" wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>
 <a:p><a:r><a:rPr lang="en-US" sz="2000" dirty="0" smtClean="0"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="Calibri" pitchFamily="2" charset="0"/></a:rPr><a:t>%s</a:t></a:r></a:p>
 </p:txBody>
 </p:sp>`, id, pal.muted, xmlEsc(subtitle)))
 
-	sb.WriteString(spRect(g, "bottomLine", 0, 6845300, 9144000, 12700, pal.accent))
+	// Bottom accent bar
+	sb.WriteString(spRect(g, "bottomBar", 0, 6800000, 6400000, 57150, pal.accent))
+	// "Barq Cowork" watermark bottom-left
+	sb.WriteString(spTextLeft(g, "watermark", 457200, 6200000, 2000000, 300000, "Barq Cowork", pal.muted, 1100, false, "b", "Calibri"))
 
 	return wrapSlide(sb.String())
 }
@@ -751,75 +770,59 @@ func pptxBulletsSlide(heading string, points []string, pal pptxPalette) string {
 	var sb strings.Builder
 	sb.WriteString(slideHeader(g, heading, pal))
 
+	contentTop := 720000
+	availH := 5900000
+	leftMargin := 457200
+
 	twoCol := len(points) >= 5
-	contentTop := 640000
-	contentH := 5900000
-
 	if twoCol {
-		colW := 4000000
-		colGap := 228600
-		leftX := 457200
-		rightX := leftX + colW + colGap
-
-		cardH := contentH / 4
-		if len(points) <= 6 {
-			cardH = contentH / 3
-		}
-		cardGap := 60000
+		colW := 3900000
+		colGap := 400000
+		rightX := leftMargin + colW + colGap
+		itemH := 700000
+		itemGap := 120000
 
 		for i, pt := range points {
 			col := i % 2
 			row := i / 2
-			cardX := leftX
+			x := leftMargin
 			if col == 1 {
-				cardX = rightX
+				x = rightX
 			}
-			cardY := contentTop + row*(cardH+cardGap)
+			y := contentTop + row*(itemH+itemGap)
 
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, colW, cardH, pal.card, pal.accent, 15))
-			sb.WriteString(spRect(g, fmt.Sprintf("strip%d", i), cardX, cardY, 9000, cardH, pal.accent))
-
-			badgeSize := 228600
-			badgeX := cardX + 30000
-			badgeY := cardY + (cardH-badgeSize)/2
-			sb.WriteString(spEllipse(g, fmt.Sprintf("badge%d", i), badgeX, badgeY, badgeSize, badgeSize, pal.accent, 100, "", 0, 0))
-			sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), badgeX, badgeY, badgeSize, badgeSize, fmt.Sprintf("%d", i+1), pal.text, 1400, true, "ctr", "Calibri"))
-
-			textX := cardX + 290000
-			textW := colW - 310000
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("ptText%d", i), textX, cardY+30000, textW, cardH-60000, pt, pal.text, 1600, false, "ctr", "Calibri"))
+			// Card background with accent left border
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), x, y, colW, itemH, pal.card, pal.border, 10))
+			sb.WriteString(spRect(g, fmt.Sprintf("accent%d", i), x, y+50000, 38100, itemH-100000, pal.accent))
+			// Text
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("text%d", i), x+120000, y+20000, colW-160000, itemH-40000, pt, pal.text, 1500, false, "ctr", "Calibri"))
 		}
 	} else {
-		numCards := len(points)
-		if numCards == 0 {
-			numCards = 1
+		n := len(points)
+		if n == 0 {
+			n = 1
 		}
-		totalGap := 60000 * (numCards - 1)
-		cardH := (contentH - totalGap) / numCards
-		if cardH > 1200000 {
-			cardH = 1200000
+		itemGap := 100000
+		totalGap := itemGap * (n - 1)
+		itemH := (availH - totalGap) / n
+		if itemH > 900000 {
+			itemH = 900000
 		}
-		cardW := 8229600
-		cardX := 457200
 
 		for i, pt := range points {
-			cardY := contentTop + i*(cardH+60000)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, cardW, cardH, pal.card, pal.accent, 15))
-			sb.WriteString(spRect(g, fmt.Sprintf("strip%d", i), cardX, cardY, 9000, cardH, pal.accent))
+			y := contentTop + i*(itemH+itemGap)
 
-			badgeSize := 228600
-			badgeX := cardX + 40000
-			badgeY := cardY + (cardH-badgeSize)/2
-			sb.WriteString(spEllipse(g, fmt.Sprintf("badge%d", i), badgeX, badgeY, badgeSize, badgeSize, pal.accent, 100, "", 0, 0))
-			sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), badgeX, badgeY, badgeSize, badgeSize, fmt.Sprintf("%d", i+1), pal.text, 1400, true, "ctr", "Calibri"))
-
-			textX := cardX + 320000
-			textW := cardW - 380000
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("ptText%d", i), textX, cardY+20000, textW, cardH-40000, pt, pal.text, 1800, false, "ctr", "Calibri"))
+			// Full-width card with accent left border
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), leftMargin, y, 8229600, itemH, pal.card, pal.border, 8))
+			// Thick accent left bar
+			sb.WriteString(spRect(g, fmt.Sprintf("accent%d", i), leftMargin, y+30000, 38100, itemH-60000, pal.accent))
+			// Bullet text
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("text%d", i), leftMargin+150000, y+20000, 7800000, itemH-40000, pt, pal.text, 1700, false, "ctr", "Calibri"))
 		}
 	}
 
-	sb.WriteString(spEllipse(g, "decCircleSmBR", 8800000, 6400000, 500000, 500000, pal.accent, 8, "", 0, 0))
+	// Bottom-right accent dot
+	sb.WriteString(spEllipse(g, "decDot", 8600000, 6400000, 300000, 300000, pal.accent, 10, "", 0, 0))
 
 	return wrapSlide(sb.String())
 }
@@ -862,38 +865,42 @@ func pptxStatsSlide(heading string, stats []pptxStat, points []string, pal pptxP
 	}
 
 	totalW := 8229600
-	gap := 152400
+	gap := 200000
 	cardW := (totalW - gap*(n-1)) / n
-	cardH := 4800000
-	cardTop := 700000
+	cardH := 4600000
+	cardTop := 800000
 	startX := 457200
 
 	for i, st := range allStats {
 		cardX := startX + i*(cardW+gap)
-		sb.WriteString(spRoundRect(g, fmt.Sprintf("statCard%d", i), cardX, cardTop, cardW, cardH, pal.card, pal.accent, 15))
-		sb.WriteString(spRect(g, fmt.Sprintf("statTopStrip%d", i), cardX, cardTop, cardW, cardH/12, pal.accent))
-		sb.WriteString(spText(g, fmt.Sprintf("statVal%d", i), cardX, cardTop+cardH/10, cardW, cardH/3, st.Value, pal.accent, 6000, true, "ctr", "Calibri Light"))
-		sb.WriteString(spText(g, fmt.Sprintf("statLabel%d", i), cardX, cardTop+cardH/3+cardH/10+60000, cardW, cardH/5, st.Label, pal.text, 1800, false, "ctr", "Calibri"))
+		// Card with top accent border
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("statCard%d", i), cardX, cardTop, cardW, cardH, pal.card, pal.border, 8))
+		// Top accent bar
+		sb.WriteString(spRect(g, fmt.Sprintf("topAccent%d", i), cardX+50000, cardTop, cardW-100000, 38100, pal.accent))
+		// Big stat value — prominent accent color
+		sb.WriteString(spText(g, fmt.Sprintf("statVal%d", i), cardX, cardTop+300000, cardW, cardH/3, st.Value, pal.accent, 5400, true, "ctr", "Calibri Light"))
+		// Divider line
+		sb.WriteString(spRect(g, fmt.Sprintf("statDiv%d", i), cardX+cardW/4, cardTop+300000+cardH/3, cardW/2, 6350, pal.border))
+		// Label
+		sb.WriteString(spText(g, fmt.Sprintf("statLbl%d", i), cardX+20000, cardTop+400000+cardH/3, cardW-40000, cardH/5, st.Label, pal.text, 1600, true, "ctr", "Calibri"))
+		// Description
 		if st.Desc != "" {
-			sb.WriteString(spText(g, fmt.Sprintf("statDesc%d", i), cardX, cardTop+cardH/3+cardH/10+cardH/5+80000, cardW, cardH/7, st.Desc, pal.muted, 1400, false, "ctr", "Calibri"))
+			sb.WriteString(spText(g, fmt.Sprintf("statDesc%d", i), cardX+20000, cardTop+500000+cardH/3+cardH/5, cardW-40000, cardH/6, st.Desc, pal.muted, 1200, false, "ctr", "Calibri"))
 		}
-		hasPercent := strings.Contains(st.Value, "%")
-		if hasPercent {
+		// Progress bar for percentages
+		if strings.Contains(st.Value, "%") {
 			pctStr := strings.TrimSuffix(strings.TrimSpace(st.Value), "%")
 			pct := 0
 			fmt.Sscanf(pctStr, "%d", &pct)
-			if pct < 0 {
-				pct = 0
-			}
-			if pct > 100 {
-				pct = 100
-			}
-			trackY := cardTop + cardH - cardH/10
-			trackH := 19050
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("track%d", i), cardX+50000, trackY, cardW-100000, trackH, pal.border, "", 0))
-			filledW := (cardW - 100000) * pct / 100
+			if pct < 0 { pct = 0 }
+			if pct > 100 { pct = 100 }
+			trackY := cardTop + cardH - 200000
+			trackH := 38100
+			barMargin := 80000
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("track%d", i), cardX+barMargin, trackY, cardW-barMargin*2, trackH, pal.border, "", 0))
+			filledW := (cardW - barMargin*2) * pct / 100
 			if filledW > 0 {
-				sb.WriteString(spRoundRect(g, fmt.Sprintf("fill%d", i), cardX+50000, trackY, filledW, trackH, pal.accent, "", 0))
+				sb.WriteString(spRoundRect(g, fmt.Sprintf("fill%d", i), cardX+barMargin, trackY, filledW, trackH, pal.accent, "", 0))
 			}
 		}
 	}
@@ -913,52 +920,60 @@ func pptxStepsSlide(heading string, points []string, pal pptxPalette) string {
 		return wrapSlide(sb.String())
 	}
 
-	rowPalette := []string{"6366F1", "8B5CF6", "06B6D4", "10B981", "F59E0B", "EF4444"}
+	// Horizontal connector line across full width
+	lineY := 1600000
+	sb.WriteString(spRect(g, "connector", 457200, lineY+100000, 8229600, 6350, pal.border))
 
 	renderRow := func(rowSteps []string, rowTop int, rowStartNum int) {
 		n := len(rowSteps)
 		if n == 0 {
 			return
 		}
-		arrowW := 200000
-		arrowH := 100000
 		totalW := 8229600
-		gap := arrowW
+		gap := 80000
 		boxW := (totalW - gap*(n-1)) / n
-		boxH := 600000
-		labelH := 400000
+		circleSize := 400000
 		startX := 457200
 
 		for i, step := range rowSteps {
 			boxX := startX + i*(boxW+gap)
-			acc := rowPalette[(rowStartNum+i)%len(rowPalette)]
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("stepBox%d", rowStartNum+i), boxX, rowTop, boxW, boxH, acc, "", 0))
-			sb.WriteString(spText(g, fmt.Sprintf("stepNum%d", rowStartNum+i), boxX, rowTop, boxW, boxH, fmt.Sprintf("%d", rowStartNum+i+1), pal.text, 3200, true, "ctr", "Calibri Light"))
-			sb.WriteString(spText(g, fmt.Sprintf("stepLabel%d", rowStartNum+i), boxX, rowTop+boxH+40000, boxW, labelH, step, pal.text, 1400, false, "t", "Calibri"))
+			centerX := boxX + boxW/2
 
+			// Step number circle on the connector line
+			circleX := centerX - circleSize/2
+			circleY := rowTop - circleSize/2 + 100000
+			sb.WriteString(spEllipse(g, fmt.Sprintf("circle%d", rowStartNum+i), circleX, circleY, circleSize, circleSize, pal.accent, 100, "", 0, 0))
+			sb.WriteString(spText(g, fmt.Sprintf("num%d", rowStartNum+i), circleX, circleY, circleSize, circleSize, fmt.Sprintf("%d", rowStartNum+i+1), pal.text, 2000, true, "ctr", "Calibri"))
+
+			// Card below the circle
+			cardTop := rowTop + circleSize/2 + 200000
+			cardH := 2400000
+			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", rowStartNum+i), boxX, cardTop, boxW, cardH, pal.card, pal.border, 8))
+			// Step text
+			sb.WriteString(spText(g, fmt.Sprintf("label%d", rowStartNum+i), boxX+30000, cardTop+40000, boxW-60000, cardH-80000, step, pal.text, 1400, false, "t", "Calibri"))
+
+			// Arrow between steps
 			if i < n-1 {
-				arrX := boxX + boxW
-				arrY := rowTop + (boxH-arrowH)/2
-				sb.WriteString(spRightArrow(g, fmt.Sprintf("arrow%d", rowStartNum+i), arrX, arrY, arrowW, arrowH, pal.border))
+				arrX := boxX + boxW + gap/4
+				arrY := rowTop + 50000
+				sb.WriteString(spRightArrow(g, fmt.Sprintf("arrow%d", rowStartNum+i), arrX, arrY, gap/2, 100000, pal.accent))
 			}
 		}
 	}
 
 	if len(steps) <= 4 {
-		renderRow(steps, 1000000, 0)
+		renderRow(steps, lineY, 0)
 	} else {
-		row1 := steps[:3]
-		row2 := steps[3:]
-		renderRow(row1, 900000, 0)
-		renderRow(row2, 3000000, 3)
+		// Second connector line
+		sb.WriteString(spRect(g, "connector2", 457200, 3800000+100000, 8229600, 6350, pal.border))
+		renderRow(steps[:3], lineY, 0)
+		renderRow(steps[3:], 3800000, 3)
 	}
 
 	return wrapSlide(sb.String())
 }
 
 // ── Cards layout ──────────────────────────────────────────────────────────────
-
-var cardIcons = []string{"◈", "⬡", "◎", "◇", "△", "▣"}
 
 func pptxCardsSlide(heading string, points []string, pal pptxPalette) string {
 	g := &idg{}
@@ -970,42 +985,60 @@ func pptxCardsSlide(heading string, points []string, pal pptxPalette) string {
 		cards = cards[:6]
 	}
 
-	cols := 2
-	rows := (len(cards) + cols - 1) / cols
+	n := len(cards)
+	cols := 3
+	if n <= 2 {
+		cols = 2
+	} else if n <= 3 {
+		cols = 3
+	}
+	rows := (n + cols - 1) / cols
 	totalW := 8229600
-	totalH := 5700000
-	gapX := 228600
-	gapY := 152400
+	gapX := 200000
+	gapY := 200000
 	cardW := (totalW - gapX*(cols-1)) / cols
-	cardH := (totalH - gapY*(rows-1)) / rows
+	availH := 5600000
+	cardH := (availH - gapY*(rows-1)) / rows
+	if cardH > 2800000 {
+		cardH = 2800000
+	}
 	startX := 457200
-	startY := 700000
+	startY := 800000
 
 	for i, pt := range cards {
 		col := i % cols
 		row := i / cols
 		cardX := startX + col*(cardW+gapX)
 		cardY := startY + row*(cardH+gapY)
-		sb.WriteString(spRoundRect(g, fmt.Sprintf("featureCard%d", i), cardX, cardY, cardW, cardH, pal.card, pal.accent, 15))
-		sb.WriteString(spRect(g, fmt.Sprintf("cardStrip%d", i), cardX, cardY, 9000, cardH, pal.accent))
 
-		icon := cardIcons[i%len(cardIcons)]
-		iconH := cardH / 3
-		sb.WriteString(spText(g, fmt.Sprintf("cardIcon%d", i), cardX, cardY+20000, cardW, iconH, icon, pal.accent, 3200, false, "ctr", "Calibri"))
+		// Card with accent top border
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), cardX, cardY, cardW, cardH, pal.card, pal.border, 8))
+		sb.WriteString(spRect(g, fmt.Sprintf("topAccent%d", i), cardX+40000, cardY, cardW-80000, 28575, pal.accent))
 
+		// Number indicator (not a circle — a rounded rectangle badge)
+		badgeW := 280000
+		badgeH := 280000
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("badge%d", i), cardX+cardW/2-badgeW/2, cardY+120000, badgeW, badgeH, pal.accent, "", 0))
+		sb.WriteString(spText(g, fmt.Sprintf("badgeNum%d", i), cardX+cardW/2-badgeW/2, cardY+120000, badgeW, badgeH, fmt.Sprintf("%d", i+1), pal.text, 1600, true, "ctr", "Calibri"))
+
+		// Title/content text
 		title := pt
 		body := ""
-		if len(pt) > 30 {
-			spaceIdx := strings.Index(pt[25:], " ")
-			if spaceIdx >= 0 {
-				split := 25 + spaceIdx
-				title = pt[:split]
-				body = pt[split+1:]
+		if idx := strings.Index(pt, ":"); idx > 0 && idx < 40 {
+			title = strings.TrimSpace(pt[:idx])
+			body = strings.TrimSpace(pt[idx+1:])
+		} else if len(pt) > 35 {
+			if spaceIdx := strings.Index(pt[30:], " "); spaceIdx >= 0 {
+				title = pt[:30+spaceIdx]
+				body = pt[30+spaceIdx+1:]
 			}
 		}
-		sb.WriteString(spText(g, fmt.Sprintf("cardTitle%d", i), cardX+20000, cardY+iconH+30000, cardW-40000, cardH/5, title, pal.text, 1600, true, "ctr", "Calibri"))
+
+		titleY := cardY + 120000 + badgeH + 100000
+		sb.WriteString(spText(g, fmt.Sprintf("title%d", i), cardX+20000, titleY, cardW-40000, cardH/4, title, pal.text, 1500, true, "t", "Calibri"))
 		if body != "" {
-			sb.WriteString(spText(g, fmt.Sprintf("cardBody%d", i), cardX+20000, cardY+iconH+cardH/5+50000, cardW-40000, cardH/4, body, pal.muted, 1300, false, "t", "Calibri"))
+			bodyY := titleY + cardH/4 + 20000
+			sb.WriteString(spText(g, fmt.Sprintf("body%d", i), cardX+30000, bodyY, cardW-60000, cardH/3, body, pal.muted, 1200, false, "t", "Calibri"))
 		}
 	}
 
