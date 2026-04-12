@@ -11,31 +11,7 @@
 
 **AI-powered document intelligence workstation**
 
-[Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Getting Started](#getting-started) · [PPTX Themes](#pptx-themes)
-
-</div>
-
----
-
-## Screenshots
-
-<div align="center">
-
-<img src="docs/screenshots/home.png" alt="Home — task composer and recent runs" width="100%" />
-
-*Home — natural-language task composer with recent run history*
-
-<br/>
-
-<img src="docs/screenshots/chat.png" alt="Task run — full-width conversation with agent" width="100%" />
-
-*Task run — full-width conversation view with step and file panel*
-
-<br/>
-
-<img src="docs/screenshots/runs.png" alt="Runs — task history list" width="100%" />
-
-*Runs — searchable task history with status and elapsed time*
+[Overview](#overview) · [Features](#features) · [Screenshots](#screenshots) · [Architecture](#architecture) · [Getting Started](#getting-started) · [PPTX Themes](#pptx-themes)
 
 </div>
 
@@ -64,6 +40,30 @@ The application generates professional PowerPoint presentations, Word documents,
 - Multi-provider LLM support: OpenAI, Anthropic, Gemini, Ollama, Z.AI, and any OpenAI-compatible endpoint
 - API keys stored locally; no environment variables or cloud accounts required
 - Cross-platform desktop application for macOS (Apple Silicon and Intel) and Windows 10/11
+
+---
+
+## Screenshots
+
+<div align="center">
+
+<img src="docs/screenshots/home.png" alt="Home page — task composer and recent runs" width="100%" />
+
+*Home — describe a task in plain language and run it instantly*
+
+<br/>
+
+<img src="docs/screenshots/chat.png" alt="Task run — agent conversation with step-by-step progress" width="100%" />
+
+*Task run — full-width agent conversation with live step execution and file output*
+
+<br/>
+
+<img src="docs/screenshots/runs.png" alt="Runs — complete task history with status and duration" width="100%" />
+
+*Runs — searchable history of all completed and in-progress tasks*
+
+</div>
 
 ---
 
