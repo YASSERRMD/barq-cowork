@@ -198,6 +198,7 @@ func renderCoverOrbitFocus(g *idg, sb *strings.Builder, deck pptxDeckContext, pa
 }
 
 func renderCoverMosaicGrid(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
+	titleSize, titleHeight := coverTitleMetrics(deck.Title, 3200)
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
 	sb.WriteString(spRoundRect(g, "titlePanel", 620000, 3720000, 3600000, 1980000, pal.card, pal.border, 12))
 	sb.WriteString(spRect(g, "panelAccent", 620000, 3720000, 3600000, 38100, pal.accent))
@@ -215,14 +216,16 @@ func renderCoverMosaicGrid(g *idg, sb *strings.Builder, deck pptxDeckContext, pa
 	renderCoverMotif(g, sb, "mosaicMotif", 6620000, 1060000, 1160000, pal, coverMotifToken(deck), 22)
 	renderCoverMotif(g, sb, "mosaicMotifSmall", 4860000, 2840000, 760000, pal, coverMotifToken(deck), 18)
 	sb.WriteString(spTextLeft(g, "titleKicker", 900000, 4040000, 2200000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent, 1080, true, "t", "Calibri"))
-	sb.WriteString(spTextLeft(g, "title", 900000, 4520000, 2820000, 940000, firstNonEmpty(deck.Title, "Presentation"), pal.text, 3050, true, "t", "Calibri Light"))
+	sb.WriteString(spTextLeft(g, "title", 900000, 4520000, 2820000, titleHeight+140000, firstNonEmpty(deck.Title, "Presentation"), pal.text, titleSize, true, "t", "Calibri Light"))
+	subtitleY := 4520000 + titleHeight + 180000
 	if subtitle := coverLead(deck); subtitle != "" {
-		sb.WriteString(spTextLeft(g, "subtitle", 900000, 5660000, 2500000, 260000, subtitle, pal.accent2, 1320, true, "t", "Calibri"))
+		sb.WriteString(spTextLeft(g, "subtitle", 900000, subtitleY, 2500000, 260000, subtitle, pal.accent2, 1320, true, "t", "Calibri"))
 	}
+	supportY := subtitleY + 320000
 	if support := coverSupportLine(deck); support != "" {
-		sb.WriteString(spTextLeft(g, "support", 4680000, 5920000, 2400000, 220000, support, pal.muted, 980, false, "t", "Calibri"))
+		sb.WriteString(spTextLeft(g, "support", 4680000, supportY, 2400000, 220000, support, pal.muted, 980, false, "t", "Calibri"))
 	}
-	sb.WriteString(spTextLeft(g, "subjectLine", 4680000, 6260000, 2200000, 180000, coverSubjectLine(deck), pal.muted, 900, true, "t", "Calibri"))
+	sb.WriteString(spTextLeft(g, "subjectLine", 4680000, supportY+340000, 2200000, 180000, coverSubjectLine(deck), pal.muted, 900, true, "t", "Calibri"))
 }
 
 func renderCoverStudioPoster(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
