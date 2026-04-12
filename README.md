@@ -17,6 +17,30 @@
 
 ---
 
+## Screenshots
+
+<div align="center">
+
+<img src="docs/screenshots/home.png" alt="Home — task composer and recent runs" width="100%" />
+
+*Home — natural-language task composer with recent run history*
+
+<br/>
+
+<img src="docs/screenshots/chat.png" alt="Task run — full-width conversation with agent" width="100%" />
+
+*Task run — full-width conversation view with step and file panel*
+
+<br/>
+
+<img src="docs/screenshots/runs.png" alt="Runs — task history list" width="100%" />
+
+*Runs — searchable task history with status and elapsed time*
+
+</div>
+
+---
+
 ## Overview
 
 Barq Cowork is an AI-powered desktop workstation for document intelligence tasks. It provides a conversational interface backed by LLM agents that plan and execute multi-step document processing workflows entirely on your machine.
@@ -158,6 +182,7 @@ barq-cowork/
 │
 ├── docs/
 │   ├── banner.png                  # Repository banner
+│   ├── screenshots/                # UI screenshots
 │   └── building.md                 # Full build guide
 └── .github/workflows/release.yml  # CI/CD release workflow
 ```
