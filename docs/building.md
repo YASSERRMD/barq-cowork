@@ -34,9 +34,9 @@ barq-cowork/
 │   └── desktop/           # Tauri + React frontend
 │       └── src-tauri/
 │           ├── binaries/  # place compiled sidecar here
-│           └── icons/     # app icons (run gen-icons.py first)
+│           └── icons/     # app icons (run gen-icons.go first)
 ├── scripts/
-│   └── gen-icons.py       # placeholder icon generator
+│   └── gen-icons.go       # placeholder icon generator
 └── docs/
     └── building.md        # this file
 ```
@@ -46,7 +46,7 @@ barq-cowork/
 ## Step 1 — Generate icons
 
 ```bash
-python3 scripts/gen-icons.py
+go run scripts/gen-icons.go
 ```
 
 This creates placeholder icons in `apps/desktop/src-tauri/icons/`.
