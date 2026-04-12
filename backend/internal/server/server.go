@@ -9,6 +9,7 @@ import (
 	v1 "github.com/barq-cowork/barq-cowork/internal/api/v1"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
 	"github.com/barq-cowork/barq-cowork/internal/service"
+	"github.com/barq-cowork/barq-cowork/internal/tools"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -34,7 +35,8 @@ type ExecutionDeps struct {
 	Plans         v1.PlanQuerier
 	Artifacts     v1.ArtifactQuerier
 	Events        v1.EventQuerier
-	WorkspaceRoot string // base path for serving artifact files
+	WorkspaceRoot string              // base path for serving artifact files
+	UserInput     *tools.UserInputStore // nil-safe; enables ask_user respond endpoint
 }
 
 // MemoryDeps groups the ports needed by the memory HTTP handler.
@@ -118,6 +120,7 @@ func (s *Server) routes() {
 			s.services.Execution.Artifacts,
 			s.services.Execution.Events,
 			s.services.Execution.WorkspaceRoot,
+			s.services.Execution.UserInput,
 		).Register(r)
 		v1.NewMemoryHandler(
 			s.services.Memory.ContextFiles,

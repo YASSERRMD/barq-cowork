@@ -1,17 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Play, FileText, Activity, Users, ChevronDown, ChevronRight,
   Clock, CheckCircle, XCircle, Loader, Circle, ArrowLeft,
   AlertTriangle, Download, Copy, Zap, Terminal, Maximize2, X,
-  PanelRight,
+  PanelRight, MessageSquare, Send,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
   tasksApi, executionApi, toolsApi, agentsApi,
   type Task, type PlanStep, type TaskEvent, type Artifact,
-  type StepStatus, type TaskStatus, type SubAgent,
+  type StepStatus, type TaskStatus, type SubAgent, type PendingInput,
 } from "../lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -362,6 +362,34 @@ function AgentsPanel({ agents }: { agents: SubAgent[] }) {
   );
 }
 
+// ── JSON inline preview ───────────────────────────────────────────
+
+function JsonPreview({ downloadUrl }: { downloadUrl: string }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    fetch(downloadUrl)
+      .then(r => r.text())
+      .then(t => {
+        try { setContent(JSON.stringify(JSON.parse(t), null, 2)); }
+        catch { setContent(t); }
+      })
+      .catch(() => setError(true));
+  }, [downloadUrl]);
+  if (error) return <p style={{ color: "var(--red)", fontSize: 12, padding: 16 }}>Failed to load JSON.</p>;
+  if (!content) return <div style={{ padding: 16, color: "var(--text-faint)", fontSize: 12 }}><Loader size={12} className="animate-spin" style={{ marginRight: 6 }} />Loading…</div>;
+  return (
+    <pre style={{
+      margin: 0, padding: "12px 16px",
+      fontSize: 11, color: "var(--text-secondary)",
+      fontFamily: "JetBrains Mono, monospace", whiteSpace: "pre-wrap",
+      wordBreak: "break-all", lineHeight: 1.6, overflowY: "auto",
+    }}>
+      {content}
+    </pre>
+  );
+}
+
 // ── Content preview panel ────────────────────────────────────────
 
 function ContentPreviewPanel({
@@ -465,33 +493,45 @@ function ContentPreviewPanel({
           />
         )}
 
-        {(artifact.type !== "markdown" && artifact.type !== "html") && (
+        {artifact.type === "json" && (
+          <JsonPreview downloadUrl={downloadUrl} />
+        )}
+
+        {(artifact.type !== "markdown" && artifact.type !== "html" && artifact.type !== "json") && (
           <div style={{
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            height: "100%", gap: 20, padding: 32,
+            height: "100%", gap: 16, padding: 32,
           }}>
-            {/* File info card */}
+            {/* File type icon */}
             <div style={{
-              background: "var(--surface-2)", border: "1px solid var(--border)",
-              borderRadius: 12, padding: "24px 32px", textAlign: "center",
-              maxWidth: 300, width: "100%",
+              width: 64, height: 64, borderRadius: 16,
+              background: artifact.type === "file" && fileName.endsWith(".pptx")
+                ? "rgba(249,115,22,0.12)"
+                : artifact.type === "file" && fileName.endsWith(".docx")
+                ? "rgba(59,130,246,0.12)"
+                : "var(--accent-dim)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 28,
             }}>
-              <div style={{
-                width: 48, height: 48, borderRadius: 12,
-                background: "var(--accent-dim)", display: "flex",
-                alignItems: "center", justifyContent: "center",
-                margin: "0 auto 14px",
-              }}>
-                <FileText size={22} color="var(--accent)" />
-              </div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, wordBreak: "break-all" }}>
+              {fileName.endsWith(".pptx") ? "📊"
+                : fileName.endsWith(".docx") ? "📄"
+                : fileName.endsWith(".pdf")  ? "📕"
+                : fileName.endsWith(".xlsx") ? "📈"
+                : <FileText size={28} color="var(--accent)" />}
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, wordBreak: "break-all" }}>
                 {fileName}
               </div>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
                 {artifact.type.toUpperCase()} · {formatBytes(artifact.size)}
               </div>
               {artifact.content_path && (
-                <div style={{ fontSize: 10.5, color: "var(--text-faint)", fontFamily: "monospace", marginBottom: 16, wordBreak: "break-all" }}>
+                <div style={{
+                  fontSize: 10.5, color: "var(--text-faint)", fontFamily: "monospace",
+                  marginBottom: 16, wordBreak: "break-all",
+                  background: "var(--surface-2)", padding: "4px 8px", borderRadius: 5,
+                }}>
                   {artifact.content_path}
                 </div>
               )}
@@ -502,7 +542,7 @@ function ContentPreviewPanel({
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, textDecoration: "none" }}
               >
                 <Download size={13} />
-                Download File
+                Download {fileName.split(".").pop()?.toUpperCase()}
               </a>
             </div>
             <button
@@ -528,6 +568,8 @@ export function TaskRunPage() {
   const [rightTab, setRightTab] = useState<RightTab>("artifacts");
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewArtifact, setPreviewArtifact] = useState<Artifact | null>(null);
+  const [inputAnswers, setInputAnswers] = useState<Record<string, string>>({});
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const { data: task, isLoading: taskLoading } = useQuery({
     queryKey: ["tasks", taskId],
@@ -575,6 +617,13 @@ export function TaskRunPage() {
     refetchInterval: isActive ? 1500 : 10000,
   });
 
+  const { data: pendingInputs = [] } = useQuery<PendingInput[]>({
+    queryKey: ["tasks", taskId, "pending-inputs"],
+    queryFn: () => executionApi.listPendingInputs(taskId!),
+    enabled: !!taskId && isActive,
+    refetchInterval: isActive ? 1000 : false,
+  });
+
   const runMutation = useMutation({
     mutationFn: () => executionApi.runTask(taskId!, { require_approval: false }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", taskId] }),
@@ -586,8 +635,25 @@ export function TaskRunPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["approvals"] }),
   });
 
+  const respondMutation = useMutation({
+    mutationFn: ({ inputId, answer }: { inputId: string; answer: string }) =>
+      executionApi.respondToInput(taskId!, inputId, answer),
+    onSuccess: (_data, vars) => {
+      setInputAnswers(prev => { const n = { ...prev }; delete n[vars.inputId]; return n; });
+      qc.invalidateQueries({ queryKey: ["tasks", taskId, "pending-inputs"] });
+    },
+  });
+
   const toggleStep = (id: string) =>
     setExpandedSteps((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // Auto-preview the first artifact that can be previewed inline
+  useEffect(() => {
+    if (!previewArtifact && artifacts.length > 0) {
+      const previewable = artifacts.find(a => a.type === "markdown" || a.type === "html");
+      if (previewable) setPreviewArtifact(previewable);
+    }
+  }, [artifacts.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingApprovals = approvals.filter(
     (a) => a.task_id === taskId && a.status === "pending"
@@ -701,6 +767,58 @@ export function TaskRunPage() {
               </span>
               <button className="btn-primary btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "approved" })}>Approve</button>
               <button className="btn-danger btn-sm" onClick={() => approveMutation.mutate({ id: ap.id, res: "rejected" })}>Reject</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Ask-user input banner ── */}
+      {pendingInputs.length > 0 && (
+        <div style={{
+          background: "rgba(139,92,246,0.07)",
+          borderBottom: "1px solid rgba(139,92,246,0.22)",
+          padding: "12px 20px", flexShrink: 0,
+          display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          {pendingInputs.map((pi) => (
+            <div key={pi.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <MessageSquare size={14} color="#a78bfa" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#a78bfa" }}>Agent is asking: </span>
+                  <span style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.5 }}>{pi.question}</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, paddingLeft: 22 }}>
+                <input
+                  ref={el => { inputRefs.current[pi.id] = el; }}
+                  type="text"
+                  placeholder="Type your answer…"
+                  value={inputAnswers[pi.id] ?? ""}
+                  onChange={e => setInputAnswers(prev => ({ ...prev, [pi.id]: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      respondMutation.mutate({ inputId: pi.id, answer: inputAnswers[pi.id] ?? "" });
+                    }
+                  }}
+                  style={{
+                    flex: 1, background: "var(--surface-2)", border: "1px solid rgba(139,92,246,0.35)",
+                    borderRadius: 7, padding: "6px 10px", fontSize: 12,
+                    color: "var(--text-primary)", outline: "none",
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="btn-primary btn-sm"
+                  disabled={respondMutation.isPending}
+                  onClick={() => respondMutation.mutate({ inputId: pi.id, answer: inputAnswers[pi.id] ?? "" })}
+                  style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: 10, paddingRight: 10 }}
+                >
+                  {respondMutation.isPending ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
+                  Send
+                </button>
+              </div>
             </div>
           ))}
         </div>

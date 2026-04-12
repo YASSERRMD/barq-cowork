@@ -467,6 +467,30 @@ func pickThemeAccent(title, subtitle string) string {
 		"visual", "photography", "film", "music", "fashion") {
 		return "8B5CF6"
 	}
+	// Security / Cyber / Risk
+	if hasWord(c, "security", "cyber", "threat", "hack", "ransomware", "firewall",
+		"privacy", "compliance", "risk") {
+		return "EF4444"
+	}
+	// Data / Analytics / BI / Warehouse
+	if hasWord(c, "data", "analytics", "bi", "warehouse", "databrick", "snowflake",
+		"insight", "dashboard", "intelligence") {
+		return "14B8A6"
+	}
+	// Logistics / Supply Chain / Shipping
+	if hasWord(c, "logistics", "supply", "shipping", "transport", "fleet", "delivery",
+		"warehouse") {
+		return "3B82F6"
+	}
+	// Retail / E-commerce / Consumer
+	if hasWord(c, "retail", "shop", "ecommerce", "consumer", "merchandise", "store") {
+		return "F97316"
+	}
+	// HR / Human Resources / Talent
+	if hasWord(c, "hr", "human resource", "talent", "recruit", "employee", "workforce",
+		"people ops") {
+		return "EC4899"
+	}
 	// Technology / AI / Digital / Software — checked last as most generic
 	if hasWord(c, "ai", "technology", "software", "code", "developer", "digital",
 		"data science", "neural", "cloud", "cybersecurity", "blockchain", "api",

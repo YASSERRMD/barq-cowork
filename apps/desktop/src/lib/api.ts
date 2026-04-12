@@ -97,6 +97,12 @@ export interface TaskEvent {
   created_at: string;
 }
 
+/** A pending ask_user question waiting for user input. */
+export interface PendingInput {
+  id: string;
+  question: string;
+}
+
 export const toolsApi = {
   list: (): Promise<ToolInfo[]> => request("/tools"),
 
@@ -340,6 +346,17 @@ export const executionApi = {
     const body = await res.json();
     return body.data as { paths: string[] };
   },
+
+  /** List open ask_user questions for a running task. */
+  listPendingInputs: (taskId: string): Promise<PendingInput[]> =>
+    request(`/tasks/${taskId}/pending-inputs`),
+
+  /** Send the user's answer back to the blocked ask_user tool call. */
+  respondToInput: (taskId: string, inputId: string, answer: string): Promise<void> =>
+    request(`/tasks/${taskId}/respond`, {
+      method: "POST",
+      body: JSON.stringify({ input_id: inputId, answer }),
+    }),
 };
 
 // ──────────────────── Sub-agents ────────────────────

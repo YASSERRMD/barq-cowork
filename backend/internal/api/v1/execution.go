@@ -13,6 +13,7 @@ import (
 
 	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/orchestrator"
+	"github.com/barq-cowork/barq-cowork/internal/tools"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -63,6 +64,7 @@ type ExecutionHandler struct {
 	artifacts     ArtifactQuerier
 	events        EventQuerier
 	workspaceRoot string
+	userInput     *tools.UserInputStore // may be nil if ask_user not wired
 }
 
 // NewExecutionHandler creates an ExecutionHandler.
@@ -72,6 +74,7 @@ func NewExecutionHandler(
 	artifacts ArtifactQuerier,
 	events EventQuerier,
 	workspaceRoot string,
+	userInput *tools.UserInputStore,
 ) *ExecutionHandler {
 	return &ExecutionHandler{
 		runner:        runner,
@@ -79,6 +82,7 @@ func NewExecutionHandler(
 		artifacts:     artifacts,
 		events:        events,
 		workspaceRoot: workspaceRoot,
+		userInput:     userInput,
 	}
 }
 
@@ -89,6 +93,10 @@ func (h *ExecutionHandler) Register(r chi.Router) {
 
 	// Task execution control
 	r.Post("/tasks/{id}/run", h.runTask)
+
+	// Interactive mid-task user input (ask_user tool)
+	r.Post("/tasks/{id}/respond", h.respondToInput)
+	r.Get("/tasks/{id}/pending-inputs", h.listPendingInputs)
 
 	// Task execution observation
 	r.Get("/tasks/{id}/plan", h.getPlan)
@@ -293,8 +301,52 @@ func (h *ExecutionHandler) downloadArtifact(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Prevent browser from caching artifact downloads — always serve fresh file
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// respondToInput POST /api/v1/tasks/{id}/respond
+// Delivers the user's answer to a blocked ask_user tool call.
+func (h *ExecutionHandler) respondToInput(w http.ResponseWriter, r *http.Request) {
+	if h.userInput == nil {
+		http.Error(w, "interactive input not enabled", http.StatusNotImplemented)
+		return
+	}
+	var req struct {
+		InputID string `json:"input_id"`
+		Answer  string `json:"answer"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.InputID == "" {
+		http.Error(w, "input_id is required", http.StatusBadRequest)
+		return
+	}
+	if !h.userInput.Answer(req.InputID, req.Answer) {
+		http.Error(w, "input_id not found or already answered", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+// listPendingInputs GET /api/v1/tasks/{id}/pending-inputs
+// Returns all open ask_user questions for the given task.
+func (h *ExecutionHandler) listPendingInputs(w http.ResponseWriter, r *http.Request) {
+	if h.userInput == nil {
+		jsonOK(w, []tools.PendingQuestion{})
+		return
+	}
+	questions := h.userInput.List(chi.URLParam(r, "id"))
+	if questions == nil {
+		questions = []tools.PendingQuestion{}
+	}
+	jsonOK(w, questions)
 }
 
 // uploadFiles POST /api/v1/workspace/upload

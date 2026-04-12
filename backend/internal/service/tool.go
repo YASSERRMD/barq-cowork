@@ -151,7 +151,9 @@ func (s *ToolService) emitEvent(ctx context.Context, taskID string, eventType do
 }
 
 // BuildRegistry creates and registers all built-in tools.
-func BuildRegistry() *tools.Registry {
+// userInput and emitFn wire up the interactive ask_user tool;
+// pass nil for both to skip registering ask_user.
+func BuildRegistry(userInput *tools.UserInputStore, emitFn func(taskID, pendingID, question string)) *tools.Registry {
 	r := tools.NewRegistry()
 	r.Register(tools.ListFilesTool{})
 	r.Register(tools.ReadFileTool{})
@@ -165,6 +167,9 @@ func BuildRegistry() *tools.Registry {
 	r.Register(tools.WriteSlidesTool{})
 	r.Register(tools.WritePPTXTool{})
 	r.Register(tools.DocxTool{})
+	if userInput != nil {
+		r.Register(tools.AskUserTool{Store: userInput, Emitter: emitFn})
+	}
 	return r
 }
 
