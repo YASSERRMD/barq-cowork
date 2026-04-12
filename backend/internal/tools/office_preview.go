@@ -141,6 +141,12 @@ func previewPPTX(path string) (string, error) {
 		return "", err
 	}
 
+	if manifest, ok, err := loadPPTXPreviewManifest(data); err != nil {
+		return "", err
+	} else if ok {
+		return renderPPTXPreviewManifest(manifest), nil
+	}
+
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return "", fmt.Errorf("open pptx zip: %w", err)

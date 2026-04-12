@@ -47,6 +47,9 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	if slideCount != 7 {
 		t.Fatalf("expected 7 slide xml files including cover, got %d", slideCount)
 	}
+	if !contains(entries, "customXml/barq-presentation.json") {
+		t.Fatalf("pptx missing structured preview manifest: %v", entries)
+	}
 
 	html, err := tools.PreviewOfficeArtifact(pptxPath)
 	if err != nil {
@@ -54,6 +57,9 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	}
 	if !strings.Contains(html, "Impact snapshot") || !strings.Contains(html, "Implementation roadmap") {
 		t.Fatalf("pptx preview missing expected headings: %s", html)
+	}
+	if !strings.Contains(html, `data-layout="chart"`) || !strings.Contains(html, `data-layout="timeline"`) || !strings.Contains(html, `barq-preview-card-icon`) {
+		t.Fatalf("pptx preview did not render structured slide layouts: %s", html)
 	}
 }
 
