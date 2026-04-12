@@ -299,6 +299,9 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	// Pure Go PPTX engine — no Python dependency.
 	themeName := pickThemeName(args.Title, args.Subtitle)
 	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, themeName)
+	if err := validatePPTXPresentation(planned); err != nil {
+		return Err("plan pptx: %v", err)
+	}
 	data, err := buildPPTX(args.Title, args.Subtitle, planned.Slides, planned.ThemeName)
 	if err != nil {
 		return Err("build pptx: %v", err)

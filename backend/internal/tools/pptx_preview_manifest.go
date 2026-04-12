@@ -10,45 +10,65 @@ import (
 const pptxPreviewManifestPath = "customXml/barq-presentation.json"
 
 type pptxPreviewManifest struct {
-	Version   int                `json:"version"`
-	Title     string             `json:"title"`
-	Subtitle  string             `json:"subtitle,omitempty"`
-	Theme     string             `json:"theme"`
-	Narrative string             `json:"narrative"`
-	LayoutMix []string           `json:"layout_mix,omitempty"`
-	Slides    []pptxPreviewSlide `json:"slides"`
+	Version   int                 `json:"version"`
+	Title     string              `json:"title"`
+	Subtitle  string              `json:"subtitle,omitempty"`
+	Theme     string              `json:"theme"`
+	DeckPlan  pptxPreviewDeckPlan `json:"deck_plan"`
+	Narrative string              `json:"narrative"`
+	LayoutMix []string            `json:"layout_mix,omitempty"`
+	Slides    []pptxPreviewSlide  `json:"slides"`
+}
+
+type pptxPreviewDeckPlan struct {
+	Subject         string   `json:"subject"`
+	Audience        string   `json:"audience"`
+	NarrativeArc    string   `json:"narrative_arc"`
+	VisualDirection string   `json:"visual_direction"`
+	DominantNeed    string   `json:"dominant_need"`
+	LayoutMix       []string `json:"layout_mix,omitempty"`
 }
 
 type pptxPreviewSlide struct {
-	Number          int                `json:"number"`
-	Heading         string             `json:"heading"`
-	Layout          string             `json:"layout"`
-	Variant         int                `json:"variant"`
-	Purpose         string             `json:"purpose,omitempty"`
-	Visual          string             `json:"visual,omitempty"`
-	SpeakerNotes    string             `json:"speaker_notes,omitempty"`
-	Points          []string           `json:"points,omitempty"`
-	Stats           []pptxStat         `json:"stats,omitempty"`
-	Steps           []string           `json:"steps,omitempty"`
-	Cards           []pptxCard         `json:"cards,omitempty"`
-	ChartType       string             `json:"chart_type,omitempty"`
-	ChartCategories []string           `json:"chart_categories,omitempty"`
-	ChartSeries     []pptxChartSeries  `json:"chart_series,omitempty"`
-	YLabel          string             `json:"y_label,omitempty"`
-	Timeline        []pptxTimelineItem `json:"timeline,omitempty"`
-	LeftColumn      *pptxCompareColumn `json:"left_column,omitempty"`
-	RightColumn     *pptxCompareColumn `json:"right_column,omitempty"`
-	Table           *pptxTableData     `json:"table,omitempty"`
+	Number          int                   `json:"number"`
+	Heading         string                `json:"heading"`
+	Layout          string                `json:"layout"`
+	Variant         int                   `json:"variant"`
+	Purpose         string                `json:"purpose,omitempty"`
+	Visual          string                `json:"visual,omitempty"`
+	ContentSource   string                `json:"content_source,omitempty"`
+	Audit           plannedPPTXSlideAudit `json:"audit"`
+	SpeakerNotes    string                `json:"speaker_notes,omitempty"`
+	Points          []string              `json:"points,omitempty"`
+	Stats           []pptxStat            `json:"stats,omitempty"`
+	Steps           []string              `json:"steps,omitempty"`
+	Cards           []pptxCard            `json:"cards,omitempty"`
+	ChartType       string                `json:"chart_type,omitempty"`
+	ChartCategories []string              `json:"chart_categories,omitempty"`
+	ChartSeries     []pptxChartSeries     `json:"chart_series,omitempty"`
+	YLabel          string                `json:"y_label,omitempty"`
+	Timeline        []pptxTimelineItem    `json:"timeline,omitempty"`
+	LeftColumn      *pptxCompareColumn    `json:"left_column,omitempty"`
+	RightColumn     *pptxCompareColumn    `json:"right_column,omitempty"`
+	Table           *pptxTableData        `json:"table,omitempty"`
 }
 
 func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresentation) ([]byte, error) {
 	manifest := pptxPreviewManifest{
-		Version:   1,
-		Title:     strings.TrimSpace(title),
-		Subtitle:  strings.TrimSpace(subtitle),
-		Theme:     planned.ThemeName,
-		Narrative: previewNarrative(planned.Slides),
-		LayoutMix: previewLayoutMix(planned.Slides),
+		Version:  1,
+		Title:    strings.TrimSpace(title),
+		Subtitle: strings.TrimSpace(subtitle),
+		Theme:    planned.ThemeName,
+		DeckPlan: pptxPreviewDeckPlan{
+			Subject:         planned.DeckPlan.Subject,
+			Audience:        planned.DeckPlan.Audience,
+			NarrativeArc:    planned.DeckPlan.NarrativeArc,
+			VisualDirection: planned.DeckPlan.VisualDirection,
+			DominantNeed:    planned.DeckPlan.DominantNeed,
+			LayoutMix:       append([]string(nil), planned.DeckPlan.LayoutMix...),
+		},
+		Narrative: firstNonEmpty(strings.TrimSpace(planned.DeckPlan.NarrativeArc), previewNarrative(planned.Slides)),
+		LayoutMix: append([]string(nil), planned.DeckPlan.LayoutMix...),
 		Slides:    make([]pptxPreviewSlide, 0, len(planned.Slides)),
 	}
 
@@ -57,9 +77,11 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			Number:          i + 2,
 			Heading:         slide.Slide.Heading,
 			Layout:          slide.Layout,
-			Variant:         slideVisualVariant(title, slide.Slide.Heading, slide.Layout, i),
-			Purpose:         previewPurpose(slide.Layout),
-			Visual:          previewVisual(slide.Layout),
+			Variant:         slide.Variant,
+			Purpose:         firstNonEmpty(slide.Plan.Purpose, previewPurpose(slide.Layout)),
+			Visual:          firstNonEmpty(slide.Plan.Visual, previewVisual(slide.Layout)),
+			ContentSource:   slide.Plan.ContentSource,
+			Audit:           slide.Audit,
 			SpeakerNotes:    strings.TrimSpace(slide.Slide.SpeakerNotes),
 			Points:          append([]string(nil), slide.Slide.Points...),
 			Stats:           append([]pptxStat(nil), slide.Slide.Stats...),
@@ -117,9 +139,15 @@ func renderPPTXPreviewCover(manifest pptxPreviewManifest, pal pptxPalette) strin
 		layoutChips = `<div class="barq-preview-chip-row">` + chips.String() + `</div>`
 	}
 
-	narrative := strings.TrimSpace(manifest.Narrative)
-	if narrative == "" {
-		narrative = "Subject-led deck planned and rendered in Go."
+	narrative := firstNonEmpty(
+		strings.TrimSpace(manifest.DeckPlan.NarrativeArc),
+		strings.TrimSpace(manifest.Narrative),
+		"Subject-led deck planned and rendered in Go.",
+	)
+
+	audience := ""
+	if strings.TrimSpace(manifest.DeckPlan.Audience) != "" {
+		audience = `<p class="barq-preview-audience">Audience: ` + html.EscapeString(manifest.DeckPlan.Audience) + `</p>`
 	}
 
 	return `<section class="barq-preview-cover">
@@ -128,6 +156,7 @@ func renderPPTXPreviewCover(manifest pptxPreviewManifest, pal pptxPalette) strin
     <h1>` + html.EscapeString(firstNonEmpty(manifest.Title, "Presentation")) + `</h1>
     <p class="barq-preview-subtitle">` + html.EscapeString(firstNonEmpty(manifest.Subtitle, "Deck preview")) + `</p>
     <p class="barq-preview-narrative">` + html.EscapeString(narrative) + `</p>
+    ` + audience + `
     ` + layoutChips + `
   </div>
   <div class="barq-preview-cover-accent" style="background:` + hexColor(pal.accent) + `"></div>
@@ -138,7 +167,16 @@ func renderPPTXPreviewSlide(slide pptxPreviewSlide, pal pptxPalette, totalSlides
 	meta := `<div class="barq-preview-meta">
   <span class="barq-preview-kicker">Slide ` + fmt.Sprintf("%d of %d", slide.Number, totalSlides) + `</span>
   <span class="barq-preview-kicker">` + html.EscapeString(strings.ToUpper(firstNonEmpty(slide.Layout, "bullets"))) + `</span>
-  <span class="barq-preview-kicker">` + html.EscapeString(firstNonEmpty(slide.Visual, "planned visual")) + `</span>
+  <span class="barq-preview-kicker">` + html.EscapeString(firstNonEmpty(slide.Visual, "planned visual")) + `</span>`
+	if strings.TrimSpace(slide.ContentSource) != "" {
+		meta += `
+  <span class="barq-preview-kicker">` + html.EscapeString(strings.ToUpper(slide.ContentSource)) + `</span>`
+	}
+	if slide.Audit.ContentFit && slide.Audit.LayoutFit && slide.Audit.VisualFit {
+		meta += `
+  <span class="barq-preview-kicker">AUDITED</span>`
+	}
+	meta += `
 </div>`
 
 	notes := ""
@@ -447,6 +485,14 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     color: var(--muted);
     font-size: 15px;
     line-height: 1.65;
+  }
+  .barq-preview-audience {
+    margin: 0 0 12px;
+    color: var(--accent-2);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .barq-preview-chip-row {
     display: flex;
