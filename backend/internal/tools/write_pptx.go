@@ -1002,6 +1002,13 @@ func buildPPTX(title, subtitle string, slides []plannedPPTXSlide, themeName stri
 	zw := zip.NewWriter(&buf)
 
 	pal := paletteFor(themeName)
+	manifest, err := buildPPTXPreviewManifest(title, subtitle, plannedPPTXPresentation{
+		ThemeName: themeName,
+		Slides:    slides,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build pptx manifest: %w", err)
+	}
 
 	type entry struct {
 		name    string
@@ -1024,6 +1031,7 @@ func buildPPTX(title, subtitle string, slides []plannedPPTXSlide, themeName stri
 		{"ppt/slideLayouts/_rels/slideLayout1.xml.rels", pptxLayoutRels()},
 		{"ppt/slideLayouts/slideLayout2.xml", pptxLayoutContentXML()},
 		{"ppt/slideLayouts/_rels/slideLayout2.xml.rels", pptxLayoutRels()},
+		{pptxPreviewManifestPath, string(manifest)},
 	}
 
 	entries = append(entries,
@@ -1069,6 +1077,7 @@ func pptxContentTypes(numSlides int) string {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="json" ContentType="application/json"/>
   <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
   <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
   <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
