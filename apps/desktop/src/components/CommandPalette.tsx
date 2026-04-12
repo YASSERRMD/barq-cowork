@@ -252,7 +252,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                       strokeWidth={1.75}
                       style={{
                         color: isSelected
-                          ? (item.iconColor ?? "#a5b4fc")
+                          ? (item.iconColor ?? "var(--accent)")
                           : (item.iconColor ?? "var(--text-muted)"),
                         flexShrink: 0,
                       }}
@@ -291,7 +291,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                       </div>
                     )}
                     {isSelected && (
-                      <ChevronRight size={13} style={{ color: "#a5b4fc", flexShrink: 0 }} />
+                      <ChevronRight size={13} style={{ color: "var(--accent)", flexShrink: 0 }} />
                     )}
                   </button>
                 );

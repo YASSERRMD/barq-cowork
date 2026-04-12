@@ -288,8 +288,8 @@ export function SkillsPage() {
                   padding: "3px 10px", borderRadius: 5, fontSize: 12, fontWeight: 500,
                   cursor: "pointer", border: "1px solid",
                   background: kindFilter === k ? "var(--accent-dim)" : "transparent",
-                  borderColor: kindFilter === k ? "rgba(99,102,241,0.3)" : "transparent",
-                  color: kindFilter === k ? "#a5b4fc" : "var(--text-faint)",
+                  borderColor: kindFilter === k ? "var(--accent)" : "transparent",
+                  color: kindFilter === k ? "var(--accent)" : "var(--text-faint)",
                   transition: "all 120ms",
                 }}>
                   {KIND_LABELS[k]}

@@ -51,7 +51,7 @@ export function ProjectDetailPage() {
   }
 
   if (!project) {
-    return <div style={{ padding: 24, color: "#f87171", fontSize: 13 }}>Project not found.</div>;
+    return <div style={{ padding: 24, color: "var(--red)", fontSize: 13 }}>Project not found.</div>;
   }
 
   return (
@@ -68,12 +68,12 @@ export function ProjectDetailPage() {
         }
       />
 
-      <div style={{ padding: "8px 20px", borderBottom: "1px solid #2a2a3a" }}>
+      <div style={{ padding: "8px 20px", borderBottom: "1px solid var(--border)" }}>
         <Breadcrumb items={[{ label: "Projects", to: "/projects" }, { label: project.name }]} />
       </div>
 
       {/* Project header / edit form */}
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid #2a2a3a" }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
         {editing ? (
           <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(); }}>
             <div style={{ display: "grid", gap: 10, maxWidth: 600 }}>
@@ -111,14 +111,14 @@ export function ProjectDetailPage() {
         ) : (
           <div>
             {project.description && (
-              <p style={{ fontSize: 13, color: "#7a7a90", marginBottom: 4 }}>{project.description}</p>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>{project.description}</p>
             )}
             {project.instructions && (
               <div style={{ marginTop: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#40404f" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-faint)" }}>
                   System instructions
                 </span>
-                <p style={{ fontSize: 12, color: "#50505f", marginTop: 3, lineHeight: 1.5 }}>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3, lineHeight: 1.5 }}>
                   {project.instructions.length > 200 ? project.instructions.slice(0, 200) + "..." : project.instructions}
                 </p>
               </div>
@@ -128,7 +128,7 @@ export function ProjectDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid #2a2a3a", padding: "0 20px" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--border)", padding: "0 20px" }}>
         {(["overview", "context", "templates", "schedules"] as Tab[]).map((t) => {
           const icons = { overview: Activity, context: FileText, templates: Layout, schedules: Calendar };
           const Icon = icons[t];
@@ -145,8 +145,8 @@ export function ProjectDetailPage() {
                 fontWeight: 500,
                 background: "transparent",
                 border: "none",
-                borderBottom: `2px solid ${tab === t ? "#6366f1" : "transparent"}`,
-                color: tab === t ? "#a5b4fc" : "#50505f",
+                borderBottom: `2px solid ${tab === t ? "var(--accent)" : "transparent"}`,
+                color: tab === t ? "var(--accent)" : "var(--text-secondary)",
                 cursor: "pointer",
                 transition: "all 150ms",
               }}
@@ -191,7 +191,7 @@ function OverviewTab({ projectId }: { projectId: string }) {
   return (
     <div style={{ padding: "16px 20px" }}>
       <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#7a7a90" }}>Recent Tasks</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Recent Tasks</span>
         <button
           className="btn-ghost btn-sm"
           onClick={() => navigate(`/projects/${projectId}/tasks`)}
@@ -219,7 +219,7 @@ function OverviewTab({ projectId }: { projectId: string }) {
               style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}
               onClick={() => navigate(`/tasks/${t.id}/run`)}
             >
-              <span style={{ fontSize: 13, color: "#c4c4d0", flex: 1 }}>{t.title}</span>
+              <span style={{ fontSize: 13, color: "var(--text-primary)", flex: 1 }}>{t.title}</span>
               <span className={`badge-${t.status === "completed" ? "green" : t.status === "failed" ? "red" : t.status === "running" ? "yellow" : "gray"}`}>
                 {t.status}
               </span>
@@ -258,7 +258,7 @@ function ContextFilesTab({ projectId }: { projectId: string }) {
   return (
     <div style={{ padding: "16px 20px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#7a7a90" }}>Context Files</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Context Files</span>
         <button className="btn-ghost btn-sm" onClick={() => setShowForm((v) => !v)}>
           <Plus size={13} /> Add File
         </button>
@@ -286,12 +286,12 @@ function ContextFilesTab({ projectId }: { projectId: string }) {
         <div style={{ display: "grid", gap: 6 }}>
           {files.map((f) => (
             <div key={f.id} className="card" style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-              <FileText size={13} color="#818cf8" />
+              <FileText size={13} color="var(--accent)" />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: "#c4c4d0" }}>{f.name}</div>
-                {f.description && <div style={{ fontSize: 11, color: "#50505f" }}>{f.description}</div>}
+                <div style={{ fontSize: 13, color: "var(--text-primary)" }}>{f.name}</div>
+                {f.description && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{f.description}</div>}
               </div>
-              <button className="btn-ghost btn-sm" style={{ color: "#f87171", padding: "2px 4px" }} onClick={() => deleteMutation.mutate(f.id)}>
+              <button className="btn-ghost btn-sm" style={{ color: "var(--red)", padding: "2px 4px" }} onClick={() => deleteMutation.mutate(f.id)}>
                 <Trash2 size={12} />
               </button>
             </div>
@@ -330,7 +330,7 @@ function TemplatesTab({ projectId }: { projectId: string }) {
   return (
     <div style={{ padding: "16px 20px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#7a7a90" }}>Task Templates</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Task Templates</span>
         <button className="btn-ghost btn-sm" onClick={() => setShowForm((v) => !v)}>
           <Plus size={13} /> Add Template
         </button>
@@ -358,10 +358,10 @@ function TemplatesTab({ projectId }: { projectId: string }) {
         <div style={{ display: "grid", gap: 6 }}>
           {templates.map((t) => (
             <div key={t.id} className="card" style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-              <Layout size={13} color="#818cf8" />
+              <Layout size={13} color="var(--accent)" />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: "#c4c4d0" }}>{t.name}</div>
-                {t.description && <div style={{ fontSize: 11, color: "#50505f" }}>{t.description}</div>}
+                <div style={{ fontSize: 13, color: "var(--text-primary)" }}>{t.name}</div>
+                {t.description && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{t.description}</div>}
               </div>
               <button
                 className="btn-ghost btn-sm"
@@ -370,7 +370,7 @@ function TemplatesTab({ projectId }: { projectId: string }) {
               >
                 Use
               </button>
-              <button className="btn-ghost btn-sm" style={{ color: "#f87171", padding: "2px 4px" }} onClick={() => deleteMutation.mutate(t.id)}>
+              <button className="btn-ghost btn-sm" style={{ color: "var(--red)", padding: "2px 4px" }} onClick={() => deleteMutation.mutate(t.id)}>
                 <Trash2 size={12} />
               </button>
             </div>

@@ -64,7 +64,7 @@ export function Sidebar() {
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            boxShadow: "0 2px 8px rgba(99,102,241,0.4)",
+            boxShadow: "0 2px 8px var(--accent-glow)",
           }}
         >
           <Zap size={13} color="#fff" strokeWidth={2.5} />

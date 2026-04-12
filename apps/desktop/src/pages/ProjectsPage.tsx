@@ -122,7 +122,7 @@ export function ProjectsPage() {
               </div>
             </div>
             {createMutation.isError && (
-              <p style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>
+              <p style={{ color: "var(--red)", fontSize: 12, marginTop: 8 }}>
                 {(createMutation.error as Error).message}
               </p>
             )}
@@ -138,7 +138,7 @@ export function ProjectsPage() {
           </div>
         ) : error ? (
           <div style={{ padding: 20 }}>
-            <p style={{ color: "#f87171", fontSize: 13 }}>
+            <p style={{ color: "var(--red)", fontSize: 13 }}>
               Failed to load projects. Is the backend running?
             </p>
           </div>
@@ -198,15 +198,15 @@ function ProjectRow({
           width: 32,
           height: 32,
           borderRadius: 8,
-          background: "rgba(99,102,241,0.1)",
-          border: "1px solid rgba(99,102,241,0.2)",
+          background: "var(--accent-dim)",
+          border: "1px solid var(--accent-glow)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
         }}
       >
-        <FolderOpen size={15} color="#818cf8" strokeWidth={1.75} />
+        <FolderOpen size={15} color="var(--accent)" strokeWidth={1.75} />
       </div>
 
       {/* Content */}

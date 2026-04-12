@@ -321,8 +321,8 @@ export function ArtifactsPage() {
                 padding: "3px 10px", borderRadius: 5, fontSize: 12, fontWeight: 500,
                 cursor: "pointer", border: "1px solid",
                 background: filterType === "" ? "var(--accent-dim)" : "transparent",
-                borderColor: filterType === "" ? "rgba(99,102,241,0.3)" : "transparent",
-                color: filterType === "" ? "#a5b4fc" : "var(--text-faint)",
+                borderColor: filterType === "" ? "var(--accent)" : "transparent",
+                color: filterType === "" ? "var(--accent)" : "var(--text-faint)",
                 transition: "all 120ms",
               }}>
                 All
@@ -332,8 +332,8 @@ export function ArtifactsPage() {
                   padding: "3px 10px", borderRadius: 5, fontSize: 12, fontWeight: 500,
                   cursor: "pointer", border: "1px solid", textTransform: "capitalize",
                   background: filterType === t ? "var(--accent-dim)" : "transparent",
-                  borderColor: filterType === t ? "rgba(99,102,241,0.3)" : "transparent",
-                  color: filterType === t ? "#a5b4fc" : "var(--text-faint)",
+                  borderColor: filterType === t ? "var(--accent)" : "transparent",
+                  color: filterType === t ? "var(--accent)" : "var(--text-faint)",
                   transition: "all 120ms",
                 }}>
                   {t}
