@@ -216,8 +216,8 @@ function ArtifactsList({
         return (
           <div key={a.id} style={{
             padding: "10px 12px",
-            background: isActive ? "rgba(99,102,241,0.08)" : "var(--surface-2)",
-            border: `1px solid ${isActive ? "rgba(99,102,241,0.35)" : "var(--border)"}`,
+            background: isActive ? "var(--accent-dim)" : "var(--surface-2)",
+            border: `1px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
             borderRadius: 8,
             cursor: onPreview ? "pointer" : "default",
             transition: "all 120ms",
@@ -479,11 +479,11 @@ function ChatPanel({
       }}>
         <div style={{
           width: 56, height: 56, borderRadius: 16,
-          background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2))",
-          border: "1px solid rgba(99,102,241,0.3)",
+          background: "var(--accent-dim)",
+          border: "1px solid var(--accent-glow)",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <Bot size={24} color="#a5b4fc" />
+          <Bot size={24} color="var(--accent)" />
         </div>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
@@ -542,34 +542,34 @@ function ChatPanel({
                 {/* Avatar */}
                 <div style={{
                   width: 30, height: 30, borderRadius: 10, flexShrink: 0,
-                  background: "linear-gradient(135deg, #312e81, #4c1d95)",
-                  border: "1px solid rgba(99,102,241,0.35)",
+                  background: "var(--accent)",
+                  border: "1px solid var(--accent-glow)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   marginTop: 2,
                 }}>
-                  <Bot size={15} color="#a5b4fc" />
+                  <Bot size={15} color="#fff" />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-faint)", paddingLeft: 2 }}>
-                    Agent {msg.isQuestion && <span style={{ color: "#a78bfa" }}>· asking</span>}
+                    Agent {msg.isQuestion && <span style={{ color: "var(--accent)" }}>· asking</span>}
                   </span>
                   <div style={{
-                    background: "#1a1830",
+                    background: "var(--surface-2)",
                     border: msg.isQuestion
-                      ? "1.5px solid rgba(124,58,237,0.5)"
-                      : "1px solid rgba(99,102,241,0.18)",
+                      ? "1.5px solid var(--accent)"
+                      : "1px solid var(--border)",
                     borderRadius: "4px 14px 14px 14px",
                     padding: "10px 14px",
-                    fontSize: 13.5, color: "#c4c9f0", lineHeight: 1.65,
+                    fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.65,
                     wordBreak: "break-word",
-                    boxShadow: msg.isQuestion ? "0 0 0 3px rgba(124,58,237,0.08)" : "none",
+                    boxShadow: msg.isQuestion ? "0 0 0 3px var(--accent-glow)" : "none",
                   }}>
                     {msg.text}
                   </div>
                   {msg.isQuestion && (
                     <div style={{
                       display: "flex", alignItems: "center", gap: 5,
-                      paddingLeft: 2, fontSize: 11, color: "#7c3aed", fontWeight: 600,
+                      paddingLeft: 2, fontSize: 11, color: "var(--accent)", fontWeight: 600,
                     }}>
                       <HelpCircle size={11} />
                       Waiting for your reply
@@ -590,12 +590,12 @@ function ChatPanel({
                   You
                 </span>
                 <div style={{
-                  background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+                  background: "var(--accent)",
                   borderRadius: "14px 4px 14px 14px",
                   padding: "10px 14px",
                   fontSize: 13.5, color: "#fff", lineHeight: 1.65,
                   wordBreak: "break-word",
-                  boxShadow: "0 2px 8px rgba(99,102,241,0.25)",
+                  boxShadow: "var(--shadow-sm)",
                 }}>
                   {msg.text}
                 </div>
@@ -609,15 +609,15 @@ function ChatPanel({
           <div style={{ display: "flex", gap: 10, maxWidth: "80%" }}>
             <div style={{
               width: 30, height: 30, borderRadius: 10, flexShrink: 0,
-              background: "linear-gradient(135deg, #312e81, #4c1d95)",
-              border: "1px solid rgba(99,102,241,0.35)",
+              background: "var(--accent)",
+              border: "1px solid var(--accent-glow)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <Bot size={15} color="#a5b4fc" />
+              <Bot size={15} color="#fff" />
             </div>
             <div style={{
-              background: "#1a1830",
-              border: "1px solid rgba(99,102,241,0.18)",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
               borderRadius: "4px 14px 14px 14px",
               padding: "12px 16px",
               display: "flex", alignItems: "center", gap: 5,
@@ -625,7 +625,7 @@ function ChatPanel({
               {[0, 1, 2].map(i => (
                 <div key={i} style={{
                   width: 6, height: 6, borderRadius: "50%",
-                  background: "#6366f1", opacity: 0.6,
+                  background: "var(--accent)", opacity: 0.6,
                   animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
                 }} />
               ))}
@@ -660,8 +660,8 @@ function ChatPanel({
             {hasPendingInput && (
               <div style={{
                 flexShrink: 0, width: 6, height: 6, borderRadius: "50%",
-                background: "#7c3aed", marginBottom: 14,
-                boxShadow: "0 0 8px rgba(124,58,237,0.6)",
+                background: "var(--accent)", marginBottom: 14,
+                boxShadow: "0 0 8px var(--accent-glow)",
               }} />
             )}
             <textarea
@@ -674,13 +674,13 @@ function ChatPanel({
               style={{
                 flex: 1, resize: "none",
                 background: "var(--surface-3)",
-                border: `1.5px solid ${hasPendingInput ? "rgba(124,58,237,0.45)" : "var(--border-mid)"}`,
+                border: `1.5px solid ${hasPendingInput ? "var(--accent)" : "var(--border-mid)"}`,
                 borderRadius: 10, padding: "10px 14px",
                 fontSize: 13.5, color: "var(--text-primary)", outline: "none",
                 lineHeight: 1.5, maxHeight: 120, overflowY: "auto",
                 fontFamily: "inherit",
                 transition: "border-color 150ms",
-                boxShadow: hasPendingInput ? "0 0 0 3px rgba(124,58,237,0.08)" : "none",
+                boxShadow: hasPendingInput ? "0 0 0 3px var(--accent-glow)" : "none",
               }}
             />
             <button
@@ -1082,9 +1082,9 @@ export function TaskRunPage() {
             )}
             {pendingInputs.length > 0 && (
               <span style={{
-                fontSize: 11, color: "#a78bfa",
-                background: "rgba(124,58,237,0.12)",
-                border: "1px solid rgba(124,58,237,0.3)",
+                fontSize: 11, color: "var(--accent)",
+                background: "var(--accent-dim)",
+                border: "1px solid var(--accent-glow)",
                 borderRadius: 20, padding: "2px 8px",
                 display: "flex", alignItems: "center", gap: 4,
               }}>
@@ -1185,8 +1185,8 @@ export function TaskRunPage() {
                 {pendingInputs.length > 0 && (
                   <div style={{
                     width: 7, height: 7, borderRadius: "50%",
-                    background: "#7c3aed",
-                    boxShadow: "0 0 6px rgba(124,58,237,0.7)",
+                    background: "var(--accent)",
+                    boxShadow: "0 0 6px var(--accent-glow)",
                     marginLeft: 2,
                     animation: "pulse 2s ease-in-out infinite",
                   }} />
@@ -1231,7 +1231,7 @@ export function TaskRunPage() {
                   gap: 3, padding: "9px 4px",
                   background: "transparent", border: "none", cursor: "pointer",
                   borderBottom: `2px solid ${sideTab === id ? "var(--accent)" : "transparent"}`,
-                  color: sideTab === id ? "#a5b4fc" : "var(--text-faint)",
+                  color: sideTab === id ? "var(--accent)" : "var(--text-muted)",
                   transition: "all 120ms", marginBottom: -1,
                   position: "relative",
                 }}
@@ -1243,7 +1243,7 @@ export function TaskRunPage() {
                 {count > 0 && (
                   <span style={{
                     position: "absolute", top: 5, right: 6,
-                    fontSize: 9, fontWeight: 700, color: sideTab === id ? "#a5b4fc" : "var(--text-faint)",
+                    fontSize: 9, fontWeight: 700, color: sideTab === id ? "var(--accent)" : "var(--text-muted)",
                     background: "var(--surface-3)",
                     borderRadius: 10, padding: "0 4px", minWidth: 14, textAlign: "center",
                     lineHeight: "14px",
