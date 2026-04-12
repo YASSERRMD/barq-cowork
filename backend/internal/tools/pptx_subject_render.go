@@ -295,10 +295,10 @@ func renderCardsDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 	cards := effectiveCards(s)
 	if len(cards) == 0 {
 		cards = []pptxCard{
-			{Icon: "⚡", Title: "Speed", Desc: "Faster execution"},
-			{Icon: "🔒", Title: "Control", Desc: "Safer operations"},
-			{Icon: "📊", Title: "Insight", Desc: "Measurable outcomes"},
-			{Icon: "🧩", Title: "Flexibility", Desc: "Fits the workflow"},
+			{Icon: "automation", Title: "Speed", Desc: "Faster execution"},
+			{Icon: "shield", Title: "Control", Desc: "Safer operations"},
+			{Icon: "chart", Title: "Insight", Desc: "Measurable outcomes"},
+			{Icon: "integration", Title: "Flexibility", Desc: "Fits the workflow"},
 		}
 	}
 	if len(cards) > 6 {
@@ -320,8 +320,7 @@ func renderCardsDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 		y := startY + row*(cardH+180000)
 		sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), x, y, cardW, cardH, pal.card, pal.border, 10))
 		sb.WriteString(spRect(g, fmt.Sprintf("cardAccent%d", i), x, y, cardW, 28575, pal.accent))
-		sb.WriteString(spEllipse(g, fmt.Sprintf("cardIconBg%d", i), x+cardW/2-180000, y+120000, 360000, 360000, pal.accent, 100, "", 0, 0))
-		sb.WriteString(spText(g, fmt.Sprintf("cardIcon%d", i), x+cardW/2-180000, y+120000, 360000, 360000, inferCardIcon(card, i), pal.text, 1700, true, "ctr", "Calibri"))
+		renderCardIconBadge(g, &sb, fmt.Sprintf("cardIcon%d", i), x+cardW/2-180000, y+120000, 360000, pal, inferCardIcon(card, i), variant)
 		sb.WriteString(spText(g, fmt.Sprintf("cardTitle%d", i), x+40000, y+560000, cardW-80000, 260000, card.Title, pal.text, 1500, true, "ctr", "Calibri"))
 		sb.WriteString(spTextLeft(g, fmt.Sprintf("cardDesc%d", i), x+50000, y+860000, cardW-100000, cardH-960000, firstNonEmpty(card.Desc, card.Title), pal.muted, 1150, false, "t", "Calibri"))
 	}
@@ -671,39 +670,6 @@ func effectiveChartSeries(s pptxSlide) []pptxChartSeries {
 		return []pptxChartSeries{{Name: "Metrics", Values: values}}
 	}
 	return nil
-}
-
-func inferCardIcon(card pptxCard, index int) string {
-	if icon := strings.TrimSpace(card.Icon); icon != "" {
-		return icon
-	}
-	if icon := inferIconFromText(card.Title + " " + card.Desc); icon != "" {
-		return icon
-	}
-	fallback := []string{"⚡", "🔒", "📈", "🧩", "🧠", "🌐"}
-	return fallback[index%len(fallback)]
-}
-
-func inferIconFromText(text string) string {
-	t := strings.ToLower(text)
-	switch {
-	case containsAny(t, "security", "risk", "compliance", "privacy"):
-		return "🔒"
-	case containsAny(t, "analytics", "data", "insight", "metric", "dashboard"):
-		return "📊"
-	case containsAny(t, "growth", "revenue", "sales", "market"):
-		return "📈"
-	case containsAny(t, "automation", "speed", "fast", "efficiency"):
-		return "⚡"
-	case containsAny(t, "integration", "platform", "api", "connect"):
-		return "🔌"
-	case containsAny(t, "customer", "people", "team", "talent"):
-		return "👥"
-	case containsAny(t, "strategy", "planning", "roadmap"):
-		return "🧭"
-	default:
-		return ""
-	}
 }
 
 func splitCardText(point string) (string, string) {

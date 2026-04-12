@@ -268,7 +268,7 @@ func renderPPTXPreviewCards(slide pptxPreviewSlide, pal pptxPalette) string {
 	var items strings.Builder
 	for i, card := range cards {
 		items.WriteString(`<article class="barq-preview-card">
-  <div class="barq-preview-card-icon" style="background:` + hexColor(pal.accent) + `">` + html.EscapeString(inferCardIcon(card, i)) + `</div>
+  <div class="barq-preview-card-icon">` + previewCardIconSVG(inferCardIcon(card, i), pal) + `</div>
   <h3>` + html.EscapeString(card.Title) + `</h3>
   <p>` + html.EscapeString(firstNonEmpty(card.Desc, card.Title)) + `</p>
 </article>`)
@@ -588,6 +588,11 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     justify-content: center;
     color: #fff;
     font-weight: 700;
+  }
+  .barq-preview-card-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
   }
   .barq-preview-step-text { padding-top: 6px; line-height: 1.55; }
   .barq-preview-card h3, .barq-preview-compare-col h3, .barq-preview-timeline-item h3 {

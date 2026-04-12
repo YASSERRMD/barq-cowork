@@ -563,6 +563,27 @@ func spEllipse(g *idg, name string, x, y, w, h int, fill string, fillAlpha int, 
 </p:sp>`, id, xmlEsc(name), x, y, w, h, fillStr, lnStr)
 }
 
+func spPresetShape(g *idg, name, prst string, x, y, w, h int, fill string, fillAlpha int, strokeCol string, strokeW, strokeAlpha int) string {
+	id := g.next()
+	var fillStr string
+	if fill != "" && fillAlpha > 0 {
+		fillStr = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>`, fill, fillAlpha*1000)
+	} else {
+		fillStr = `<a:noFill/>`
+	}
+	var lnStr string
+	if strokeCol != "" && strokeW > 0 && strokeAlpha > 0 {
+		lnStr = fmt.Sprintf(`<a:ln w="%d"><a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill></a:ln>`, strokeW, strokeCol, strokeAlpha*1000)
+	} else {
+		lnStr = `<a:ln><a:noFill/></a:ln>`
+	}
+	return fmt.Sprintf(`<p:sp>
+<p:nvSpPr><p:cNvPr id="%d" name="%s"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="%s"><a:avLst/></a:prstGeom>%s%s</p:spPr>
+<p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
+</p:sp>`, id, xmlEsc(name), x, y, w, h, xmlEsc(prst), fillStr, lnStr)
+}
+
 func spText(g *idg, name string, x, y, w, h int, text, color string, sz int, bold bool, anchor string, font string) string {
 	id := g.next()
 	bAttr := "0"
