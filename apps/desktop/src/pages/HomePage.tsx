@@ -24,7 +24,7 @@ import { useAppStore } from "../store/appStore";
 // ── Suggested actions ────────────────────────────────────────────
 const SUGGESTIONS = [
   { icon: FileText,        label: "Summarize a PDF",            prompt: "Summarize this PDF and create a DOCX report." },
-  { icon: Presentation,   label: "Create a presentation",       prompt: "Convert this document into a PowerPoint presentation with 10 slides." },
+  { icon: Presentation,   label: "Create a presentation",       prompt: "Create a subject-specific PowerPoint presentation. Plan the deck narrative, choose theme and layout per slide, vary slide types, and use icons, charts, timelines, or comparisons where they actually help." },
   { icon: FileSpreadsheet, label: "Analyze a spreadsheet",      prompt: "Analyze this Excel file and produce an XLSX summary with key insights." },
   { icon: Search,          label: "Search documents",            prompt: "Search this folder of documents and produce a summary of findings." },
   { icon: Archive,         label: "Organize files",              prompt: "Organize files in this folder by type and date." },
