@@ -17,6 +17,12 @@ import (
 // WritePPTXTool creates a real .pptx PowerPoint file.
 type WritePPTXTool struct{}
 
+const (
+	pptxDesignWidth = 9144000
+	pptxSlideWidth  = 12192000
+	pptxSlideHeight = 6858000
+)
+
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
 	return "Create a professional PowerPoint presentation (.pptx) powered by the Barq PPTX Engine. " +
@@ -303,10 +309,10 @@ type pptxTableData struct {
 
 // pptxSlide is the full slide definition accepted by the write_pptx tool.
 type pptxSlide struct {
-	Heading      string `json:"heading"`
-	Type         string `json:"type"`   // primary field
-	Layout       string `json:"layout"` // backward-compat alias for Type
-	SpeakerNotes string `json:"speaker_notes"`
+	Heading      string           `json:"heading"`
+	Type         string           `json:"type"`   // primary field
+	Layout       string           `json:"layout"` // backward-compat alias for Type
+	SpeakerNotes string           `json:"speaker_notes"`
 	Design       *pptxSlideDesign `json:"design,omitempty"`
 	// bullets
 	Points []string `json:"points,omitempty"`
@@ -834,8 +840,27 @@ func autoLayout(heading string, points []string) string {
 
 // ── Shape builders ────────────────────────────────────────────────────────────
 
+func scaleCanvasX(v int) int {
+	return int((int64(v)*int64(pptxSlideWidth) + int64(pptxDesignWidth)/2) / int64(pptxDesignWidth))
+}
+
+func scaleCanvasW(v int) int {
+	return int((int64(v)*int64(pptxSlideWidth) + int64(pptxDesignWidth)/2) / int64(pptxDesignWidth))
+}
+
+func scaleCanvasFrame(x, w, h int, preserveSquare bool) (int, int) {
+	if preserveSquare && w == h {
+		center := x + w/2
+		scaledCenter := scaleCanvasX(center)
+		return scaledCenter - w/2, w
+	}
+	return scaleCanvasX(x), scaleCanvasW(w)
+}
+
 func spRect(g *idg, name string, x, y, w, h int, fill string) string {
 	id := g.next()
+	x = scaleCanvasX(x)
+	w = scaleCanvasW(w)
 	return fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="%s"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
 <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
@@ -845,6 +870,7 @@ func spRect(g *idg, name string, x, y, w, h int, fill string) string {
 
 func spRoundRect(g *idg, name string, x, y, w, h int, fill, borderCol string, borderAlpha int) string {
 	id := g.next()
+	x, w = scaleCanvasFrame(x, w, h, true)
 	borderFill := ""
 	if borderCol != "" && borderAlpha > 0 {
 		borderFill = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"/></a:solidFill>`, mixHex(firstNonEmpty(fill, "FFFFFF"), borderCol, float64(borderAlpha)/100))
@@ -860,6 +886,7 @@ func spRoundRect(g *idg, name string, x, y, w, h int, fill, borderCol string, bo
 
 func spEllipse(g *idg, name string, x, y, w, h int, fill string, fillAlpha int, strokeCol string, strokeW, strokeAlpha int) string {
 	id := g.next()
+	x, w = scaleCanvasFrame(x, w, h, true)
 	var fillStr string
 	if fill != "" && fillAlpha > 0 {
 		fillStr = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>`, fill, fillAlpha*1000)
@@ -881,6 +908,7 @@ func spEllipse(g *idg, name string, x, y, w, h int, fill string, fillAlpha int, 
 
 func spPresetShape(g *idg, name, prst string, x, y, w, h int, fill string, fillAlpha int, strokeCol string, strokeW, strokeAlpha int) string {
 	id := g.next()
+	x, w = scaleCanvasFrame(x, w, h, true)
 	var fillStr string
 	if fill != "" && fillAlpha > 0 {
 		fillStr = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>`, fill, fillAlpha*1000)
@@ -902,6 +930,8 @@ func spPresetShape(g *idg, name, prst string, x, y, w, h int, fill string, fillA
 
 func spText(g *idg, name string, x, y, w, h int, text, color string, sz int, bold bool, anchor string, font string) string {
 	id := g.next()
+	x = scaleCanvasX(x)
+	w = scaleCanvasW(w)
 	bAttr := "0"
 	if bold {
 		bAttr = "1"
@@ -923,6 +953,8 @@ func spText(g *idg, name string, x, y, w, h int, text, color string, sz int, bol
 
 func spTextLeft(g *idg, name string, x, y, w, h int, text, color string, sz int, bold bool, anchor string, font string) string {
 	id := g.next()
+	x = scaleCanvasX(x)
+	w = scaleCanvasW(w)
 	bAttr := "0"
 	if bold {
 		bAttr = "1"
@@ -944,6 +976,8 @@ func spTextLeft(g *idg, name string, x, y, w, h int, text, color string, sz int,
 
 func spRightArrow(g *idg, name string, x, y, w, h int, fill string) string {
 	id := g.next()
+	x = scaleCanvasX(x)
+	w = scaleCanvasW(w)
 	return fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="%s"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
 <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rightArrow"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
@@ -1446,7 +1480,7 @@ func pptxPresentationXML(numSlides int) string {
     <p:sldMasterId id="2147483648" r:id="rId1"/>
   </p:sldMasterIdLst>
   <p:sldIdLst>` + sldIdLst.String() + `</p:sldIdLst>
-  <p:sldSz cx="9144000" cy="6858000" type="screen4x3"/>
+  <p:sldSz cx="12192000" cy="6858000" type="screen16x9"/>
   <p:notesSz cx="6858000" cy="9144000"/>
   <p:defaultTextStyle>
     <a:defPPr><a:defRPr lang="en-US"/></a:defPPr>
