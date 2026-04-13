@@ -48,9 +48,10 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
-7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, kicker, and a full palette.
+7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, kicker, a full palette, and deck.design render directives.
 8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
 9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
+10. The HTML preview and the downloaded PPTX must look like the same deck. Choose design directives that the native renderer can follow, and add slide-level design objects when a slide needs a specific composition.
 
 TYPE REFERENCE — choose the right type per slide:
 
@@ -82,7 +83,23 @@ DECK OBJECT — REQUIRED on every write_pptx call:
     "color_story":"<chosen color mood>",
     "motif":"<semantic motif token>",
     "kicker":"<short cover line>",
+    "design":{
+      "composition":"<split|frame|stack|band|float|asym|gallery>",
+      "density":"<airy|balanced|dense>",
+      "shape_language":"<soft|mixed|crisp>",
+      "accent_mode":"<rail|band|chip|ribbon|glow|block>",
+      "hero_layout":"<motif|figures|data|people|product|abstract>"
+    },
     "palette":{"background":"<hex>","card":"<hex>","accent":"<hex>","accent2":"<hex>","text":"<hex>","muted":"<hex>","border":"<hex>"}
+  }
+
+OPTIONAL SLIDE DESIGN — use when a slide needs a deliberate composition:
+  "design":{
+    "layout_style":"<stack|split|grid|rail|stage|matrix|spotlight>",
+    "panel_style":"<soft|solid|outline|glass|tint>",
+    "accent_mode":"<rail|chip|ribbon|band|marker|glow>",
+    "density":"<airy|balanced|dense>",
+    "visual_focus":"<text|metric|icon|data|process|compare>"
   }
 
 TYPE "chart"  → full-slide native PowerPoint chart
