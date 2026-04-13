@@ -653,6 +653,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
   .barq-preview-cover-stage, .barq-preview-slide-stage {
     position: relative;
     overflow: hidden;
+    aspect-ratio: 16 / 9;
     border-radius: 34px;
     border: 1px solid var(--border-soft);
     background:
@@ -661,13 +662,11 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     box-shadow: 0 24px 54px rgba(15, 23, 42, 0.10);
   }
   .barq-preview-cover-stage {
-    min-height: 420px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 280px;
     padding: 34px;
   }
   .barq-preview-cover[data-family="proposal"] .barq-preview-cover-stage {
-    min-height: 420px;
     display: block;
     padding: 0;
     border-radius: 26px;
@@ -1212,6 +1211,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
   }
   @media (max-width: 720px) {
     main { padding: 18px 14px 28px; }
+    .barq-preview-cover-stage, .barq-preview-slide-stage { aspect-ratio: auto; }
     .barq-preview-cover-stage { grid-template-columns: 1fr; padding: 22px; }
     .barq-preview-cover-figure { min-height: 160px; }
     .barq-preview-compare { grid-template-columns: 1fr; }
