@@ -266,6 +266,8 @@ func defaultDeckDesign(themeName, audience string, deckInput pptxDeckDesignInput
 		default:
 			if containsAny(strings.ToLower(deckInput.VisualStyle), "gallery", "showcase", "collage", "modular") {
 				design.Composition = "gallery"
+			} else if containsAny(strings.ToLower(deckInput.VisualStyle), "contemporary", "modern", "refined", "editorial", "premium", "future") {
+				design.Composition = "split"
 			} else {
 				design.Composition = "split"
 			}
@@ -275,7 +277,7 @@ func defaultDeckDesign(themeName, audience string, deckInput pptxDeckDesignInput
 		switch {
 		case containsAny(strings.ToLower(strings.Join([]string{audience, deckInput.VisualStyle}, " ")), "kids", "children", "classroom", "playful"):
 			design.Density = "dense"
-		case containsAny(strings.ToLower(deckInput.VisualStyle), "minimal", "editorial", "premium", "calm"):
+		case containsAny(strings.ToLower(deckInput.VisualStyle), "minimal", "editorial", "premium", "calm", "contemporary", "modern", "refined", "future"):
 			design.Density = "airy"
 		default:
 			design.Density = "balanced"
@@ -302,7 +304,11 @@ func defaultDeckDesign(themeName, audience string, deckInput pptxDeckDesignInput
 		case "mosaic":
 			design.AccentMode = "block"
 		default:
-			design.AccentMode = "rail"
+			if containsAny(strings.ToLower(deckInput.VisualStyle), "contemporary", "modern", "refined", "editorial", "premium", "future") {
+				design.AccentMode = "ribbon"
+			} else {
+				design.AccentMode = "rail"
+			}
 		}
 	}
 	if strings.TrimSpace(design.HeroLayout) == "" {

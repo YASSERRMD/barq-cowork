@@ -354,6 +354,9 @@ var themepalettes = map[string]pptxPalette{
 	"studio-light":    {bg: "EEF4FF", card: "FFFFFF", accent: "4F46E5", accent2: "A5B4FC", text: "111827", muted: "6B7280", border: "D7DDED"},
 	"playful-light":   {bg: "FFF6E5", card: "FFFDF7", accent: "F59E0B", accent2: "FCD34D", text: "1F2937", muted: "6B7280", border: "E8D8B8"},
 	"earth-light":     {bg: "F2F1EA", card: "FBFAF6", accent: "10B981", accent2: "6EE7B7", text: "1F2937", muted: "667085", border: "D3CFC1"},
+	"future-light":    {bg: "F4F8FF", card: "FFFFFF", accent: "0F766E", accent2: "F97316", text: "0F172A", muted: "64748B", border: "D7E3F0"},
+	"slate-light":     {bg: "F5F7FB", card: "FFFFFF", accent: "334155", accent2: "22C55E", text: "0F172A", muted: "64748B", border: "DCE4EE"},
+	"aurora-dark":     {bg: "0B1120", card: "111827", accent: "22D3EE", accent2: "A78BFA", text: "F8FAFC", muted: "CBD5E1", border: "243244"},
 	"executive-dark":  {bg: "0F172A", card: "162033", accent: "4F46E5", accent2: "A5B4FC", text: "F8FAFC", muted: "CBD5E1", border: "334155"},
 	"signal-dark":     {bg: "111827", card: "1F2937", accent: "14B8A6", accent2: "5EEAD4", text: "F9FAFB", muted: "D1D5DB", border: "374151"},
 }
@@ -383,10 +386,14 @@ func pickPaletteFamily(themeName string, design pptxDeckDesignInput, audience st
 	}, " "))
 
 	switch {
-	case containsAny(text, "playful", "kids", "kid", "children", "classroom", "young learners", "storybook", "collage"):
+	case containsAny(text, "future", "futuristic", "next-gen", "next generation", "contemporary", "2030", "digital future", "smart", "ai", "artificial intelligence", "modern") && containsAny(text, "dark", "midnight", "dramatic"):
+		return "aurora-dark"
+	case containsAny(text, "future", "futuristic", "next-gen", "next generation", "contemporary", "2030", "digital future", "smart", "ai", "artificial intelligence", "modern"):
+		return "future-light"
+	case containsAny(text, "editorial", "magazine", "minimal", "clean", "story-led", "refined", "paper", "premium", "quiet"):
+		return "slate-light"
+	case containsAny(text, "playful", "storybook", "collage", "classroom poster", "childlike", "colorful", "cartoon"):
 		return "playful-light"
-	case containsAny(text, "editorial", "magazine", "minimal", "clean", "story-led", "refined", "paper"):
-		return "editorial-light"
 	case containsAny(text, "poster", "studio", "bold", "vibrant", "campaign", "gallery", "showcase"):
 		return "studio-light"
 	case containsAny(text, "earth", "organic", "natural", "sustainable", "calm", "warm neutral"):
@@ -398,13 +405,20 @@ func pickPaletteFamily(themeName string, design pptxDeckDesignInput, audience st
 	}
 
 	switch themeName {
-	case "education", "retail", "hr":
-		return "playful-light"
+	case "education":
+		if containsAny(text, "kids", "kid", "children", "young learners") {
+			return "future-light"
+		}
+		return "editorial-light"
+	case "retail", "hr":
+		return "slate-light"
 	case "environment":
 		return "earth-light"
-	case "healthcare", "data", "finance", "logistics":
+	case "healthcare", "finance", "logistics":
 		return "editorial-light"
-	case "security", "tech":
+	case "data", "tech":
+		return "future-light"
+	case "security":
 		return "executive-dark"
 	case "creative":
 		return "studio-light"
