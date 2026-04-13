@@ -1,0 +1,18 @@
+{
+  "name": "barq-pptx-renderer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/render-pptx.ts --bundle --platform=node --format=cjs --target=node20 --outfile=../internal/tools/assets/pptx-renderer.cjs",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "esbuild": "^0.25.9",
+    "typescript": "^5.9.3"
+  }
+}
