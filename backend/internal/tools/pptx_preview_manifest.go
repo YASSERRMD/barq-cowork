@@ -340,7 +340,7 @@ func renderPPTXPreviewProposalSlide(slide pptxPreviewSlide, pal pptxPalette, tot
 	iconPal := pal
 	iconPal.text = "FFFFFF"
 	iconPal.accent = mixHex(proposalHeaderFill(pal), pal.accent, 0.22)
-	body := renderPPTXPreviewBody(slide, pal)
+	body := renderPPTXPreviewProposalBody(slide, pal)
 	return `<section class="barq-preview-slide" data-family="proposal" data-layout="` + html.EscapeString(slide.Layout) + `">
   <div class="barq-preview-slide-stage">
     <div class="barq-preview-proposal-head">
@@ -351,6 +351,275 @@ func renderPPTXPreviewProposalSlide(slide pptxPreviewSlide, pal pptxPalette, tot
     <div class="barq-preview-slide-body">` + body + `</div>
   </div>
 </section>`
+}
+
+func renderPPTXPreviewProposalBody(slide pptxPreviewSlide, pal pptxPalette) string {
+	switch slide.Layout {
+	case "stats":
+		return renderPPTXPreviewProposalStats(slide, pal)
+	case "steps":
+		return renderPPTXPreviewProposalSteps(slide, pal)
+	case "cards":
+		return renderPPTXPreviewProposalCards(slide, pal)
+	case "chart":
+		return renderPPTXPreviewChart(slide, pal)
+	case "timeline":
+		return renderPPTXPreviewProposalTimeline(slide, pal)
+	case "compare":
+		return renderPPTXPreviewCompare(slide)
+	case "table":
+		return renderPPTXPreviewProposalTable(slide, pal)
+	case "title":
+		return renderPPTXPreviewSection(slide)
+	case "blank":
+		return renderPPTXPreviewBlank(slide)
+	default:
+		return renderPPTXPreviewProposalBullets(slide, pal)
+	}
+}
+
+func renderPPTXPreviewProposalStats(slide pptxPreviewSlide, pal pptxPalette) string {
+	stats := append([]pptxStat(nil), slide.Stats...)
+	if len(stats) == 0 {
+		stats = effectiveStats(pptxSlide{Points: slide.Points})
+	}
+	if len(stats) == 0 {
+		stats = []pptxStat{{Value: "92%", Label: "Retention", Desc: "Strong repeat usage"}}
+	}
+	if len(stats) > 4 {
+		stats = stats[:4]
+	}
+
+	var hero strings.Builder
+	for i := 0; i < minInt(2, len(stats)); i++ {
+		fill := proposalHeaderFill(pal)
+		muted := proposalMutedOnDark(pal)
+		if i == 1 {
+			fill = mixHex(proposalHeaderFill(pal), pal.card, 0.18)
+		}
+		accent := proposalAccentColor(pal, i)
+		hero.WriteString(renderPPTXPreviewProposalMetricCard(
+			stats[i],
+			accent,
+			hexColor(fill),
+			hexColor(mixHex(fill, pal.card, 0.18)),
+			hexColor(muted),
+			hexColor(muted),
+			true,
+		))
+	}
+
+	var lower strings.Builder
+	for i := 2; i < len(stats); i++ {
+		accent := proposalAccentColor(pal, i)
+		lower.WriteString(renderPPTXPreviewProposalMetricCard(
+			stats[i],
+			accent,
+			"#FFFFFF",
+			hexColor(proposalRowBorder(pal)),
+			hexColor(pal.text),
+			hexColor(proposalMutedOnLight(pal)),
+			false,
+		))
+	}
+
+	band := ""
+	if len(stats) > 2 {
+		band = `<div class="barq-preview-proposal-band">` + html.EscapeString(proposalStatsTakeaway(stats)) + `</div>`
+	}
+
+	return `<div class="barq-preview-proposal-stats">
+  <div class="barq-preview-proposal-stats-hero">` + hero.String() + `</div>
+  <div class="barq-preview-proposal-stats-lower">` + lower.String() + `</div>
+  ` + band + `
+</div>`
+}
+
+func renderPPTXPreviewProposalBullets(slide pptxPreviewSlide, pal pptxPalette) string {
+	points := safePoints(slide.Points, 8)
+	if len(points) == 0 {
+		points = []string{"Key insight", "Supporting evidence", "Operational implication"}
+	}
+	stats := append([]pptxStat(nil), slide.Stats...)
+	if len(stats) > 4 {
+		stats = stats[:4]
+	}
+
+	metricRow := ""
+	if len(stats) > 0 {
+		var metrics strings.Builder
+		for i, stat := range stats {
+			metrics.WriteString(renderPPTXPreviewProposalMetricCard(
+				stat,
+				proposalAccentColor(pal, i),
+				"#FFFFFF",
+				hexColor(proposalRowBorder(pal)),
+				hexColor(pal.text),
+				hexColor(proposalMutedOnLight(pal)),
+				false,
+			))
+		}
+		metricRow = `<div class="barq-preview-proposal-detail-metrics">` + metrics.String() + `</div>`
+	}
+
+	lead := proposalLeadText(pptxSlide{Heading: slide.Heading, SpeakerNotes: slide.SpeakerNotes}, points)
+	leadHTML := ""
+	if strings.TrimSpace(lead) != "" {
+		leadHTML = `<p class="barq-preview-proposal-detail-lead">` + html.EscapeString(lead) + `</p>`
+	}
+
+	cols := 1
+	if len(points) >= 4 {
+		cols = 2
+	}
+	left := make([]string, 0, len(points))
+	right := make([]string, 0, len(points))
+	if cols == 2 {
+		for i, point := range points {
+			if i%2 == 0 {
+				left = append(left, point)
+			} else {
+				right = append(right, point)
+			}
+		}
+	} else {
+		left = append(left, points...)
+	}
+
+	columns := `<div class="barq-preview-proposal-detail-columns">
+  <div class="barq-preview-proposal-detail-col">` + renderPPTXPreviewProposalPointList(left, pal, 0) + `</div>`
+	if cols == 2 {
+		columns += `<div class="barq-preview-proposal-detail-col">` + renderPPTXPreviewProposalPointList(right, pal, len(left)) + `</div>`
+	}
+	columns += `</div>`
+
+	return `<div class="barq-preview-proposal-detail">
+  ` + metricRow + `
+  ` + leadHTML + `
+  <div class="barq-preview-proposal-detail-label">` + html.EscapeString(proposalSectionLabel(pptxSlide{Heading: slide.Heading})) + `</div>
+  ` + columns + `
+</div>`
+}
+
+func renderPPTXPreviewProposalSteps(slide pptxPreviewSlide, pal pptxPalette) string {
+	steps := append([]string(nil), slide.Steps...)
+	if len(steps) == 0 {
+		steps = slide.Points
+	}
+	var rows strings.Builder
+	for i, step := range safePoints(steps, 6) {
+		title, desc := splitCardText(step)
+		rows.WriteString(renderPPTXPreviewProposalRoadmapRow(i, firstNonEmpty(title, step), fmt.Sprintf("STEP %02d", i+1), desc, firstNonEmpty(inferIconFromText(title), "strategy"), proposalAccentColor(pal, i), pal))
+	}
+	return `<div class="barq-preview-proposal-roadmap">` + rows.String() + `</div>`
+}
+
+func renderPPTXPreviewProposalCards(slide pptxPreviewSlide, pal pptxPalette) string {
+	cards := append([]pptxCard(nil), slide.Cards...)
+	if len(cards) == 0 {
+		cards = effectiveCards(pptxSlide{Points: slide.Points})
+	}
+	var items strings.Builder
+	for i, card := range cards {
+		accent := proposalAccentColor(pal, i)
+		items.WriteString(`<article class="barq-preview-proposal-card" style="--accent:` + hexColor(accent) + `">
+  <div class="barq-preview-proposal-card-accent"></div>
+  <div class="barq-preview-proposal-card-icon">` + previewCardIconSVG(inferCardIcon(card, i), pal) + `</div>
+  <h3>` + html.EscapeString(card.Title) + `</h3>
+  <p>` + html.EscapeString(firstNonEmpty(card.Desc, card.Title)) + `</p>
+</article>`)
+	}
+	return `<div class="barq-preview-proposal-card-grid">` + items.String() + `</div>`
+}
+
+func renderPPTXPreviewProposalTimeline(slide pptxPreviewSlide, pal pptxPalette) string {
+	var rows strings.Builder
+	for i, item := range slide.Timeline {
+		rows.WriteString(renderPPTXPreviewProposalRoadmapRow(i, item.Title, item.Date, firstNonEmpty(item.Desc, item.Title), firstNonEmpty(inferIconFromText(item.Title), previewProposalSlideIconToken(slide)), proposalAccentColor(pal, i), pal))
+	}
+	return `<div class="barq-preview-proposal-roadmap">` + rows.String() + `</div>`
+}
+
+func renderPPTXPreviewProposalTable(slide pptxPreviewSlide, pal pptxPalette) string {
+	if slide.Table == nil {
+		return ``
+	}
+	var head strings.Builder
+	for _, value := range slide.Table.Headers {
+		head.WriteString(`<th>` + html.EscapeString(value) + `</th>`)
+	}
+	var rows strings.Builder
+	for _, row := range slide.Table.Rows {
+		rows.WriteString("<tr>")
+		for _, value := range row {
+			rows.WriteString(`<td>` + html.EscapeString(value) + `</td>`)
+		}
+		rows.WriteString("</tr>")
+	}
+	side := ""
+	if len(slide.Table.Rows) >= 2 {
+		side = `<aside class="barq-preview-proposal-table-side">
+  <div class="barq-preview-proposal-table-side-label">Decision Signal</div>
+  <p>` + html.EscapeString(summarizeTable(slide.Table)) + `</p>
+</aside>`
+	}
+	return `<div class="barq-preview-proposal-table-shell">
+  <div class="barq-preview-proposal-table-panel">
+    <div class="barq-preview-proposal-table-accent"></div>
+    <table class="barq-preview-table">
+      <thead><tr>` + head.String() + `</tr></thead>
+      <tbody>` + rows.String() + `</tbody>
+    </table>
+  </div>
+  ` + side + `
+</div>`
+}
+
+func renderPPTXPreviewProposalPointList(points []string, pal pptxPalette, offset int) string {
+	var items strings.Builder
+	for i, point := range points {
+		title, desc := splitCardText(point)
+		accent := proposalAccentColor(pal, offset+i)
+		items.WriteString(`<div class="barq-preview-proposal-detail-item">
+  <span class="barq-preview-proposal-detail-dot" style="background:` + hexColor(accent) + `"></span>
+  <div class="barq-preview-proposal-detail-copy">
+    <div class="barq-preview-proposal-detail-title">` + html.EscapeString(title) + `</div>`)
+		if desc != "" {
+			items.WriteString(`<div class="barq-preview-proposal-detail-desc">` + html.EscapeString(desc) + `</div>`)
+		}
+		items.WriteString(`</div></div>`)
+	}
+	return items.String()
+}
+
+func renderPPTXPreviewProposalRoadmapRow(index int, title, meta, desc, icon string, accent string, pal pptxPalette) string {
+	return `<article class="barq-preview-proposal-roadmap-row" style="--accent:` + hexColor(accent) + `">
+  <div class="barq-preview-proposal-roadmap-badge">` + fmt.Sprintf("%d", index+1) + `</div>
+  <div class="barq-preview-proposal-roadmap-icon">` + previewCardIconSVG(icon, pal) + `</div>
+  <div class="barq-preview-proposal-roadmap-panel">
+    <div class="barq-preview-proposal-roadmap-accent"></div>
+    <div class="barq-preview-proposal-roadmap-title">` + html.EscapeString(title) + `</div>
+    <div class="barq-preview-proposal-roadmap-meta">` + html.EscapeString(meta) + `</div>
+    <div class="barq-preview-proposal-roadmap-desc">` + html.EscapeString(desc) + `</div>
+  </div>
+</article>`
+}
+
+func renderPPTXPreviewProposalMetricCard(stat pptxStat, accent string, surface, border, labelColor, mutedColor string, dark bool) string {
+	klass := "barq-preview-proposal-metric"
+	if dark {
+		klass += " barq-preview-proposal-metric-dark"
+	}
+	detail := ""
+	if text := strings.TrimSpace(stat.Desc); text != "" {
+		detail = `<div class="barq-preview-proposal-metric-detail" style="color:` + mutedColor + `">` + html.EscapeString(text) + `</div>`
+	}
+	return `<article class="` + klass + `" style="background:` + surface + `;border-color:` + border + `;--accent:` + hexColor(accent) + `">
+  <div class="barq-preview-proposal-metric-accent"></div>
+  <div class="barq-preview-proposal-metric-label" style="color:` + labelColor + `">` + html.EscapeString(strings.ToUpper(stat.Label)) + `</div>
+  <div class="barq-preview-proposal-metric-value">` + html.EscapeString(stat.Value) + `</div>
+  ` + detail + `
+</article>`
 }
 
 func renderPPTXPreviewCoverFigure(manifest pptxPreviewManifest, pal pptxPalette, design pptxDeckDesign) string {
@@ -1209,6 +1478,203 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     color: var(--muted);
     line-height: 1.6;
   }
+  .barq-preview-proposal-stats,
+  .barq-preview-proposal-detail,
+  .barq-preview-proposal-roadmap,
+  .barq-preview-proposal-table-shell {
+    display: grid;
+    gap: 14px;
+  }
+  .barq-preview-proposal-stats-hero,
+  .barq-preview-proposal-stats-lower,
+  .barq-preview-proposal-detail-metrics,
+  .barq-preview-proposal-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .barq-preview-proposal-stats-lower,
+  .barq-preview-proposal-detail-metrics,
+  .barq-preview-proposal-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .barq-preview-proposal-metric,
+  .barq-preview-proposal-card,
+  .barq-preview-proposal-table-panel,
+  .barq-preview-proposal-table-side {
+    position: relative;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .barq-preview-proposal-metric {
+    padding: 16px 18px;
+    min-height: 138px;
+  }
+  .barq-preview-proposal-metric-dark {
+    min-height: 178px;
+  }
+  .barq-preview-proposal-metric-accent,
+  .barq-preview-proposal-card-accent,
+  .barq-preview-proposal-table-accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    height: 4px;
+    background: var(--accent);
+  }
+  .barq-preview-proposal-metric-label,
+  .barq-preview-proposal-detail-label,
+  .barq-preview-proposal-table-side-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .barq-preview-proposal-metric-value {
+    margin-top: 12px;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+  }
+  .barq-preview-proposal-metric-detail,
+  .barq-preview-proposal-detail-lead,
+  .barq-preview-proposal-detail-desc,
+  .barq-preview-proposal-roadmap-desc,
+  .barq-preview-proposal-table-side p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .barq-preview-proposal-band {
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(15, 27, 42, 0.06);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .barq-preview-proposal-detail-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+  }
+  .barq-preview-proposal-detail-col {
+    display: grid;
+    gap: 10px;
+  }
+  .barq-preview-proposal-detail-item {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .barq-preview-proposal-detail-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    margin-top: 5px;
+  }
+  .barq-preview-proposal-detail-title,
+  .barq-preview-proposal-roadmap-title,
+  .barq-preview-proposal-card h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .barq-preview-proposal-roadmap-row {
+    display: grid;
+    grid-template-columns: 40px 28px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .barq-preview-proposal-roadmap-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--proposal-header);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .barq-preview-proposal-roadmap-icon {
+    width: 28px;
+    height: 28px;
+    margin-top: 6px;
+  }
+  .barq-preview-proposal-roadmap-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .barq-preview-proposal-roadmap-panel {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1.4fr);
+    gap: 14px;
+    align-items: start;
+    padding: 14px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .barq-preview-proposal-roadmap-accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent);
+  }
+  .barq-preview-proposal-roadmap-meta {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: center;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding-top: 1px;
+  }
+  .barq-preview-proposal-table-shell {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 14px;
+    align-items: start;
+  }
+  .barq-preview-proposal-table-panel {
+    padding-top: 4px;
+  }
+  .barq-preview-proposal-table-side {
+    padding: 16px;
+  }
+  .barq-preview-proposal-table-side-label {
+    color: var(--accent);
+  }
+  .barq-preview-proposal-card {
+    padding: 16px;
+  }
+  .barq-preview-proposal-card-icon {
+    width: 34px;
+    height: 34px;
+    margin-bottom: 14px;
+  }
+  .barq-preview-proposal-card-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .barq-preview-proposal-card p {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
   @media (max-width: 720px) {
     main { padding: 18px 14px 28px; }
     .barq-preview-cover-stage, .barq-preview-slide-stage { aspect-ratio: auto; }
@@ -1216,6 +1682,15 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     .barq-preview-cover-figure { min-height: 160px; }
     .barq-preview-compare { grid-template-columns: 1fr; }
     .barq-preview-timeline-item, .barq-preview-share-row {
+      grid-template-columns: 1fr;
+    }
+    .barq-preview-proposal-stats-hero,
+    .barq-preview-proposal-stats-lower,
+    .barq-preview-proposal-detail-metrics,
+    .barq-preview-proposal-card-grid,
+    .barq-preview-proposal-detail-columns,
+    .barq-preview-proposal-table-shell,
+    .barq-preview-proposal-roadmap-panel {
       grid-template-columns: 1fr;
     }
     .barq-preview-bar-group { min-height: 170px; }
