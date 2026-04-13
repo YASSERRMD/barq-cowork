@@ -868,20 +868,27 @@ func spRect(g *idg, name string, x, y, w, h int, fill string) string {
 </p:sp>`, id, xmlEsc(name), x, y, w, h, fill)
 }
 
-func spRoundRect(g *idg, name string, x, y, w, h int, fill, borderCol string, borderAlpha int) string {
+func spRoundRect(g *idg, name string, x, y, w, h int, fill, borderCol string, radius int) string {
 	id := g.next()
 	x, w = scaleCanvasFrame(x, w, h, true)
+	adj := radius * 900
+	if adj < 2400 {
+		adj = 2400
+	}
+	if adj > 18000 {
+		adj = 18000
+	}
 	borderFill := ""
-	if borderCol != "" && borderAlpha > 0 {
-		borderFill = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"/></a:solidFill>`, mixHex(firstNonEmpty(fill, "FFFFFF"), borderCol, float64(borderAlpha)/100))
+	if borderCol != "" {
+		borderFill = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"/></a:solidFill>`, borderCol)
 	} else {
 		borderFill = `<a:noFill/>`
 	}
 	return fmt.Sprintf(`<p:sp>
 <p:nvSpPr><p:cNvPr id="%d" name="%s"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 30000"/></a:avLst></a:prstGeom><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:ln w="9525">%s</a:ln></p:spPr>
+<p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val %d"/></a:avLst></a:prstGeom><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:ln w="9525">%s</a:ln></p:spPr>
 <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
-</p:sp>`, id, xmlEsc(name), x, y, w, h, fill, borderFill)
+</p:sp>`, id, xmlEsc(name), x, y, w, h, adj, fill, borderFill)
 }
 
 func spEllipse(g *idg, name string, x, y, w, h int, fill string, fillAlpha int, strokeCol string, strokeW, strokeAlpha int) string {
