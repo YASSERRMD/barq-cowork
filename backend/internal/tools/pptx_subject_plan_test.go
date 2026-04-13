@@ -137,6 +137,36 @@ func TestCoverStyleKey_PrefersExplicitCoverStyle(t *testing.T) {
 	}
 }
 
+func TestSlideLabel_IsUserFacingNumbering(t *testing.T) {
+	label := slideLabel(pptxDeckContext{SlideCount: 7}, 1, "capabilities")
+	if label != "Slide 3 of 8" {
+		t.Fatalf("expected simple slide numbering, got %q", label)
+	}
+}
+
+func TestMixHex_BakesTintedColor(t *testing.T) {
+	if got := mixHex("FFF9F0", "6366F1", 0.16); got == "6366F1" || got == "FFF9F0" || got == "" {
+		t.Fatalf("expected blended tint, got %q", got)
+	}
+}
+
+func TestCoverMetrics_ExpandForWrappedCopy(t *testing.T) {
+	titleSize, titleHeight := coverTitleMetrics("Kids and AI: Navigating the Digital Future Together", 3300, 16)
+	if titleHeight <= 860000 || titleSize >= 3300 {
+		t.Fatalf("expected wrapped title metrics to expand height and reduce size, got size=%d height=%d", titleSize, titleHeight)
+	}
+
+	mosaicTitleSize, mosaicTitleHeight := coverTitleMetrics("Kids & AI: Growing Up Smart", 3300, 12)
+	if mosaicTitleHeight <= 860000 || mosaicTitleSize >= 3300 {
+		t.Fatalf("expected mosaic title metrics to expand for a three-line cover, got size=%d height=%d", mosaicTitleSize, mosaicTitleHeight)
+	}
+
+	subtitleSize, subtitleHeight := coverSubtitleMetrics("A practical guide for parents and educators introducing AI safely and creatively", 1380, 30)
+	if subtitleHeight <= 340000 || subtitleSize >= 1380 {
+		t.Fatalf("expected wrapped subtitle metrics to expand height and reduce size, got size=%d height=%d", subtitleSize, subtitleHeight)
+	}
+}
+
 func TestInferCardIcon_NormalizesLegacyEmojiToSemanticToken(t *testing.T) {
 	icon := inferCardIcon(pptxCard{Icon: "📊", Title: "Insights", Desc: "Data visibility"}, 0)
 	if icon != "chart" {

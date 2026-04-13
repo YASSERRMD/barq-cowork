@@ -452,14 +452,16 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     --text: ` + hexColor(pal.text) + `;
     --muted: ` + hexColor(pal.muted) + `;
     --border: ` + hexColor(pal.border) + `;
-    --accent-soft: ` + hexRGBA(pal.accent, 0.12) + `;
-    --accent-soft-2: ` + hexRGBA(pal.accent2, 0.18) + `;
-    --border-soft: ` + hexRGBA(pal.border, 0.55) + `;
+    --accent-soft: ` + hexColor(mixHex(pal.bg, pal.accent, 0.16)) + `;
+    --accent-soft-2: ` + hexColor(mixHex(pal.bg, pal.accent2, 0.18)) + `;
+    --border-soft: ` + hexColor(mixHex(pal.bg, pal.border, 0.72)) + `;
+    --surface-soft: ` + hexColor(mixHex(pal.bg, pal.card, 0.88)) + `;
+    --track-soft: ` + hexColor(mixHex(pal.bg, pal.border, 0.18)) + `;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: linear-gradient(180deg, var(--bg) 0%%, ` + hexRGBA(pal.card, 0.98) + ` 100%%);
+    background: var(--bg);
     color: var(--text);
     font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   }
@@ -468,7 +470,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     border-radius: 24px;
     border: 1px solid var(--border-soft);
     background: var(--card);
-    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
     margin-bottom: 18px;
   }
   .barq-preview-cover {
@@ -613,7 +615,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
   .barq-preview-stats-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .barq-preview-cards-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .barq-preview-stat, .barq-preview-card, .barq-preview-compare-col, .barq-preview-blank, .barq-preview-section-break {
-    background: ` + hexRGBA(pal.bg, 0.42) + `;
+    background: var(--surface-soft);
     border: 1px solid var(--border-soft);
     border-radius: 18px;
     padding: 16px;
@@ -646,7 +648,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     padding: 12px 14px;
     border-radius: 16px;
     border: 1px solid var(--border-soft);
-    background: ` + hexRGBA(pal.bg, 0.42) + `;
+    background: var(--surface-soft);
   }
   .barq-preview-step-num, .barq-preview-card-icon {
     width: 36px;
@@ -683,7 +685,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     min-height: 240px;
     padding: 16px;
     border-radius: 18px;
-    background: ` + hexRGBA(pal.bg, 0.42) + `;
+    background: var(--surface-soft);
     border: 1px solid var(--border-soft);
   }
   .barq-preview-bar-group {
@@ -716,7 +718,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
   .barq-preview-share-track {
     height: 12px;
     border-radius: 999px;
-    background: ` + hexRGBA(pal.border, 0.18) + `;
+    background: var(--track-soft);
     overflow: hidden;
   }
   .barq-preview-share-track span {
@@ -731,7 +733,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     align-items: start;
     padding: 14px 16px;
     border-radius: 18px;
-    background: ` + hexRGBA(pal.bg, 0.42) + `;
+    background: var(--surface-soft);
     border: 1px solid var(--border-soft);
   }
   .barq-preview-timeline-date {
@@ -762,7 +764,7 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     text-align: left;
     font-size: 13px;
   }
-  .barq-preview-table td { background: ` + hexRGBA(pal.bg, 0.42) + `; }
+  .barq-preview-table td { background: var(--surface-soft); }
   .barq-preview-section-break, .barq-preview-blank { text-align: center; }
   .barq-preview-section-badge, .barq-preview-blank-label {
     color: var(--accent);

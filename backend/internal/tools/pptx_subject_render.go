@@ -162,8 +162,8 @@ func renderCoverEditorialSplit(g *idg, sb *strings.Builder, deck pptxDeckContext
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
 	sb.WriteString(spRect(g, "accentRail", 0, 0, 9144000, 38100, pal.accent))
 	sb.WriteString(spRect(g, "rightPanel", 6360000, 0, 2784000, 6858000, pal.card))
-	sb.WriteString(spEllipse(g, "heroOrb", 6840000, -360000, 2340000, 2340000, pal.accent, 14, "", 0, 0))
-	sb.WriteString(spEllipse(g, "footOrb", 7120000, 4680000, 1500000, 1500000, pal.accent2, 12, "", 0, 0))
+	sb.WriteString(spEllipse(g, "heroOrb", 6840000, -360000, 2340000, 2340000, deckAccentWash(pal, 0.16), 100, "", 0, 0))
+	sb.WriteString(spEllipse(g, "footOrb", 7120000, 4680000, 1500000, 1500000, deckAccent2Wash(pal, 0.14), 100, "", 0, 0))
 	renderCoverMotif(g, sb, "editorialMotif", 7000000, 1180000, 1180000, pal, coverMotifToken(deck), 22)
 	sb.WriteString(spTextLeft(g, "titleKicker", 540000, 880000, 2300000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent, 1080, true, "t", "Calibri"))
 	sb.WriteString(spTextLeft(g, "title", 540000, 1480000, 5200000, 1820000, firstNonEmpty(deck.Title, "Presentation"), pal.text, 4200, true, "t", "Calibri Light"))
@@ -179,12 +179,12 @@ func renderCoverEditorialSplit(g *idg, sb *strings.Builder, deck pptxDeckContext
 
 func renderCoverOrbitFocus(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
-	sb.WriteString(spEllipse(g, "orbitOne", 800000, 720000, 4200000, 4200000, "", 0, pal.border, 6350, 42))
-	sb.WriteString(spEllipse(g, "orbitTwo", 1260000, 1180000, 3340000, 3340000, "", 0, pal.border, 6350, 42))
-	sb.WriteString(spEllipse(g, "orbitThree", 1740000, 1660000, 2380000, 2380000, "", 0, pal.border, 6350, 42))
-	sb.WriteString(spEllipse(g, "accentGlow", 1280000, 2140000, 1400000, 1400000, pal.accent, 18, "", 0, 0))
-	renderCoverMotif(g, sb, "orbitMotif", 2140000, 2600000, 900000, pal, coverMotifToken(deck), 26)
-	sb.WriteString(spRoundRect(g, "titlePanel", 4300000, 1120000, 3660000, 3920000, pal.card, pal.border, 12))
+	sb.WriteString(spEllipse(g, "orbitOne", 800000, 720000, 4200000, 4200000, "", 0, deckBorder(pal), 6350, 100))
+	sb.WriteString(spEllipse(g, "orbitTwo", 1260000, 1180000, 3340000, 3340000, "", 0, deckBorder(pal), 6350, 100))
+	sb.WriteString(spEllipse(g, "orbitThree", 1740000, 1660000, 2380000, 2380000, "", 0, deckBorder(pal), 6350, 100))
+	sb.WriteString(spEllipse(g, "accentGlow", 1280000, 2140000, 1400000, 1400000, deckAccentWash(pal, 0.18), 100, "", 0, 0))
+	renderCoverMotif(g, sb, "orbitMotif", 2140000, 2600000, 900000, pal, coverMotifToken(deck), 30)
+	sb.WriteString(spRoundRect(g, "titlePanel", 4300000, 1120000, 3660000, 3920000, deckSurface(pal), pal.border, 18))
 	sb.WriteString(spRect(g, "titleAccent", 4300000, 1120000, 3660000, 38100, pal.accent))
 	sb.WriteString(spTextLeft(g, "titleKicker", 4620000, 1480000, 2400000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent, 1080, true, "t", "Calibri"))
 	sb.WriteString(spTextLeft(g, "title", 4620000, 1980000, 3020000, 1500000, firstNonEmpty(deck.Title, "Presentation"), pal.text, 3600, true, "t", "Calibri Light"))
@@ -198,48 +198,55 @@ func renderCoverOrbitFocus(g *idg, sb *strings.Builder, deck pptxDeckContext, pa
 }
 
 func renderCoverMosaicGrid(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
-	titleSize, titleHeight := coverTitleMetrics(deck.Title, 3200)
+	titleSize, titleHeight := coverTitleMetrics(deck.Title, 3300, 12)
+	subtitle := coverLead(deck)
+	subtitleSize, subtitleHeight := coverSubtitleMetrics(subtitle, 1380, 30)
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
-	sb.WriteString(spRoundRect(g, "titlePanel", 620000, 3720000, 3600000, 1980000, pal.card, pal.border, 12))
-	sb.WriteString(spRect(g, "panelAccent", 620000, 3720000, 3600000, 38100, pal.accent))
-	tileXs := []int{4680000, 6440000, 4680000, 6440000, 7320000}
-	tileYs := []int{920000, 920000, 2660000, 2660000, 4380000}
-	tileWs := []int{1540000, 1540000, 1540000, 1540000, 980000}
-	tileHs := []int{1400000, 1400000, 1400000, 1400000, 1180000}
+	sb.WriteString(spRect(g, "topRule", 620000, 980000, 1960000, 38100, pal.accent))
+	sb.WriteString(spRoundRect(g, "titlePanel", 620000, 1240000, 3900000, 4260000, deckSurface(pal), pal.border, 18))
+	sb.WriteString(spRect(g, "panelAccent", 620000, 1240000, 3900000, 38100, pal.accent))
+	tileXs := []int{5060000, 6620000, 5060000, 6620000, 7480000}
+	tileYs := []int{1040000, 860000, 2700000, 2700000, 4720000}
+	tileWs := []int{1340000, 1820000, 1340000, 1820000, 940000}
+	tileHs := []int{1320000, 1540000, 1320000, 1700000, 1060000}
 	for i := range tileXs {
-		fill := pal.card
-		if i == 1 || i == 3 {
-			fill = pal.accent
+		fill := deckSurface(pal)
+		switch i {
+		case 1:
+			fill = deckAccentWash(pal, 0.84)
+		case 3:
+			fill = deckAccent2Wash(pal, 0.78)
 		}
-		sb.WriteString(spRoundRect(g, fmt.Sprintf("tile%d", i), tileXs[i], tileYs[i], tileWs[i], tileHs[i], fill, pal.border, 12))
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("tile%d", i), tileXs[i], tileYs[i], tileWs[i], tileHs[i], fill, pal.border, 18))
 	}
-	renderCoverMotif(g, sb, "mosaicMotif", 6620000, 1060000, 1160000, pal, coverMotifToken(deck), 22)
-	renderCoverMotif(g, sb, "mosaicMotifSmall", 4860000, 2840000, 760000, pal, coverMotifToken(deck), 18)
-	sb.WriteString(spTextLeft(g, "titleKicker", 900000, 4040000, 2200000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent, 1080, true, "t", "Calibri"))
-	sb.WriteString(spTextLeft(g, "title", 900000, 4520000, 2820000, titleHeight+140000, firstNonEmpty(deck.Title, "Presentation"), pal.text, titleSize, true, "t", "Calibri Light"))
-	subtitleY := 4520000 + titleHeight + 180000
-	if subtitle := coverLead(deck); subtitle != "" {
-		sb.WriteString(spTextLeft(g, "subtitle", 900000, subtitleY, 2500000, 260000, subtitle, pal.accent2, 1320, true, "t", "Calibri"))
+	renderCoverMotif(g, sb, "mosaicMotif", 7060000, 1160000, 980000, pal, coverMotifToken(deck), 30)
+	renderCoverMotif(g, sb, "mosaicMotifSmall", 5440000, 3040000, 620000, pal, coverMotifToken(deck), 24)
+	sb.WriteString(spTextLeft(g, "titleKicker", 920000, 1600000, 2600000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent, 1080, true, "t", "Calibri"))
+	sb.WriteString(spTextLeft(g, "title", 920000, 2100000, 3120000, titleHeight, firstNonEmpty(deck.Title, "Presentation"), pal.text, titleSize, true, "t", "Calibri Light"))
+	subtitleY := 2100000 + titleHeight + 180000
+	if subtitle != "" {
+		sb.WriteString(spTextLeft(g, "subtitle", 920000, subtitleY, 3100000, subtitleHeight, subtitle, pal.accent2, subtitleSize, true, "t", "Calibri"))
 	}
-	supportY := subtitleY + 320000
+	supportY := subtitleY + subtitleHeight + 160000
 	if support := coverSupportLine(deck); support != "" {
-		sb.WriteString(spTextLeft(g, "support", 4680000, supportY, 2400000, 220000, support, pal.muted, 980, false, "t", "Calibri"))
+		sb.WriteString(spTextLeft(g, "support", 920000, supportY, 3080000, 500000, support, pal.muted, 1080, false, "t", "Calibri"))
 	}
-	sb.WriteString(spTextLeft(g, "subjectLine", 4680000, supportY+340000, 2200000, 180000, coverSubjectLine(deck), pal.muted, 900, true, "t", "Calibri"))
+	sb.WriteString(spRect(g, "footerRule", 920000, 5020000, 1680000, 19050, pal.accent2))
+	sb.WriteString(spTextLeft(g, "subjectLine", 920000, 5140000, 3080000, 260000, coverSubjectLine(deck), pal.muted, 920, true, "t", "Calibri"))
 }
 
 func renderCoverStudioPoster(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
-	titleSize, titleHeight := coverTitleMetrics(deck.Title, 3600)
+	titleSize, titleHeight := coverTitleMetrics(deck.Title, 3600, 18)
 	subtitle := coverLead(deck)
-	subtitleSize, subtitleHeight := coverSubtitleMetrics(subtitle, 1500)
+	subtitleSize, subtitleHeight := coverSubtitleMetrics(subtitle, 1500, 34)
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
 	sb.WriteString(spRect(g, "posterBand", 0, 0, 2480000, 6858000, pal.accent))
 	sb.WriteString(spRect(g, "posterRail", 2480000, 0, 300000, 6858000, pal.accent2))
 	for i := 0; i < 3; i++ {
 		y := 980000 + i*1460000
-		sb.WriteString(spRoundRect(g, fmt.Sprintf("posterStrip%d", i), 6460000, y, 1980000, 1080000, pal.card, pal.border, 10))
+		sb.WriteString(spRoundRect(g, fmt.Sprintf("posterStrip%d", i), 6460000, y, 1980000, 1080000, deckSurface(pal), pal.border, 18))
 	}
-	renderCoverMotif(g, sb, "posterMotif", 6740000, 1160000, 960000, pal, coverMotifToken(deck), 24)
+	renderCoverMotif(g, sb, "posterMotif", 6740000, 1160000, 960000, pal, coverMotifToken(deck), 30)
 	sb.WriteString(spTextLeft(g, "titleKicker", 2980000, 900000, 2600000, 220000, strings.ToUpper(coverKicker(deck)), pal.accent2, 1120, true, "t", "Calibri"))
 	sb.WriteString(spTextLeft(g, "title", 2980000, 1460000, 3200000, titleHeight, firstNonEmpty(deck.Title, "Presentation"), pal.text, titleSize, true, "t", "Calibri Light"))
 	subtitleY := 1460000 + titleHeight + 220000
@@ -255,15 +262,15 @@ func renderCoverStudioPoster(g *idg, sb *strings.Builder, deck pptxDeckContext, 
 
 func renderCoverPlayfulCanvas(g *idg, sb *strings.Builder, deck pptxDeckContext, pal pptxPalette) {
 	sb.WriteString(spRect(g, "bg", 0, 0, 9144000, 6858000, pal.bg))
-	sb.WriteString(spEllipse(g, "playOrbOne", 540000, 720000, 1400000, 1400000, pal.accent, 18, "", 0, 0))
-	sb.WriteString(spEllipse(g, "playOrbTwo", 6780000, 820000, 1640000, 1640000, pal.accent2, 18, "", 0, 0))
-	sb.WriteString(spEllipse(g, "playOrbThree", 7340000, 4640000, 1280000, 1280000, pal.accent, 14, "", 0, 0))
-	sb.WriteString(spRoundRect(g, "titleCard", 860000, 1820000, 4480000, 2800000, pal.card, pal.border, 12))
+	sb.WriteString(spEllipse(g, "playOrbOne", 540000, 720000, 1400000, 1400000, deckAccentWash(pal, 0.16), 100, "", 0, 0))
+	sb.WriteString(spEllipse(g, "playOrbTwo", 6780000, 820000, 1640000, 1640000, deckAccent2Wash(pal, 0.18), 100, "", 0, 0))
+	sb.WriteString(spEllipse(g, "playOrbThree", 7340000, 4640000, 1280000, 1280000, deckAccentWash(pal, 0.12), 100, "", 0, 0))
+	sb.WriteString(spRoundRect(g, "titleCard", 860000, 1820000, 4480000, 2800000, deckSurface(pal), pal.border, 18))
 	sb.WriteString(spRect(g, "titleAccent", 860000, 1820000, 4480000, 38100, pal.accent))
 	sb.WriteString(spRoundRect(g, "stickerOne", 1120000, 1240000, 2200000, 320000, pal.accent, "", 0))
 	sb.WriteString(spText(g, "titleKicker", 1120000, 1240000, 2200000, 320000, strings.ToUpper(coverKicker(deck)), pal.text, 1120, true, "ctr", "Calibri"))
-	renderCoverMotif(g, sb, "playMotifOne", 5640000, 1880000, 1080000, pal, coverMotifToken(deck), 24)
-	renderCoverMotif(g, sb, "playMotifTwo", 7040000, 3200000, 820000, pal, coverMotifToken(deck), 20)
+	renderCoverMotif(g, sb, "playMotifOne", 5640000, 1880000, 1080000, pal, coverMotifToken(deck), 30)
+	renderCoverMotif(g, sb, "playMotifTwo", 7040000, 3200000, 820000, pal, coverMotifToken(deck), 26)
 	sb.WriteString(spTextLeft(g, "title", 1240000, 2320000, 3840000, 1360000, firstNonEmpty(deck.Title, "Presentation"), pal.text, 3420, true, "t", "Calibri Light"))
 	if subtitle := coverLead(deck); subtitle != "" {
 		sb.WriteString(spTextLeft(g, "subtitle", 1240000, 3820000, 3300000, 300000, subtitle, pal.accent, 1440, true, "t", "Calibri"))
@@ -332,7 +339,7 @@ func coverMotifToken(deck pptxDeckContext) string {
 }
 
 func renderCoverMotif(g *idg, sb *strings.Builder, name string, x, y, size int, pal pptxPalette, token string, fillAlpha int) {
-	sb.WriteString(spEllipse(g, name+"Bg", x, y, size, size, pal.accent, fillAlpha, pal.accent2, 6350, minInt(fillAlpha+20, 100)))
+	sb.WriteString(spEllipse(g, name+"Bg", x, y, size, size, deckAccentWash(pal, float64(fillAlpha)/100), 100, deckAccent2Wash(pal, 0.62), 6350, 100))
 	renderPPTXIconGlyph(g, sb, name+"Glyph", x, y, size, pal, token)
 }
 
@@ -345,28 +352,78 @@ func coverCompactText(value string, limit int) string {
 	return strings.TrimSpace(string(runes[:maxInt(0, limit-1)])) + "…"
 }
 
-func coverTitleMetrics(title string, base int) (int, int) {
-	length := len([]rune(strings.TrimSpace(title)))
+func coverTitleMetrics(title string, base, charsPerLine int) (int, int) {
+	lines := estimateCoverLines(title, charsPerLine)
+	size := base
 	switch {
-	case length > 40:
-		return base - 800, 1380000
-	case length > 28:
-		return base - 450, 1120000
-	default:
-		return base, 860000
+	case lines >= 4:
+		size -= 700
+	case lines == 3:
+		size -= 380
+	case lines == 2:
+		size -= 120
 	}
+	return size, maxInt(860000, lines*440000+140000)
 }
 
-func coverSubtitleMetrics(subtitle string, base int) (int, int) {
-	length := len([]rune(strings.TrimSpace(subtitle)))
+func coverSubtitleMetrics(subtitle string, base, charsPerLine int) (int, int) {
+	lines := estimateCoverLines(subtitle, charsPerLine)
+	size := base
 	switch {
-	case length > 72:
-		return base - 260, 820000
-	case length > 48:
-		return base - 140, 620000
-	default:
-		return base, 340000
+	case lines >= 3:
+		size -= 180
+	case lines == 2:
+		size -= 80
 	}
+	return size, maxInt(340000, lines*220000+80000)
+}
+
+func estimateCoverLines(text string, charsPerLine int) int {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" || charsPerLine <= 0 {
+		return 1
+	}
+	words := strings.Fields(text)
+	lines := 1
+	lineLen := 0
+	for _, word := range words {
+		wordLen := len([]rune(word))
+		if wordLen > charsPerLine {
+			if lineLen > 0 {
+				lines++
+				lineLen = 0
+			}
+			lines += (wordLen - 1) / charsPerLine
+			continue
+		}
+		if lineLen == 0 {
+			lineLen = wordLen
+			continue
+		}
+		if lineLen+1+wordLen > charsPerLine {
+			lines++
+			lineLen = wordLen
+			continue
+		}
+		lineLen += 1 + wordLen
+	}
+	return maxInt(lines, 1)
+}
+
+func deckSurface(pal pptxPalette) string {
+	return mixHex(pal.bg, pal.card, 0.88)
+}
+
+func deckBorder(pal pptxPalette) string {
+	return mixHex(pal.bg, pal.border, 0.72)
+}
+
+func deckAccentWash(pal pptxPalette, strength float64) string {
+	return mixHex(pal.bg, pal.accent, strength)
+}
+
+func deckAccent2Wash(pal pptxPalette, strength float64) string {
+	return mixHex(pal.bg, pal.accent2, strength)
 }
 
 func renderBackdrop(g *idg, sb *strings.Builder, pal pptxPalette, variant int) int {
@@ -375,16 +432,16 @@ func renderBackdrop(g *idg, sb *strings.Builder, pal pptxPalette, variant int) i
 	switch variant {
 	case 0:
 		sb.WriteString(spRect(g, "topStrip", 0, 0, 9144000, 38100, pal.accent))
-		sb.WriteString(spEllipse(g, "orbTop", 7100000, -700000, 2500000, 2500000, pal.accent, 7, "", 0, 0))
-		sb.WriteString(spEllipse(g, "orbBottom", -300000, 5600000, 1200000, 1200000, pal.accent2, 6, "", 0, 0))
+		sb.WriteString(spEllipse(g, "orbTop", 7100000, -700000, 2500000, 2500000, deckAccentWash(pal, 0.12), 100, "", 0, 0))
+		sb.WriteString(spEllipse(g, "orbBottom", -300000, 5600000, 1200000, 1200000, deckAccent2Wash(pal, 0.12), 100, "", 0, 0))
 	case 1:
 		sb.WriteString(spRect(g, "leftRail", 0, 0, 260000, 6858000, pal.accent))
-		sb.WriteString(spRoundRect(g, "haloCard", 6640000, 440000, 1900000, 720000, pal.card, pal.border, 10))
-		sb.WriteString(spEllipse(g, "halo", 7420000, 5180000, 1400000, 1400000, pal.accent2, 8, "", 0, 0))
+		sb.WriteString(spRoundRect(g, "haloCard", 6640000, 440000, 1900000, 720000, deckSurface(pal), pal.border, 18))
+		sb.WriteString(spEllipse(g, "halo", 7420000, 5180000, 1400000, 1400000, deckAccent2Wash(pal, 0.14), 100, "", 0, 0))
 	default:
 		sb.WriteString(spRect(g, "rightPanel", 7480000, 0, 1664000, 6858000, pal.card))
-		sb.WriteString(spEllipse(g, "topGlow", 6400000, -500000, 1800000, 1800000, pal.accent, 10, "", 0, 0))
-		sb.WriteString(spEllipse(g, "midGlow", 7800000, 2300000, 900000, 900000, pal.accent2, 14, "", 0, 0))
+		sb.WriteString(spEllipse(g, "topGlow", 6400000, -500000, 1800000, 1800000, deckAccentWash(pal, 0.14), 100, "", 0, 0))
+		sb.WriteString(spEllipse(g, "midGlow", 7800000, 2300000, 900000, 900000, deckAccent2Wash(pal, 0.16), 100, "", 0, 0))
 	}
 
 	return 840000
@@ -396,11 +453,12 @@ func renderHeadline(g *idg, sb *strings.Builder, pal pptxPalette, heading, kicke
 		sb.WriteString(spTextLeft(g, "heading", 457200, 140000, 7200000, 420000, heading, pal.text, 3000, true, "ctr", "Calibri Light"))
 		sb.WriteString(spRect(g, "headingLine", 457200, 610000, 1600000, 22225, pal.accent))
 		if kicker != "" {
-			sb.WriteString(spTextLeft(g, "kicker", 457200, 650000, 2400000, 180000, strings.ToUpper(kicker), pal.muted, 1100, true, "t", "Calibri"))
+			sb.WriteString(spRoundRect(g, "kickerPill", 457200, 640000, 1700000, 220000, deckAccentWash(pal, 0.16), "", 0))
+			sb.WriteString(spText(g, "kicker", 457200, 640000, 1700000, 220000, kicker, pal.accent, 1040, true, "ctr", "Calibri"))
 		}
 		return 900000
 	case 1:
-		sb.WriteString(spRoundRect(g, "headingCard", 520000, 160000, 6100000, 560000, pal.card, pal.border, 10))
+		sb.WriteString(spRoundRect(g, "headingCard", 520000, 160000, 6100000, 560000, deckSurface(pal), pal.border, 18))
 		sb.WriteString(spRect(g, "headingAccent", 520000, 160000, 90000, 560000, pal.accent))
 		sb.WriteString(spTextLeft(g, "heading", 700000, 230000, 5600000, 300000, heading, pal.text, 2800, true, "ctr", "Calibri Light"))
 		if kicker != "" {
@@ -409,8 +467,8 @@ func renderHeadline(g *idg, sb *strings.Builder, pal pptxPalette, heading, kicke
 		return 980000
 	default:
 		sb.WriteString(spTextLeft(g, "heading", 457200, 180000, 6400000, 430000, heading, pal.text, 3100, true, "ctr", "Calibri Light"))
-		sb.WriteString(spRoundRect(g, "badge", 457200, 620000, 1400000, 220000, pal.card, pal.border, 10))
-		sb.WriteString(spText(g, "kicker", 457200, 620000, 1400000, 220000, strings.ToUpper(firstNonEmpty(kicker, "Key Slide")), pal.accent2, 1100, true, "ctr", "Calibri"))
+		sb.WriteString(spRoundRect(g, "badge", 457200, 620000, 1600000, 220000, deckAccentWash(pal, 0.14), "", 0))
+		sb.WriteString(spText(g, "kicker", 457200, 620000, 1600000, 220000, firstNonEmpty(kicker, "Slide"), pal.accent, 1080, true, "ctr", "Calibri"))
 		return 980000
 	}
 }
@@ -953,7 +1011,7 @@ func splitCardText(point string) (string, string) {
 }
 
 func slideLabel(deck pptxDeckContext, slideIndex int, fallback string) string {
-	return fmt.Sprintf("%s • %d/%d", firstNonEmpty(fallback, "slide"), slideIndex+2, deck.SlideCount+1)
+	return fmt.Sprintf("Slide %d of %d", slideIndex+2, deck.SlideCount+1)
 }
 
 func safePoints(points []string, limit int) []string {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -436,6 +437,44 @@ func normalizePaletteHex(value string) string {
 	return strings.ToUpper(value)
 }
 
+func mixHex(base, overlay string, overlayWeight float64) string {
+	base = normalizePaletteHex(base)
+	overlay = normalizePaletteHex(overlay)
+	if base == "" {
+		base = "FFFFFF"
+	}
+	if overlay == "" {
+		return base
+	}
+	if overlayWeight < 0 {
+		overlayWeight = 0
+	}
+	if overlayWeight > 1 {
+		overlayWeight = 1
+	}
+	br, bg, bb := parseHexRGB(base)
+	or, og, ob := parseHexRGB(overlay)
+	mix := func(b, o int) int {
+		return int(float64(b)*(1-overlayWeight) + float64(o)*overlayWeight + 0.5)
+	}
+	return fmt.Sprintf("%02X%02X%02X", mix(br, or), mix(bg, og), mix(bb, ob))
+}
+
+func parseHexRGB(value string) (int, int, int) {
+	value = normalizePaletteHex(value)
+	if value == "" || len(value) != 6 {
+		return 255, 255, 255
+	}
+	parse := func(pair string) int {
+		n, err := strconv.ParseInt(pair, 16, 0)
+		if err != nil {
+			return 255
+		}
+		return int(n)
+	}
+	return parse(value[0:2]), parse(value[2:4]), parse(value[4:6])
+}
+
 func missingDeckDesignFields(deck pptxDeckDesignInput) []string {
 	var missing []string
 	if strings.TrimSpace(deck.Subject) == "" {
@@ -752,7 +791,7 @@ func spRoundRect(g *idg, name string, x, y, w, h int, fill, borderCol string, bo
 	id := g.next()
 	borderFill := ""
 	if borderCol != "" && borderAlpha > 0 {
-		borderFill = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>`, borderCol, borderAlpha*1000)
+		borderFill = fmt.Sprintf(`<a:solidFill><a:srgbClr val="%s"/></a:solidFill>`, mixHex(firstNonEmpty(fill, "FFFFFF"), borderCol, float64(borderAlpha)/100))
 	} else {
 		borderFill = `<a:noFill/>`
 	}
