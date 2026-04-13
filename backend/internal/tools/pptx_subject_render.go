@@ -208,9 +208,9 @@ func resolveSlideDesign(deck pptxDeckContext, s pptxSlide) pptxResolvedSlideDesi
 func slideCornerRadius(deck pptxDeckContext, large bool) int {
 	if deckRenderFamily(deck) == "proposal" {
 		if large {
-			return 8
+			return 6
 		}
-		return 4
+		return 3
 	}
 	shape := resolveDeckDesign(deck).ShapeLanguage
 	switch shape {
@@ -273,6 +273,10 @@ func proposalMutedOnDark(pal pptxPalette) string {
 	return mixHex(proposalHeaderFill(pal), "FFFFFF", 0.66)
 }
 
+func proposalMutedOnLight(pal pptxPalette) string {
+	return mixHex(proposalCanvasFill(pal), pal.text, 0.54)
+}
+
 func proposalAccentColor(pal pptxPalette, index int) string {
 	switch index % 4 {
 	case 1:
@@ -295,6 +299,46 @@ func proposalRowFill(pal pptxPalette, index int) string {
 
 func proposalRowBorder(pal pptxPalette) string {
 	return mixHex(proposalCanvasFill(pal), pal.border, 0.84)
+}
+
+func renderProposalPanel(g *idg, sb *strings.Builder, name string, x, y, w, h int, fill, border string) {
+	sb.WriteString(spRect(g, name, x, y, w, h, fill))
+	if border == "" {
+		return
+	}
+	const stroke = 4500
+	sb.WriteString(spRect(g, name+"TopBorder", x, y, w, stroke, border))
+	sb.WriteString(spRect(g, name+"BottomBorder", x, y+h-stroke, w, stroke, border))
+	sb.WriteString(spRect(g, name+"LeftBorder", x, y, stroke, h, border))
+	sb.WriteString(spRect(g, name+"RightBorder", x+w-stroke, y, stroke, h, border))
+}
+
+func renderProposalTopAccent(g *idg, sb *strings.Builder, name string, x, y, w int, fill string) {
+	sb.WriteString(spRect(g, name, x, y, w, 32000, fill))
+}
+
+func renderProposalSideAccent(g *idg, sb *strings.Builder, name string, x, y, h int, fill string) {
+	sb.WriteString(spRect(g, name, x, y, 32000, h, fill))
+}
+
+func renderProposalMetricTile(g *idg, sb *strings.Builder, name string, x, y, w, h int, value, label, detail, accent string, pal pptxPalette, dark bool) {
+	fill := pal.card
+	border := proposalRowBorder(pal)
+	labelColor := pal.text
+	bodyColor := proposalMutedOnLight(pal)
+	if dark {
+		fill = proposalHeaderFill(pal)
+		border = mixHex(fill, pal.card, 0.18)
+		labelColor = proposalMutedOnDark(pal)
+		bodyColor = proposalMutedOnDark(pal)
+	}
+	renderProposalPanel(g, sb, name+"Panel", x, y, w, h, fill, border)
+	renderProposalTopAccent(g, sb, name+"Accent", x, y, w, accent)
+	sb.WriteString(spTextLeft(g, name+"Label", x+90000, y+90000, w-180000, 150000, strings.ToUpper(label), labelColor, 820, true, "t", pptxBodyFont))
+	sb.WriteString(spTextLeft(g, name+"Value", x+90000, y+270000, w-180000, 260000, value, accent, 1820, true, "t", pptxHeadingFont))
+	if detail != "" {
+		sb.WriteString(spTextLeft(g, name+"Detail", x+90000, y+500000, w-180000, h-570000, detail, bodyColor, 820, false, "t", pptxBodyFont))
+	}
 }
 
 func proposalSlideTitle(text string) string {
@@ -328,7 +372,7 @@ func proposalSlideIconToken(s pptxSlide) string {
 
 func renderProposalHeaderIcon(g *idg, sb *strings.Builder, name string, x, y, size int, pal pptxPalette, token string) {
 	fill := mixHex(proposalHeaderFill(pal), pal.accent, 0.22)
-	sb.WriteString(spRoundRect(g, name+"Bg", x, y, size, size, fill, "", 0))
+	renderProposalPanel(g, sb, name+"Bg", x, y, size, size, fill, mixHex(fill, pal.card, 0.18))
 	iconPal := pal
 	iconPal.text = "FFFFFF"
 	iconPal.accent2 = "FFFFFF"
@@ -372,7 +416,7 @@ func renderSlideShell(g *idg, sb *strings.Builder, pal pptxPalette, deck pptxDec
 		sb.WriteString(spRect(g, "headerBar", 0, 0, 9144000, 620000, headerBG))
 		renderProposalHeaderIcon(g, sb, "headerIcon", 420000, 130000, 280000, pal, proposalSlideIconToken(s))
 		sb.WriteString(spTextLeft(g, "headerTitle", 780000, 164000, 5600000, 220000, proposalSlideTitle(slideHeadingOrFallback(s, "Untitled Slide")), "FFFFFF", 1440, true, "ctr", pptxHeadingFont))
-		sb.WriteString(spRoundRect(g, "headerMeta", 7420000, 134000, 1280000, 280000, mixHex(headerBG, pal.accent2, 0.52), "", 0))
+		renderProposalPanel(g, sb, "headerMeta", 7420000, 134000, 1280000, 280000, mixHex(headerBG, pal.accent2, 0.52), mixHex(headerBG, pal.card, 0.16))
 		sb.WriteString(spText(g, "headerMetaText", 7420000, 134000, 1280000, 280000, slideLabel(deck, slideIndex, effectivePPTXLayout(s)), "FFFFFF", 900, true, "ctr", pptxBodyFont))
 		return pptxSlideShell{
 			FrameX: 420000,
@@ -990,17 +1034,53 @@ func renderBulletsDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptx
 	}
 
 	if deckRenderFamily(deck) == "proposal" {
-		rowH := 560000
+		bodyY := shell.BodyY
+		stats := effectiveStats(s)
+		if len(stats) > 0 {
+			if len(stats) > 4 {
+				stats = stats[:4]
+			}
+			gap := 140000
+			cardW := (shell.BodyW - gap*(len(stats)-1)) / len(stats)
+			for i, stat := range stats {
+				renderProposalMetricTile(g, &sb, fmt.Sprintf("detailMetric%d", i), shell.BodyX+i*(cardW+gap), bodyY, cardW, 640000, stat.Value, stat.Label, stat.Desc, proposalAccentColor(pal, i), pal, false)
+			}
+			bodyY += 820000
+		}
+		lead := proposalLeadText(s, points)
+		if lead != "" {
+			sb.WriteString(spTextLeft(g, "detailLead", shell.BodyX, bodyY, shell.BodyW, 320000, lead, pal.muted, 920, false, "t", pptxBodyFont))
+			bodyY += 420000
+		}
+		sb.WriteString(spTextLeft(g, "detailLabel", shell.BodyX, bodyY, 2600000, 180000, proposalSectionLabel(s), pal.text, 960, true, "t", pptxBodyFont))
+		bodyY += 240000
+		cols := 1
+		if len(points) >= 4 {
+			cols = 2
+		}
+		colGap := 260000
+		colW := shell.BodyW
+		if cols == 2 {
+			colW = (shell.BodyW - colGap) / 2
+		}
+		rowH := 260000
 		for i, pt := range points {
+			col := 0
+			row := i
+			if cols == 2 {
+				col = i % 2
+				row = i / 2
+			}
 			title, desc := splitCardText(pt)
-			y := shell.BodyY + i*(rowH+90000)
+			x := shell.BodyX + col*(colW+colGap)
+			y := bodyY + row*rowH
 			accent := proposalAccentColor(pal, i)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("pointRow%d", i), shell.BodyX, y, shell.BodyW, rowH, proposalRowFill(pal, i), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, fmt.Sprintf("pointAccent%d", i), shell.BodyX, y, 42000, rowH, accent))
-			renderProposalHeaderIcon(g, &sb, fmt.Sprintf("pointIcon%d", i), shell.BodyX+76000, y+120000, 240000, pal, firstNonEmpty(inferIconFromText(title), proposalSlideIconToken(s)))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("pointTitle%d", i), shell.BodyX+380000, y+110000, shell.BodyW-520000, 180000, title, pal.text, 1140, true, "t", pptxHeadingFont))
-			if desc != "" {
-				sb.WriteString(spTextLeft(g, fmt.Sprintf("pointDesc%d", i), shell.BodyX+380000, y+280000, shell.BodyW-520000, 180000, desc, pal.muted, 920, false, "t", pptxBodyFont))
+			sb.WriteString(spEllipse(g, fmt.Sprintf("pointDot%d", i), x, y+45000, 90000, 90000, accent, 100, "", 0, 0))
+			if desc == "" {
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("pointText%d", i), x+140000, y, colW-140000, 180000, title, pal.text, 900, false, "t", pptxBodyFont))
+			} else {
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("pointTitle%d", i), x+140000, y, colW-140000, 150000, title, pal.text, 900, true, "t", pptxBodyFont))
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("pointDesc%d", i), x+140000, y+130000, colW-140000, 150000, desc, proposalMutedOnLight(pal), 820, false, "t", pptxBodyFont))
 			}
 		}
 		return wrapSlide(sb.String())
@@ -1062,27 +1142,55 @@ func renderStatsDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 	}
 
 	if deckRenderFamily(deck) == "proposal" {
-		cols := 2
-		if len(stats) == 1 {
-			cols = 1
-		}
-		rows := (len(stats) + cols - 1) / cols
-		gapX := 160000
-		gapY := 140000
-		cardW := (shell.BodyW - gapX*(cols-1)) / cols
-		cardH := (shell.BodyH - gapY*(rows-1)) / rows
-		for i, stat := range stats {
-			col := i % cols
-			row := i / cols
-			x := shell.BodyX + col*(cardW+gapX)
-			y := shell.BodyY + row*(cardH+gapY)
+		gapX := 170000
+		heroW := (shell.BodyW - gapX) / 2
+		heroH := minInt(1640000, shell.BodyH)
+		heroY := shell.BodyY
+		for i := 0; i < minInt(2, len(stats)); i++ {
+			stat := stats[i]
+			x := shell.BodyX + i*(heroW+gapX)
+			fill := proposalHeaderFill(pal)
+			if i == 1 {
+				fill = mixHex(proposalHeaderFill(pal), pal.card, 0.18)
+			}
 			accent := proposalAccentColor(pal, i)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("statCard%d", i), x, y, cardW, cardH, proposalRowFill(pal, i), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, fmt.Sprintf("statAccent%d", i), x, y, cardW, 32000, accent))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("statValue%d", i), x+90000, y+130000, cardW-180000, 360000, stat.Value, accent, 2480, true, "t", pptxHeadingFont))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("statLabel%d", i), x+90000, y+520000, cardW-180000, 180000, strings.ToUpper(stat.Label), pal.text, 980, true, "t", pptxBodyFont))
+			renderProposalPanel(g, &sb, fmt.Sprintf("heroStatCard%d", i), x, heroY, heroW, heroH, fill, mixHex(fill, pal.card, 0.18))
+			renderProposalTopAccent(g, &sb, fmt.Sprintf("heroStatAccent%d", i), x, heroY, heroW, accent)
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("heroStatLabel%d", i), x+110000, heroY+120000, heroW-220000, 170000, strings.ToUpper(stat.Label), proposalMutedOnDark(pal), 860, true, "t", pptxBodyFont))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("heroStatValue%d", i), x+110000, heroY+360000, heroW-220000, 420000, stat.Value, accent, 2720, true, "t", pptxHeadingFont))
 			if stat.Desc != "" {
-				sb.WriteString(spTextLeft(g, fmt.Sprintf("statDesc%d", i), x+90000, y+760000, cardW-180000, cardH-840000, stat.Desc, pal.muted, 900, false, "t", pptxBodyFont))
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("heroStatDesc%d", i), x+110000, heroY+840000, heroW-220000, heroH-930000, stat.Desc, proposalMutedOnDark(pal), 960, false, "t", pptxBodyFont))
+			}
+		}
+
+		if len(stats) > 2 {
+			lowerY := heroY + heroH + 190000
+			lowerH := minInt(980000, shell.BodyY+shell.BodyH-lowerY-420000)
+			miniCount := len(stats) - 2
+			miniGap := 150000
+			miniW := shell.BodyW
+			if miniCount > 1 {
+				miniW = (shell.BodyW - miniGap*(miniCount-1)) / miniCount
+			}
+			for i := 2; i < len(stats); i++ {
+				stat := stats[i]
+				slot := i - 2
+				x := shell.BodyX + slot*(miniW+miniGap)
+				accent := proposalAccentColor(pal, i)
+				renderProposalPanel(g, &sb, fmt.Sprintf("miniStatCard%d", i), x, lowerY, miniW, lowerH, pal.card, proposalRowBorder(pal))
+				renderProposalTopAccent(g, &sb, fmt.Sprintf("miniStatAccent%d", i), x, lowerY, miniW, accent)
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("miniStatLabel%d", i), x+90000, lowerY+100000, miniW-180000, 140000, strings.ToUpper(stat.Label), pal.text, 820, true, "t", pptxBodyFont))
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("miniStatValue%d", i), x+90000, lowerY+300000, miniW-180000, 280000, stat.Value, accent, 1880, true, "t", pptxHeadingFont))
+				if stat.Desc != "" {
+					sb.WriteString(spTextLeft(g, fmt.Sprintf("miniStatDesc%d", i), x+90000, lowerY+570000, miniW-180000, lowerH-640000, stat.Desc, proposalMutedOnLight(pal), 840, false, "t", pptxBodyFont))
+				}
+			}
+
+			bandY := lowerY + lowerH + 160000
+			bandH := minInt(360000, shell.BodyY+shell.BodyH-bandY)
+			if bandH > 160000 {
+				sb.WriteString(spRect(g, "statsBand", shell.BodyX, bandY, shell.BodyW, bandH, mixHex(proposalCanvasFill(pal), pal.border, 0.18)))
+				sb.WriteString(spTextLeft(g, "statsBandText", shell.BodyX+90000, bandY+70000, shell.BodyW-180000, bandH-120000, proposalStatsTakeaway(stats), pal.text, 840, true, "ctr", pptxBodyFont))
 			}
 		}
 		return wrapSlide(sb.String())
@@ -1138,15 +1246,22 @@ func renderStepsDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 	design := resolveSlideDesign(deck, s)
 
 	if deckRenderFamily(deck) == "proposal" {
-		rowH := 520000
+		rowH := 460000
 		for i, step := range steps {
-			y := shell.BodyY + i*(rowH+100000)
+			title, desc := splitCardText(step)
+			y := shell.BodyY + i*(rowH+84000)
 			accent := proposalAccentColor(pal, i)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("stepRow%d", i), shell.BodyX, y, shell.BodyW, rowH, proposalRowFill(pal, i), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, fmt.Sprintf("stepAccent%d", i), shell.BodyX, y, 42000, rowH, accent))
-			sb.WriteString(spEllipse(g, fmt.Sprintf("stepBadge%d", i), shell.BodyX+80000, y+140000, 220000, 220000, accent, 100, "", 0, 0))
-			sb.WriteString(spText(g, fmt.Sprintf("stepNum%d", i), shell.BodyX+80000, y+140000, 220000, 220000, fmt.Sprintf("%d", i+1), "FFFFFF", 980, true, "ctr", pptxBodyFont))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("stepText%d", i), shell.BodyX+380000, y+120000, shell.BodyW-520000, 280000, step, pal.text, 1120, true, "t", pptxHeadingFont))
+			renderProposalPanel(g, &sb, fmt.Sprintf("stepRow%d", i), shell.BodyX+320000, y, shell.BodyW-320000, rowH, proposalRowFill(pal, i), proposalRowBorder(pal))
+			renderProposalSideAccent(g, &sb, fmt.Sprintf("stepAccent%d", i), shell.BodyX+320000, y, rowH, accent)
+			sb.WriteString(spEllipse(g, fmt.Sprintf("stepBadge%d", i), shell.BodyX, y+70000, 220000, 220000, proposalHeaderFill(pal), 100, "", 0, 0))
+			sb.WriteString(spText(g, fmt.Sprintf("stepNum%d", i), shell.BodyX, y+70000, 220000, 220000, fmt.Sprintf("%d", i+1), "FFFFFF", 980, true, "ctr", pptxBodyFont))
+			renderProposalHeaderIcon(g, &sb, fmt.Sprintf("stepIcon%d", i), shell.BodyX+240000, y+102000, 180000, pal, firstNonEmpty(inferIconFromText(title), "strategy"))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("stepTitle%d", i), shell.BodyX+620000, y+76000, shell.BodyW-1880000, 160000, title, pal.text, 980, true, "t", pptxBodyFont))
+			if desc != "" {
+				sb.WriteString(spTextLeft(g, fmt.Sprintf("stepDesc%d", i), shell.BodyX+620000, y+214000, shell.BodyW-1880000, 130000, desc, proposalMutedOnLight(pal), 820, false, "t", pptxBodyFont))
+			}
+			renderProposalPanel(g, &sb, fmt.Sprintf("stepTag%d", i), shell.BodyX+shell.BodyW-1080000, y+90000, 900000, 220000, mixHex(proposalCanvasFill(pal), accent, 0.14), "")
+			sb.WriteString(spText(g, fmt.Sprintf("stepTagText%d", i), shell.BodyX+shell.BodyW-1080000, y+90000, 900000, 220000, fmt.Sprintf("STEP %02d", i+1), accent, 820, true, "ctr", pptxBodyFont))
 		}
 		return wrapSlide(sb.String())
 	}
@@ -1212,11 +1327,11 @@ func renderCardsDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 			x := shell.BodyX + col*(cardW+180000)
 			y := shell.BodyY + row*(cardH+120000)
 			accent := proposalAccentColor(pal, i)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("card%d", i), x, y, cardW, cardH, proposalRowFill(pal, i), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, fmt.Sprintf("cardAccent%d", i), x, y, 42000, cardH, accent))
-			renderProposalHeaderIcon(g, &sb, fmt.Sprintf("cardIcon%d", i), x+80000, y+80000, 240000, pal, inferCardIcon(card, i))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("cardTitle%d", i), x+380000, y+96000, cardW-460000, 200000, card.Title, pal.text, 1140, true, "t", pptxHeadingFont))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("cardDesc%d", i), x+380000, y+300000, cardW-460000, cardH-360000, firstNonEmpty(card.Desc, card.Title), pal.muted, 920, false, "t", pptxBodyFont))
+			renderProposalPanel(g, &sb, fmt.Sprintf("card%d", i), x, y, cardW, cardH, proposalRowFill(pal, i), proposalRowBorder(pal))
+			renderProposalTopAccent(g, &sb, fmt.Sprintf("cardAccent%d", i), x, y, cardW, accent)
+			renderProposalHeaderIcon(g, &sb, fmt.Sprintf("cardIcon%d", i), x+80000, y+80000, 220000, pal, inferCardIcon(card, i))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("cardTitle%d", i), x+360000, y+94000, cardW-440000, 180000, card.Title, pal.text, 1020, true, "t", pptxBodyFont))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("cardDesc%d", i), x+90000, y+360000, cardW-180000, cardH-440000, firstNonEmpty(card.Desc, card.Title), proposalMutedOnLight(pal), 860, false, "t", pptxBodyFont))
 		}
 		return wrapSlide(sb.String())
 	}
@@ -1264,8 +1379,8 @@ func renderChartDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 		mainX, mainY := shell.BodyX, shell.BodyY
 		mainH := shell.BodyH
 		mainAccent := proposalAccentColor(pal, 0)
-		sb.WriteString(spRoundRect(g, "chartProposalPanel", mainX, mainY, mainW, mainH, pal.card, proposalRowBorder(pal), slideCornerRadius(deck, false)))
-		sb.WriteString(spRect(g, "chartProposalAccent", mainX, mainY, mainW, 32000, mainAccent))
+		renderProposalPanel(g, &sb, "chartProposalPanel", mainX, mainY, mainW, mainH, pal.card, proposalRowBorder(pal))
+		renderProposalTopAccent(g, &sb, "chartProposalAccent", mainX, mainY, mainW, mainAccent)
 
 		if chartType == "pie" || chartType == "doughnut" {
 			values := normalizedChartValues(series[0].Values, len(categories))
@@ -1327,14 +1442,14 @@ func renderChartDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 		if sideW > 0 {
 			sideX := mainX + mainW + 160000
 			sideAccent := proposalAccentColor(pal, 1)
-			sb.WriteString(spRoundRect(g, "chartProposalSide", sideX, mainY, sideW, mainH, proposalRowFill(pal, 1), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, "chartProposalSideAccent", sideX, mainY, 42000, mainH, sideAccent))
+			renderProposalPanel(g, &sb, "chartProposalSide", sideX, mainY, sideW, mainH, proposalRowFill(pal, 1), proposalRowBorder(pal))
+			renderProposalSideAccent(g, &sb, "chartProposalSideAccent", sideX, mainY, mainH, sideAccent)
 			renderProposalHeaderIcon(g, &sb, "chartSideIcon", sideX+90000, mainY+100000, 240000, pal, proposalSlideIconToken(s))
 			sb.WriteString(spTextLeft(g, "chartSeriesName", sideX+380000, mainY+120000, sideW-460000, 180000, firstNonEmpty(series[0].Name, "Signal"), pal.text, 1100, true, "t", pptxHeadingFont))
 			if strings.TrimSpace(s.YLabel) != "" {
 				sb.WriteString(spTextLeft(g, "chartYLabel", sideX+380000, mainY+320000, sideW-460000, 160000, strings.ToUpper(s.YLabel), sideAccent, 840, true, "t", pptxBodyFont))
 			}
-			sb.WriteString(spTextLeft(g, "chartInsight", sideX+90000, mainY+620000, sideW-180000, mainH-720000, chartInsight(categories, values), pal.muted, 920, false, "t", pptxBodyFont))
+			sb.WriteString(spTextLeft(g, "chartInsight", sideX+90000, mainY+620000, sideW-180000, mainH-720000, chartInsight(categories, values), proposalMutedOnLight(pal), 920, false, "t", pptxBodyFont))
 		}
 		return wrapSlide(sb.String())
 	}
@@ -1430,12 +1545,14 @@ func renderTimelineDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck ppt
 		for i, item := range items {
 			y := shell.BodyY + i*(rowH+90000)
 			accent := proposalAccentColor(pal, i)
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("timelineRow%d", i), shell.BodyX, y, shell.BodyW, rowH, proposalRowFill(pal, i), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, fmt.Sprintf("timelineAccent%d", i), shell.BodyX, y, 42000, rowH, accent))
-			sb.WriteString(spRoundRect(g, fmt.Sprintf("timelineDate%d", i), shell.BodyX+76000, y+150000, 1160000, 220000, mixHex(proposalCanvasFill(pal), accent, 0.16), "", 0))
-			sb.WriteString(spText(g, fmt.Sprintf("timelineDateText%d", i), shell.BodyX+76000, y+150000, 1160000, 220000, item.Date, accent, 900, true, "ctr", pptxBodyFont))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("timelineTitle%d", i), shell.BodyX+1360000, y+120000, shell.BodyW-1500000, 180000, item.Title, pal.text, 1120, true, "t", pptxHeadingFont))
-			sb.WriteString(spTextLeft(g, fmt.Sprintf("timelineDesc%d", i), shell.BodyX+1360000, y+290000, shell.BodyW-1500000, 180000, firstNonEmpty(item.Desc, item.Title), pal.muted, 920, false, "t", pptxBodyFont))
+			sb.WriteString(spEllipse(g, fmt.Sprintf("timelineBadge%d", i), shell.BodyX, y+90000, 220000, 220000, proposalHeaderFill(pal), 100, "", 0, 0))
+			sb.WriteString(spText(g, fmt.Sprintf("timelineBadgeNum%d", i), shell.BodyX, y+90000, 220000, 220000, fmt.Sprintf("%d", i+1), "FFFFFF", 980, true, "ctr", pptxBodyFont))
+			renderProposalHeaderIcon(g, &sb, fmt.Sprintf("timelineIcon%d", i), shell.BodyX+260000, y+112000, 180000, pal, firstNonEmpty(inferIconFromText(item.Title), proposalSlideIconToken(s)))
+			renderProposalPanel(g, &sb, fmt.Sprintf("timelineRow%d", i), shell.BodyX+480000, y, shell.BodyW-480000, rowH, proposalRowFill(pal, i), proposalRowBorder(pal))
+			renderProposalSideAccent(g, &sb, fmt.Sprintf("timelineAccent%d", i), shell.BodyX+480000, y, rowH, accent)
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("timelineTitle%d", i), shell.BodyX+700000, y+86000, 2480000, 160000, item.Title, pal.text, 980, true, "t", pptxBodyFont))
+			sb.WriteString(spText(g, fmt.Sprintf("timelineDateText%d", i), shell.BodyX+3440000, y+120000, 1040000, 140000, item.Date, proposalMutedOnLight(pal), 820, true, "ctr", pptxBodyFont))
+			sb.WriteString(spTextLeft(g, fmt.Sprintf("timelineDesc%d", i), shell.BodyX+4420000, y+86000, shell.BodyW-4560000, 280000, firstNonEmpty(item.Desc, item.Title), proposalMutedOnLight(pal), 820, false, "t", pptxBodyFont))
 		}
 		return wrapSlide(sb.String())
 	}
@@ -1490,13 +1607,13 @@ func renderCompareDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptx
 			{key: "right", col: right, x: rightX, accent: proposalAccentColor(pal, 1)},
 		}
 		for _, item := range columns {
-			sb.WriteString(spRoundRect(g, item.key+"Col", item.x, shell.BodyY, colW, colH, proposalRowFill(pal, 0), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, item.key+"Accent", item.x, shell.BodyY, 42000, colH, item.accent))
+			renderProposalPanel(g, &sb, item.key+"Col", item.x, shell.BodyY, colW, colH, proposalRowFill(pal, 0), proposalRowBorder(pal))
+			renderProposalSideAccent(g, &sb, item.key+"Accent", item.x, shell.BodyY, colH, item.accent)
 			renderProposalHeaderIcon(g, &sb, item.key+"Icon", item.x+90000, shell.BodyY+90000, 220000, pal, proposalSlideIconToken(s))
 			sb.WriteString(spTextLeft(g, item.key+"Title", item.x+360000, shell.BodyY+110000, colW-440000, 180000, strings.ToUpper(firstNonEmpty(item.col.Heading, "Column")), item.accent, 900, true, "t", pptxBodyFont))
 			for i, point := range safePoints(item.col.Points, 5) {
 				rowY := shell.BodyY + 420000 + i*520000
-				sb.WriteString(spRoundRect(g, fmt.Sprintf("%sPointRow%d", item.key, i), item.x+90000, rowY, colW-180000, 380000, mixHex(proposalCanvasFill(pal), pal.card, 0.58), proposalRowBorder(pal), 4))
+				renderProposalPanel(g, &sb, fmt.Sprintf("%sPointRow%d", item.key, i), item.x+90000, rowY, colW-180000, 380000, mixHex(proposalCanvasFill(pal), pal.card, 0.58), proposalRowBorder(pal))
 				sb.WriteString(spEllipse(g, fmt.Sprintf("%sPointDot%d", item.key, i), item.x+130000, rowY+110000, 160000, 160000, item.accent, 100, "", 0, 0))
 				sb.WriteString(spTextLeft(g, fmt.Sprintf("%sPointText%d", item.key, i), item.x+340000, rowY+80000, colW-470000, 220000, point, pal.text, 980, false, "t", pptxBodyFont))
 			}
@@ -1547,8 +1664,8 @@ func renderTableDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 			sideW = 1920000
 			tableW -= sideW + 160000
 		}
-		sb.WriteString(spRoundRect(g, "tableProposalPanel", tableX, tableY, tableW, shell.BodyH, pal.card, proposalRowBorder(pal), slideCornerRadius(deck, false)))
-		sb.WriteString(spRect(g, "tableProposalAccent", tableX, tableY, tableW, 32000, proposalAccentColor(pal, 0)))
+		renderProposalPanel(g, &sb, "tableProposalPanel", tableX, tableY, tableW, shell.BodyH, pal.card, proposalRowBorder(pal))
+		renderProposalTopAccent(g, &sb, "tableProposalAccent", tableX, tableY, tableW, proposalAccentColor(pal, 0))
 		colW := tableW / cols
 		rowH := 480000
 		headY := tableY + 100000
@@ -1570,8 +1687,8 @@ func renderTableDeckSlide(s pptxSlide, pal pptxPalette, variant int, deck pptxDe
 		if sideW > 0 {
 			sideX := tableX + tableW + 160000
 			sideAccent := proposalAccentColor(pal, 1)
-			sb.WriteString(spRoundRect(g, "tableProposalSide", sideX, tableY, sideW, shell.BodyH, proposalRowFill(pal, 1), proposalRowBorder(pal), slideCornerRadius(deck, false)))
-			sb.WriteString(spRect(g, "tableProposalSideAccent", sideX, tableY, 42000, shell.BodyH, sideAccent))
+			renderProposalPanel(g, &sb, "tableProposalSide", sideX, tableY, sideW, shell.BodyH, proposalRowFill(pal, 1), proposalRowBorder(pal))
+			renderProposalSideAccent(g, &sb, "tableProposalSideAccent", sideX, tableY, shell.BodyH, sideAccent)
 			renderProposalHeaderIcon(g, &sb, "tableSideIcon", sideX+90000, tableY+90000, 220000, pal, proposalSlideIconToken(s))
 			sb.WriteString(spTextLeft(g, "panelTitle", sideX+360000, tableY+110000, sideW-440000, 180000, "DECISION SIGNAL", sideAccent, 900, true, "t", pptxBodyFont))
 			sb.WriteString(spTextLeft(g, "panelBody", sideX+90000, tableY+460000, sideW-180000, shell.BodyH-560000, summarizeTable(table), pal.muted, 920, false, "t", pptxBodyFont))
@@ -1856,6 +1973,64 @@ func splitCardText(point string) (string, string) {
 		return point, ""
 	}
 	return strings.Join(parts[:minInt(4, len(parts))], " "), strings.Join(parts[minInt(4, len(parts)):], " ")
+}
+
+func proposalStatsTakeaway(stats []pptxStat) string {
+	if len(stats) == 0 {
+		return "Key indicators that frame the decision."
+	}
+	var labels []string
+	for _, stat := range stats {
+		if label := strings.TrimSpace(stat.Label); label != "" {
+			labels = append(labels, label)
+		}
+		if len(labels) == 3 {
+			break
+		}
+	}
+	if len(labels) == 0 {
+		return "Key indicators that frame the decision."
+	}
+	if len(labels) == 1 {
+		return fmt.Sprintf("Primary signal: %s.", labels[0])
+	}
+	if len(labels) == 2 {
+		return fmt.Sprintf("Decision signals: %s and %s.", labels[0], labels[1])
+	}
+	return fmt.Sprintf("Decision signals: %s, %s, and %s.", labels[0], labels[1], labels[2])
+}
+
+func proposalLeadText(s pptxSlide, points []string) string {
+	if notes := strings.TrimSpace(s.SpeakerNotes); notes != "" {
+		return notes
+	}
+	for _, point := range points {
+		if len([]rune(strings.TrimSpace(point))) >= 72 {
+			return point
+		}
+	}
+	if len(points) >= 2 {
+		left, _ := splitCardText(points[0])
+		right, _ := splitCardText(points[1])
+		return fmt.Sprintf("Focus areas include %s and %s.", left, right)
+	}
+	return ""
+}
+
+func proposalSectionLabel(s pptxSlide) string {
+	text := strings.ToLower(strings.TrimSpace(s.Heading))
+	switch {
+	case containsAny(text, "deliverable", "scope", "phase", "build", "implementation"):
+		return "KEY DELIVERABLES"
+	case containsAny(text, "assumption", "constraint", "dependency"):
+		return "KEY ASSUMPTIONS"
+	case containsAny(text, "risk", "issue"):
+		return "KEY RISKS"
+	case containsAny(text, "team", "role"):
+		return "TEAM FOCUS"
+	default:
+		return "KEY POINTS"
+	}
 }
 
 func slideLabel(deck pptxDeckContext, slideIndex int, fallback string) string {
