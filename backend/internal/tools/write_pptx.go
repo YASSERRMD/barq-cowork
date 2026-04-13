@@ -25,7 +25,7 @@ const (
 
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
-	return "Create a professional PowerPoint presentation (.pptx) powered by the Barq PPTX Engine. " +
+	return "Create a professional PowerPoint presentation (.pptx) powered by an embedded PptxGenJS renderer. " +
 		"Requires a complete deck design brief chosen by the model, then audits each slide for content fit, layout fit, and visual fit before rendering. " +
 		"Supports 10 rich slide types: bullets, stats, steps, cards, chart, timeline, compare, table, title, blank. " +
 		"Use this for ALL presentation, slides, deck, or slideshow requests. " +
@@ -620,12 +620,15 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 		return Err("create slides dir: %v", err)
 	}
 
-	// Pure Go PPTX engine — no Python dependency.
 	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, args.Deck)
 	if err := validatePPTXPresentation(planned); err != nil {
 		return Err("plan pptx: %v", err)
 	}
-	data, err := buildPPTX(args.Title, args.Subtitle, planned)
+	manifest, err := buildPPTXPreviewManifest(args.Title, args.Subtitle, planned)
+	if err != nil {
+		return Err("build pptx manifest: %v", err)
+	}
+	data, err := buildPPTXWithRenderer(ctx, manifest)
 	if err != nil {
 		return Err("build pptx: %v", err)
 	}
