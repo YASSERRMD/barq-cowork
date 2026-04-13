@@ -54,6 +54,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 10. The HTML preview and the downloaded PPTX must look like the same deck. Choose design directives that the native renderer can follow, and add slide-level design objects when a slide needs a specific composition.
 11. Default to a refined contemporary presentation aesthetic. Avoid dated corporate blue-orange palettes, thick office-style borders, repetitive bullet slabs, and generic 2000s deck patterns unless the user explicitly asks for them.
 12. For AI, digital-future, innovation, or forward-looking subjects, prefer airy split/gallery compositions, restrained surfaces, and a fresh palette rather than classroom amber or old business-deck blue.
+13. Keep one coherent deck system across the full presentation: cover language, header treatment, spacing, card style, and table/chart chrome should feel like one designed document, not a different template on every slide.
 
 TYPE REFERENCE — choose the right type per slide:
 
