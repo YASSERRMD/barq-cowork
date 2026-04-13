@@ -18,41 +18,86 @@ import {
   Circle,
   Zap,
 } from "lucide-react";
-import { tasksApi, executionApi, providersApi, type Task, type TaskStatus, type ProviderProfile } from "../lib/api";
+import {
+  tasksApi,
+  executionApi,
+  providersApi,
+  type Task,
+  type TaskStatus,
+  type ProviderProfile,
+} from "../lib/api";
 import { useAppStore } from "../store/appStore";
 
 // ── Suggested actions ────────────────────────────────────────────
 const SUGGESTIONS = [
-  { icon: FileText,        label: "Summarize a PDF",            prompt: "Summarize this PDF and create a DOCX report." },
-  { icon: Presentation,   label: "Create a presentation",       prompt: "Create a subject-specific PowerPoint presentation. Plan the deck narrative, choose theme and layout per slide, vary slide types, and use icons, charts, timelines, or comparisons where they actually help." },
-  { icon: FileSpreadsheet, label: "Analyze a spreadsheet",      prompt: "Analyze this Excel file and produce an XLSX summary with key insights." },
-  { icon: Search,          label: "Search documents",            prompt: "Search this folder of documents and produce a summary of findings." },
-  { icon: Archive,         label: "Organize files",              prompt: "Organize files in this folder by type and date." },
-  { icon: FileText,        label: "Compare PDFs",                prompt: "Compare these PDF documents and generate an executive summary." },
+  {
+    icon: FileText,
+    label: "Summarize a PDF",
+    prompt: "Summarize this PDF and create a DOCX report.",
+  },
+  {
+    icon: Presentation,
+    label: "Create a presentation",
+    prompt:
+      "Create a subject-specific PowerPoint presentation. Plan the deck first, choose a fresh visual style, cover style, color story, motif, kicker, full palette, and native render design directives from the subject, make the preview and downloaded PPTX look like the same deck, keep the deck refined and contemporary instead of dated corporate slideware, use one coherent deck system across all slides instead of mixing unrelated templates, avoid classroom amber or old-business blue unless explicitly requested, do not reuse an old cover pattern, vary slide types, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide.",
+  },
+  {
+    icon: FileSpreadsheet,
+    label: "Analyze a spreadsheet",
+    prompt:
+      "Analyze this Excel file and produce an XLSX summary with key insights.",
+  },
+  {
+    icon: Search,
+    label: "Search documents",
+    prompt:
+      "Search this folder of documents and produce a summary of findings.",
+  },
+  {
+    icon: Archive,
+    label: "Organize files",
+    prompt: "Organize files in this folder by type and date.",
+  },
+  {
+    icon: FileText,
+    label: "Compare PDFs",
+    prompt: "Compare these PDF documents and generate an executive summary.",
+  },
 ];
 
 // ── Status helpers ────────────────────────────────────────────────
 const STATUS_BADGE: Record<TaskStatus, string> = {
-  pending:   "badge-gray",
-  planning:  "badge-accent",
-  running:   "badge-yellow",
+  pending: "badge-gray",
+  planning: "badge-accent",
+  running: "badge-yellow",
   completed: "badge-green",
-  failed:    "badge-red",
+  failed: "badge-red",
   cancelled: "badge-gray",
 };
 
 function StatusDot({ status }: { status: TaskStatus }) {
   switch (status) {
-    case "running":   return <Loader size={11} color="var(--yellow)" className="animate-spin" />;
-    case "planning":  return <Loader size={11} color="var(--accent)" className="animate-spin" />;
-    case "completed": return <CheckCircle size={11} color="var(--green)" />;
-    case "failed":    return <XCircle size={11} color="var(--red)" />;
-    default:          return <Circle size={11} color="var(--text-faint)" />;
+    case "running":
+      return (
+        <Loader size={11} color="var(--yellow)" className="animate-spin" />
+      );
+    case "planning":
+      return (
+        <Loader size={11} color="var(--accent)" className="animate-spin" />
+      );
+    case "completed":
+      return <CheckCircle size={11} color="var(--green)" />;
+    case "failed":
+      return <XCircle size={11} color="var(--red)" />;
+    default:
+      return <Circle size={11} color="var(--text-faint)" />;
   }
 }
 
 function elapsed(task: Task): string {
-  const start = task.started_at ? new Date(task.started_at) : new Date(task.created_at);
+  const start = task.started_at
+    ? new Date(task.started_at)
+    : new Date(task.created_at);
   const end = task.completed_at ? new Date(task.completed_at) : new Date();
   const s = Math.floor((end.getTime() - start.getTime()) / 1000);
   if (s < 60) return `${s}s`;
@@ -80,7 +125,9 @@ function TaskComposer({
   const qc = useQueryClient();
 
   // Auto-focus on mount
-  useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
 
   // Auto-grow textarea
   useEffect(() => {
@@ -135,7 +182,8 @@ function TaskComposer({
     },
   });
 
-  const canSubmit = text.trim().length > 0 && !createMutation.isPending && !uploading;
+  const canSubmit =
+    text.trim().length > 0 && !createMutation.isPending && !uploading;
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canSubmit) {
@@ -161,7 +209,7 @@ function TaskComposer({
           style={{ display: "none" }}
           onChange={(e) => {
             const files = Array.from(e.target.files || []);
-            setAttachedFiles(prev => [...prev, ...files]);
+            setAttachedFiles((prev) => [...prev, ...files]);
             e.target.value = "";
           }}
         />
@@ -179,19 +227,47 @@ function TaskComposer({
 
         {/* Attached files chips */}
         {attachedFiles.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 12px", borderTop: "1px solid var(--border)" }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 4,
+              padding: "6px 12px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
             {attachedFiles.map((f, i) => (
-              <span key={i} style={{
-                display: "flex", alignItems: "center", gap: 4,
-                background: "var(--surface-3)", border: "1px solid var(--border)",
-                borderRadius: 5, padding: "2px 8px", fontSize: 11, color: "var(--text-secondary)",
-              }}>
+              <span
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "var(--surface-3)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 5,
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  color: "var(--text-secondary)",
+                }}
+              >
                 <Paperclip size={10} />
                 {f.name}
                 <button
-                  onClick={() => setAttachedFiles(p => p.filter((_, j) => j !== i))}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", padding: 0, lineHeight: 1 }}
-                >✕</button>
+                  onClick={() =>
+                    setAttachedFiles((p) => p.filter((_, j) => j !== i))
+                  }
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--text-faint)",
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  ✕
+                </button>
               </span>
             ))}
           </div>
@@ -199,31 +275,75 @@ function TaskComposer({
 
         {/* Folder path chip */}
         {folderPath && (
-          <div style={{ padding: "4px 12px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6 }}>
+          <div
+            style={{
+              padding: "4px 12px",
+              borderTop: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
             <FolderOpen size={11} color="var(--accent)" />
-            <span style={{ fontSize: 11, color: "var(--accent)", fontFamily: "monospace" }}>{folderPath}</span>
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--accent)",
+                fontFamily: "monospace",
+              }}
+            >
+              {folderPath}
+            </span>
             <button
               onClick={() => setFolderPath("")}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", fontSize: 11 }}
-            >✕</button>
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--text-faint)",
+                fontSize: 11,
+              }}
+            >
+              ✕
+            </button>
           </div>
         )}
 
         {/* Folder path input */}
         {showFolderInput && (
-          <div style={{ padding: "8px 12px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              padding: "8px 12px",
+              borderTop: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
             <FolderOpen size={13} color="var(--accent)" />
             <input
               style={{
-                flex: 1, background: "transparent", border: "none", outline: "none",
-                fontSize: 12, color: "var(--text-secondary)",
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                fontSize: 12,
+                color: "var(--text-secondary)",
               }}
               placeholder="Paste folder path, e.g. /Users/you/Documents/Reports"
               value={folderPath}
-              onChange={e => setFolderPath(e.target.value)}
+              onChange={(e) => setFolderPath(e.target.value)}
             />
             {folderPath && (
-              <button className="btn-ghost btn-xs" onClick={() => { setFolderPath(""); setShowFolderInput(false); }}>✕</button>
+              <button
+                className="btn-ghost btn-xs"
+                onClick={() => {
+                  setFolderPath("");
+                  setShowFolderInput(false);
+                }}
+              >
+                ✕
+              </button>
             )}
           </div>
         )}
@@ -239,16 +359,24 @@ function TaskComposer({
           }}
         >
           {/* File attach button */}
-          <button className="btn-ghost btn-sm" title="Attach file" onClick={() => fileInputRef.current?.click()}>
+          <button
+            className="btn-ghost btn-sm"
+            title="Attach file"
+            onClick={() => fileInputRef.current?.click()}
+          >
             <Paperclip size={13} />
-            <span>{attachedFiles.length > 0 ? `${attachedFiles.length} file${attachedFiles.length > 1 ? "s" : ""}` : "File"}</span>
+            <span>
+              {attachedFiles.length > 0
+                ? `${attachedFiles.length} file${attachedFiles.length > 1 ? "s" : ""}`
+                : "File"}
+            </span>
           </button>
 
           {/* Folder attach button */}
           <button
             className="btn-ghost btn-sm"
             title="Attach folder"
-            onClick={() => setShowFolderInput(v => !v)}
+            onClick={() => setShowFolderInput((v) => !v)}
             style={{ color: folderPath ? "var(--accent)" : undefined }}
           >
             <FolderOpen size={13} />
@@ -368,7 +496,9 @@ export function HomePage() {
     refetchInterval: (query) => {
       const list = query.state.data as Task[] | undefined;
       if (!list) return 5000;
-      const hasActive = list.some((t) => t.status === "planning" || t.status === "running");
+      const hasActive = list.some(
+        (t) => t.status === "planning" || t.status === "running",
+      );
       return hasActive ? 2000 : 5000;
     },
   });
@@ -379,28 +509,57 @@ export function HomePage() {
     enabled: backendReachable,
   });
 
-  const activeTask = tasks.find((t) => t.status === "planning" || t.status === "running");
+  const activeTask = tasks.find(
+    (t) => t.status === "planning" || t.status === "running",
+  );
   const recentTasks = tasks.slice(0, 8);
   const goToRun = (taskId: string) => navigate(`/tasks/${taskId}/run`);
 
   return (
-    <div className="page-enter" style={{ height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
-
+    <div
+      className="page-enter"
+      style={{
+        height: "100%",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--bg)",
+      }}
+    >
       {/* ── Slim top bar ── */}
-      <div style={{
-        height: "var(--topbar-h)", borderBottom: "1px solid var(--border)",
-        display: "flex", alignItems: "center", padding: "0 24px",
-        flexShrink: 0, background: "var(--surface-1)",
-      }}>
+      <div
+        style={{
+          height: "var(--topbar-h)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 24px",
+          flexShrink: 0,
+          background: "var(--surface-1)",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 22, height: 22, borderRadius: 6,
-            background: "var(--accent)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
+          <div
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              background: "var(--accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <Zap size={11} color="#fff" strokeWidth={2.5} />
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--text-primary)",
+              letterSpacing: "-0.01em",
+            }}
+          >
             Barq
           </span>
         </div>
@@ -415,7 +574,11 @@ export function HomePage() {
             Running…
           </button>
         )}
-        <button className="btn-ghost btn-sm" style={{ marginLeft: 4 }} onClick={() => navigate("/runs")}>
+        <button
+          className="btn-ghost btn-sm"
+          style={{ marginLeft: 4 }}
+          onClick={() => navigate("/runs")}
+        >
           History
           <ChevronRight size={12} />
         </button>
@@ -423,39 +586,66 @@ export function HomePage() {
 
       {/* ── Main: two-column layout ── */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
-
         {/* Left: Composer + suggestions (centered) */}
-        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {/* Hero area */}
-          <div style={{
-            flex: 1, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            padding: "48px 40px 32px",
-            minHeight: 340,
-          }}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "48px 40px 32px",
+              minHeight: 340,
+            }}
+          >
             <div style={{ width: "100%", maxWidth: 680 }}>
               {/* Greeting */}
               <div style={{ marginBottom: 28, textAlign: "center" }}>
-                <h1 style={{
-                  fontSize: 30, fontWeight: 700, color: "var(--text-primary)",
-                  letterSpacing: "-0.04em", margin: "0 0 8px",
-                  lineHeight: 1.15,
-                }}>
+                <h1
+                  style={{
+                    fontSize: 30,
+                    fontWeight: 700,
+                    color: "var(--text-primary)",
+                    letterSpacing: "-0.04em",
+                    margin: "0 0 8px",
+                    lineHeight: 1.15,
+                  }}
+                >
                   What can I help you with?
                 </h1>
-                <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: "var(--text-muted)",
+                    margin: 0,
+                  }}
+                >
                   Describe a task and your AI agent will take care of it.
                 </p>
               </div>
 
               {/* Composer */}
               {!backendReachable ? (
-                <div style={{
-                  padding: "18px 20px", background: "var(--surface-2)",
-                  border: "1px solid var(--border)", borderRadius: 14,
-                  textAlign: "center", color: "var(--text-muted)", fontSize: 13,
-                }}>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 14,
+                    textAlign: "center",
+                    color: "var(--text-muted)",
+                    fontSize: 13,
+                  }}
+                >
                   Connecting to backend…
                 </div>
               ) : (
@@ -467,21 +657,40 @@ export function HomePage() {
           {/* Recent runs — horizontal scroll row */}
           {!tasksLoading && recentTasks.length > 0 && (
             <div style={{ padding: "0 40px 32px", flexShrink: 0 }}>
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                marginBottom: 12,
-              }}>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-                  textTransform: "uppercase", color: "var(--text-faint)",
-                }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "var(--text-faint)",
+                  }}
+                >
                   Recent
                 </span>
-                <button className="btn-ghost btn-xs" onClick={() => navigate("/runs")} style={{ gap: 3 }}>
+                <button
+                  className="btn-ghost btn-xs"
+                  onClick={() => navigate("/runs")}
+                  style={{ gap: 3 }}
+                >
                   All <ChevronRight size={10} />
                 </button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                  gap: 8,
+                }}
+              >
                 {recentTasks.map((task) => (
                   <div
                     key={task.id}
@@ -493,25 +702,55 @@ export function HomePage() {
                       borderRadius: 10,
                       cursor: "pointer",
                       transition: "all 120ms",
-                      display: "flex", flexDirection: "column", gap: 6,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
                     }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-mid)"; (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.borderColor =
+                        "var(--border-mid)";
+                      (e.currentTarget as HTMLElement).style.boxShadow =
+                        "var(--shadow-md)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.borderColor =
+                        "var(--border)";
+                      (e.currentTarget as HTMLElement).style.boxShadow = "none";
+                    }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 6 }}
+                    >
                       <StatusDot status={task.status} />
-                      <span className={STATUS_BADGE[task.status] ?? "badge-gray"} style={{ fontSize: 10 }}>
+                      <span
+                        className={STATUS_BADGE[task.status] ?? "badge-gray"}
+                        style={{ fontSize: 10 }}
+                      >
                         {task.status}
                       </span>
                     </div>
-                    <div style={{
-                      fontSize: 12.5, fontWeight: 500, color: "var(--text-primary)",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      lineHeight: 1.4,
-                    }}>
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        color: "var(--text-primary)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        lineHeight: 1.4,
+                      }}
+                    >
                       {task.title}
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 3 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-faint)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 3,
+                      }}
+                    >
                       <Clock size={9} />
                       {elapsed(task)}
                     </div>
@@ -523,8 +762,20 @@ export function HomePage() {
 
           {tasksLoading && (
             <div style={{ padding: "0 40px 32px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
-                {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 72, borderRadius: 10 }} />)}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="skeleton"
+                    style={{ height: 72, borderRadius: 10 }}
+                  />
+                ))}
               </div>
             </div>
           )}

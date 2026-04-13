@@ -12,7 +12,7 @@ func TestPlanPPTXPresentation_BuildsDeckStrategyAndAuditsSlides(t *testing.T) {
 			{Heading: "Adoption trend", Type: "chart", ChartType: "column", ChartCategories: []string{"Q1", "Q2", "Q3", "Q4"}, ChartSeries: []pptxChartSeries{{Name: "Adoption", Values: []float64{18, 34, 51, 72}}}},
 			{Heading: "Implementation roadmap", Type: "timeline", Timeline: []pptxTimelineItem{{Date: "Q1", Title: "Pilot", Desc: "Initial deployment"}, {Date: "Q2", Title: "Expand", Desc: "Add more clinics"}, {Date: "Q3", Title: "Standardize", Desc: "Roll out best practices"}}},
 		},
-		"",
+		pptxDeckDesignInput{},
 	)
 
 	if planned.ThemeName != "healthcare" {
@@ -47,7 +47,7 @@ func TestPlanPPTXPresentation_FillsSubjectAwareFallbacks(t *testing.T) {
 			{Heading: "Capability story", Type: "cards"},
 			{Heading: "Decision matrix", Type: "table"},
 		},
-		"",
+		pptxDeckDesignInput{},
 	)
 
 	if err := validatePPTXPresentation(planned); err != nil {
@@ -71,6 +71,112 @@ func TestPickThemeName_PrefersEducationForKidsAudience(t *testing.T) {
 	)
 	if theme != "education" {
 		t.Fatalf("expected education theme, got %q", theme)
+	}
+}
+
+func TestPlanPPTXPresentation_PrefersExplicitDeckDesign(t *testing.T) {
+	planned := planPPTXPresentation(
+		"Kids and AI",
+		"Guide for families",
+		[]pptxSlide{{Heading: "Why it matters", Type: "bullets", Points: []string{"Creativity tools are everywhere", "Families need practical guidance", "Children need safe exploration"}}},
+		pptxDeckDesignInput{
+			Subject:     "Kids and AI",
+			Audience:    "parents and educators",
+			Narrative:   "Context -> opportunities -> safeguards",
+			Theme:       "education",
+			VisualStyle: "playful classroom collage",
+			CoverStyle:  "playful",
+			ColorStory:  "bright classroom tones with soft contrast",
+			Motif:       "learning",
+			Kicker:      "A visual guide for curious learners",
+			Design: &pptxDeckDesign{
+				Composition:   "float",
+				Density:       "dense",
+				ShapeLanguage: "soft",
+				AccentMode:    "chip",
+				HeroLayout:    "people",
+			},
+			Palette: &pptxPaletteInput{
+				Background: "FFF6E5",
+				Card:       "FFFDF7",
+				Accent:     "F59E0B",
+				Accent2:    "FCD34D",
+				Text:       "1F2937",
+				Muted:      "6B7280",
+				Border:     "E8D8B8",
+			},
+		},
+	)
+
+	if planned.ThemeName != "education" {
+		t.Fatalf("expected explicit education theme, got %q", planned.ThemeName)
+	}
+	if planned.DeckPlan.CoverStyle != "playful" || planned.DeckPlan.Motif != "learning" {
+		t.Fatalf("expected explicit deck design to be preserved, got %+v", planned.DeckPlan)
+	}
+	if planned.DeckPlan.Design.Composition != "float" || planned.DeckPlan.Design.AccentMode != "chip" {
+		t.Fatalf("expected explicit render design to be preserved, got %+v", planned.DeckPlan.Design)
+	}
+	if planned.Slides[0].Slide.Design == nil || planned.Slides[0].Slide.Design.LayoutStyle == "" {
+		t.Fatalf("expected slide design defaults to be assigned, got %+v", planned.Slides[0].Slide.Design)
+	}
+	if planned.Palette.bg != "FFF6E5" || planned.Palette.accent != "F59E0B" {
+		t.Fatalf("expected explicit palette override, got %+v", planned.Palette)
+	}
+}
+
+func TestResolveDeckPalette_KeepsChosenVisualFamilyAccent(t *testing.T) {
+	palette := resolveDeckPalette("education", pptxDeckDesignInput{
+		VisualStyle: "bold studio poster",
+		CoverStyle:  "poster",
+		ColorStory:  "electric cobalt and rose",
+	}, "creative students")
+
+	if palette.accent != "4F46E5" || palette.accent2 != "A5B4FC" {
+		t.Fatalf("expected studio-light palette accents, got %+v", palette)
+	}
+}
+
+func TestCoverStyleKey_PrefersExplicitCoverStyle(t *testing.T) {
+	key := coverStyleKey(pptxDeckContext{
+		DeckPlan: plannedPPTXDeckPlan{
+			CoverStyle:      "poster",
+			VisualDirection: "bright playful collage with modern colors",
+			ColorStory:      "bright energetic and optimistic",
+		},
+	})
+	if key != "poster" {
+		t.Fatalf("expected explicit poster cover style to win, got %q", key)
+	}
+}
+
+func TestSlideLabel_IsUserFacingNumbering(t *testing.T) {
+	label := slideLabel(pptxDeckContext{SlideCount: 7}, 1, "capabilities")
+	if label != "Slide 3 of 8" {
+		t.Fatalf("expected simple slide numbering, got %q", label)
+	}
+}
+
+func TestMixHex_BakesTintedColor(t *testing.T) {
+	if got := mixHex("FFF9F0", "6366F1", 0.16); got == "6366F1" || got == "FFF9F0" || got == "" {
+		t.Fatalf("expected blended tint, got %q", got)
+	}
+}
+
+func TestCoverMetrics_ExpandForWrappedCopy(t *testing.T) {
+	titleSize, titleHeight := coverTitleMetrics("Kids and AI: Navigating the Digital Future Together", 3300, 16)
+	if titleHeight <= 860000 || titleSize >= 3300 {
+		t.Fatalf("expected wrapped title metrics to expand height and reduce size, got size=%d height=%d", titleSize, titleHeight)
+	}
+
+	mosaicTitleSize, mosaicTitleHeight := coverTitleMetrics("Kids & AI: Growing Up Smart", 3300, 12)
+	if mosaicTitleHeight <= 860000 || mosaicTitleSize >= 3300 {
+		t.Fatalf("expected mosaic title metrics to expand for a three-line cover, got size=%d height=%d", mosaicTitleSize, mosaicTitleHeight)
+	}
+
+	subtitleSize, subtitleHeight := coverSubtitleMetrics("A practical guide for parents and educators introducing AI safely and creatively", 1380, 30)
+	if subtitleHeight <= 340000 || subtitleSize >= 1380 {
+		t.Fatalf("expected wrapped subtitle metrics to expand height and reduce size, got size=%d height=%d", subtitleSize, subtitleHeight)
 	}
 }
 

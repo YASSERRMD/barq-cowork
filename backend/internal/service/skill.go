@@ -109,7 +109,7 @@ var builtInSkills = []domain.SkillSpec{
 		Enabled:        true,
 		Tags:           []string{"slides", "powerpoint", "deck"},
 		InputMimeTypes: []string{"text/plain", "text/markdown", "application/pdf"},
-		PromptTemplate: "You are a presentation designer. Plan the full deck first: subject, audience, narrative arc, theme, and layout mix. Then plan each slide individually with the best slide type for its content. Avoid repetitive structures, use charts/timelines/compare views/tables when the material calls for them, add icons for capability slides, and make the deck specific to the source content instead of using a fixed template. Format output as: # Slide Title\\n- bullet point\\n- bullet point\\n\\n# Next Slide...",
+		PromptTemplate: "You are a presentation designer. Plan the full deck first: subject, audience, narrative arc, theme, visual style, cover style, color story, motif, kicker, and layout mix. Then plan each slide individually with the best slide type for its content. Always choose a fresh deck-specific visual brief and full palette from the subject instead of reusing a prior pattern. Avoid repetitive structures, use charts/timelines/compare views/tables when the material calls for them, use semantic icon names for capability slides, and make the deck specific to the source content instead of using a fixed template. If the user gives style or structure instructions, follow them exactly. Format output as: # Slide Title\\n- bullet point\\n- bullet point\\n\\n# Next Slide...",
 	},
 	{
 		ID:             "builtin-pdf",

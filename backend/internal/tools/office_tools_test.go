@@ -20,6 +20,26 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 		"filename":"subject-driven-deck",
 		"title":"AI in Healthcare: Operational Rollout",
 		"subtitle":"Executive presentation",
+		"deck":{
+			"subject":"AI in Healthcare: Operational Rollout",
+			"audience":"operations leaders",
+			"narrative":"Pressure points -> measured impact -> rollout decision",
+			"theme":"healthcare",
+			"visual_style":"editorial clinical",
+			"cover_style":"editorial",
+			"color_story":"cool clinical tones with calm contrast",
+			"motif":"health",
+			"kicker":"Operational care briefing",
+			"palette":{
+				"background":"F5FAFE",
+				"card":"FFFFFF",
+				"accent":"0EA5E9",
+				"accent2":"67E8F9",
+				"text":"0F172A",
+				"muted":"64748B",
+				"border":"D6EAF4"
+			}
+		},
 		"slides":[
 			{"heading":"Current pressure points","type":"bullets","points":["Fragmented data across teams","Manual triage slows response","Leaders lack real-time visibility"]},
 			{"heading":"Impact snapshot","type":"stats","stats":[{"value":"92%","label":"Retention","desc":"Clinician workflow adoption"},{"value":"3.2x","label":"ROI","desc":"Operational efficiency gain"}]},
@@ -54,11 +74,21 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	}
 	manifestBytes := unzipEntryData(t, data, "customXml/barq-presentation.json")
 	var manifest struct {
-		Theme    string `json:"theme"`
+		Theme   string `json:"theme"`
+		Palette struct {
+			Background string `json:"background"`
+			Accent     string `json:"accent"`
+		} `json:"palette"`
 		DeckPlan struct {
 			Subject         string `json:"subject"`
 			Audience        string `json:"audience"`
 			VisualDirection string `json:"visual_direction"`
+			CoverStyle      string `json:"cover_style"`
+			Motif           string `json:"motif"`
+			Design          struct {
+				Composition string `json:"composition"`
+				AccentMode  string `json:"accent_mode"`
+			} `json:"design"`
 		} `json:"deck_plan"`
 	}
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
@@ -70,26 +100,58 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	if manifest.DeckPlan.Subject == "" || manifest.DeckPlan.Audience == "" || manifest.DeckPlan.VisualDirection == "" {
 		t.Fatalf("expected populated deck plan in manifest, got %+v", manifest.DeckPlan)
 	}
-	coverXML := strings.ToUpper(string(unzipEntryData(t, data, "ppt/slides/slide1.xml")))
-	if !strings.Contains(coverXML, "AUDIENCE") &&
-		!strings.Contains(coverXML, "STORY STRUCTURE") &&
-		!strings.Contains(coverXML, "VISUAL DIRECTION") &&
-		!strings.Contains(coverXML, "PRIORITY") {
-		t.Fatalf("expected planned cover metadata, got %s", coverXML)
+	if manifest.DeckPlan.CoverStyle != "editorial" || manifest.DeckPlan.Motif != "health" {
+		t.Fatalf("expected explicit deck design in manifest, got %+v", manifest.DeckPlan)
 	}
-	if !strings.Contains(coverXML, "BULLETS") && !strings.Contains(coverXML, "STATS") && !strings.Contains(coverXML, "TIMELINE") {
-		t.Fatalf("expected subject-driven cover metadata, got %s", coverXML)
+	if manifest.DeckPlan.Design.Composition == "" || manifest.DeckPlan.Design.AccentMode == "" {
+		t.Fatalf("expected render design metadata in manifest, got %+v", manifest.DeckPlan.Design)
+	}
+	if manifest.Palette.Background == "" || manifest.Palette.Accent == "" {
+		t.Fatalf("expected palette in manifest, got %+v", manifest.Palette)
+	}
+	coverXML := strings.ToUpper(string(unzipEntryData(t, data, "ppt/slides/slide1.xml")))
+	if strings.Contains(coverXML, "AUDIENCE") ||
+		strings.Contains(coverXML, "STORY STRUCTURE") ||
+		strings.Contains(coverXML, "VISUAL DIRECTION") ||
+		strings.Contains(coverXML, "PRIORITY") ||
+		strings.Contains(coverXML, "BULLETS") ||
+		strings.Contains(coverXML, "TIMELINE") {
+		t.Fatalf("expected user-facing cover only, got %s", coverXML)
+	}
+	if !strings.Contains(coverXML, "AI IN HEALTHCARE") {
+		t.Fatalf("expected cover title in slide XML, got %s", coverXML)
 	}
 
 	html, err := tools.PreviewOfficeArtifact(pptxPath)
 	if err != nil {
 		t.Fatalf("preview pptx: %v", err)
 	}
-	if !strings.Contains(html, "Impact snapshot") || !strings.Contains(html, "Implementation roadmap") {
+	htmlUpper := strings.ToUpper(html)
+	if !strings.Contains(htmlUpper, "IMPACT SNAPSHOT") || !strings.Contains(htmlUpper, "IMPLEMENTATION ROADMAP") {
 		t.Fatalf("pptx preview missing expected headings: %s", html)
 	}
-	if !strings.Contains(html, `data-layout="chart"`) || !strings.Contains(html, `data-layout="timeline"`) || !strings.Contains(html, `barq-preview-card-icon`) {
+	if strings.Contains(html, "Audience:") || strings.Contains(html, "AUDITED") {
+		t.Fatalf("pptx preview leaked planning metadata: %s", html)
+	}
+	if !strings.Contains(html, `data-family="proposal"`) || !strings.Contains(html, `data-layout="chart"`) || !strings.Contains(html, `data-layout="timeline"`) || !strings.Contains(html, `barq-preview-proposal-icon`) {
 		t.Fatalf("pptx preview did not render structured slide layouts: %s", html)
+	}
+}
+
+func TestWritePPTXTool_RejectsIncompleteDeckBrief(t *testing.T) {
+	ictx, _ := newTestCtx(t)
+	result := tools.WritePPTXTool{}.Execute(context.Background(), ictx, `{
+		"filename":"missing-design-brief",
+		"title":"Kids and AI",
+		"slides":[
+			{"heading":"Why it matters","type":"bullets","points":["Tools are everywhere","Families need guidance","Children need safe exploration"]}
+		]
+	}`)
+	if result.Status == tools.ResultOK {
+		t.Fatalf("expected incomplete deck brief to fail")
+	}
+	if !strings.Contains(result.Error, "deck design brief is required") {
+		t.Fatalf("expected deck brief validation error, got %q", result.Error)
 	}
 }
 

@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -95,12 +96,16 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 		UpdatedAt:   time.Now().UTC(),
 	}
 
-	result := loop.Run(context.Background(), task, t.TempDir())
+	taskWorkspace := t.TempDir()
+	result := loop.Run(context.Background(), task, taskWorkspace)
 	if result.Completed != 1 {
 		t.Fatalf("expected one completed tool call, got %+v", result)
 	}
 	if len(artifacts.artifacts) != 1 {
 		t.Fatalf("expected one recorded artifact, got %d", len(artifacts.artifacts))
+	}
+	if got := artifacts.artifacts[0].ContentPath; got != filepath.Join(taskWorkspace, "slides", "forced-presentation.pptx") {
+		t.Fatalf("expected absolute artifact path, got %q", got)
 	}
 	if len(prov.requests) < 2 {
 		t.Fatalf("expected at least two provider calls, got %d", len(prov.requests))
@@ -109,6 +114,20 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	lastMessage := prov.requests[1].Messages[len(prov.requests[1].Messages)-1].Content
 	if !strings.Contains(lastMessage, "call write_pptx now") {
 		t.Fatalf("expected forced tool reminder in second request, got %q", lastMessage)
+	}
+}
+
+func TestResolveArtifactContentPath(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "tmp", "barq-workspace")
+	got := resolveArtifactContentPath(root, "slides/deck.pptx")
+	want := filepath.Join(root, "slides", "deck.pptx")
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+
+	abs := filepath.Join(root, "documents", "brief.docx")
+	if got := resolveArtifactContentPath(root, abs); got != abs {
+		t.Fatalf("expected absolute path passthrough, got %q", got)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,28 +42,19 @@ Required fields: "filename", "title", "slides" (6-10 slides).
 Each slide MUST have: "heading" (≤60 chars) and "type".
 
 PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
-1. Plan the full presentation first: subject, audience, narrative arc, theme, and the mix of slide layouts.
+1. Plan the full presentation first: subject, audience, narrative arc, theme, visual style, cover style, color story, motif, and the mix of slide layouts.
 2. Only then plan each slide individually: choose the most suitable type, verify the slide has enough content, and check whether it needs icons, charts, diagrams, timelines, comparisons, or tables.
 3. Do not use a fixed deck template or the same layout repeatedly. The structure must come from the user's subject and explicit instructions.
 4. If the user explicitly requests a style, sections, sequence, visual direction, or specific slide elements, follow that exactly.
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
-
-COLOR THEME — the engine auto-detects a theme from the title, but you should
-pick titles that clearly signal the topic domain for best color matching:
-  healthcare/medical → cyan/teal palette
-  tech/AI/software   → indigo/purple palette
-  education/learning → amber/gold palette
-  finance/business   → green palette
-  environment/climate→ teal/emerald palette
-  creative/design    → purple palette
-  security/cyber     → red palette
-  data/analytics     → teal palette
-  logistics/supply   → blue palette
-  retail/ecommerce   → orange palette
-  hr/talent          → pink palette
-Use descriptive titles like "AI in Healthcare: Transforming Patient Care"
-rather than vague ones like "Presentation about stuff".
+7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, kicker, a full palette, and deck.design render directives.
+8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
+9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
+10. The HTML preview and the downloaded PPTX must look like the same deck. Choose design directives that the native renderer can follow, and add slide-level design objects when a slide needs a specific composition.
+11. Default to a refined contemporary presentation aesthetic. Avoid dated corporate blue-orange palettes, thick office-style borders, repetitive bullet slabs, and generic 2000s deck patterns unless the user explicitly asks for them.
+12. For AI, digital-future, innovation, or forward-looking subjects, prefer airy split/gallery compositions, restrained surfaces, and a fresh palette rather than classroom amber or old business-deck blue.
+13. Keep one coherent deck system across the full presentation: cover language, header treatment, spacing, card style, and table/chart chrome should feel like one designed document, not a different template on every slide.
 
 TYPE REFERENCE — choose the right type per slide:
 
@@ -78,10 +70,40 @@ TYPE "steps"  → numbered process flow with arrows
   "steps": ["Define requirements","Design architecture","Build MVP","Test & iterate","Deploy"]
 
 TYPE "cards"  → icon feature grid (4-6 cards)
-  "cards": [{"icon":"⚡","title":"Speed","desc":"Sub-50ms response time"},
-            {"icon":"🔒","title":"Security","desc":"SOC2 Type II certified"},
-            {"icon":"🔌","title":"Integrations","desc":"200+ native connectors"},
-            {"icon":"📊","title":"Analytics","desc":"Real-time dashboards"}]
+  "cards": [{"icon":"automation","title":"Speed","desc":"Sub-50ms response time"},
+            {"icon":"shield","title":"Security","desc":"SOC2 Type II certified"},
+            {"icon":"integration","title":"Integrations","desc":"200+ native connectors"},
+            {"icon":"chart","title":"Analytics","desc":"Real-time dashboards"}]
+
+DECK OBJECT — REQUIRED on every write_pptx call:
+  "deck": {
+    "subject":"<subject framing>",
+    "audience":"<who this deck is for>",
+    "narrative":"<story arc>",
+    "theme":"<domain theme>",
+    "visual_style":"<chosen visual direction>",
+    "cover_style":"<editorial|orbit|mosaic|poster|playful>",
+    "color_story":"<chosen color mood>",
+    "motif":"<semantic motif token>",
+    "kicker":"<short cover line>",
+    "design":{
+      "composition":"<split|frame|stack|band|float|asym|gallery>",
+      "density":"<airy|balanced|dense>",
+      "shape_language":"<soft|mixed|crisp>",
+      "accent_mode":"<rail|band|chip|ribbon|glow|block>",
+      "hero_layout":"<motif|figures|data|people|product|abstract>"
+    },
+    "palette":{"background":"<hex>","card":"<hex>","accent":"<hex>","accent2":"<hex>","text":"<hex>","muted":"<hex>","border":"<hex>"}
+  }
+
+OPTIONAL SLIDE DESIGN — use when a slide needs a deliberate composition:
+  "design":{
+    "layout_style":"<stack|split|grid|rail|stage|matrix|spotlight>",
+    "panel_style":"<soft|solid|outline|glass|tint>",
+    "accent_mode":"<rail|chip|ribbon|band|marker|glow>",
+    "density":"<airy|balanced|dense>",
+    "visual_focus":"<text|metric|icon|data|process|compare>"
+  }
 
 TYPE "chart"  → full-slide native PowerPoint chart
   "chart_type": "column" | "bar" | "line" | "pie" | "doughnut" | "area"
@@ -217,7 +239,7 @@ func (a *AgentLoop) Run(
 			Model:       a.cfg.Model,
 			Stream:      true,
 			MaxTokens:   2048,
-			Temperature: 0.3,
+			Temperature: taskTemperature(task),
 			Messages:    messages,
 			Tools:       toolDefs,
 		}
@@ -324,7 +346,7 @@ func (a *AgentLoop) Run(
 				step.Status = domain.StepStatusCompleted
 				step.ToolOutput = toolOutput
 				result.Completed++
-				a.maybeRecordAgentArtifact(ctx, step, task)
+				a.maybeRecordAgentArtifact(ctx, step, task, workspaceRoot)
 			}
 			_ = a.plans.UpdateStep(ctx, step)
 
@@ -367,7 +389,21 @@ func (a *AgentLoop) executeToolCall(
 	return result.ToJSON(), nil
 }
 
-func (a *AgentLoop) maybeRecordAgentArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task) {
+func resolveArtifactContentPath(workspaceRoot, outputPath string) string {
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath == "" {
+		return ""
+	}
+	if filepath.IsAbs(outputPath) {
+		return filepath.Clean(outputPath)
+	}
+	if strings.TrimSpace(workspaceRoot) == "" {
+		return filepath.Clean(filepath.FromSlash(outputPath))
+	}
+	return filepath.Clean(filepath.Join(workspaceRoot, filepath.FromSlash(outputPath)))
+}
+
+func (a *AgentLoop) maybeRecordAgentArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task, workspaceRoot string) {
 	artType, ok := artifactTools[step.ToolName]
 	if !ok {
 		return
@@ -383,13 +419,18 @@ func (a *AgentLoop) maybeRecordAgentArtifact(ctx context.Context, step *domain.P
 		return
 	}
 
+	contentPath := resolveArtifactContentPath(workspaceRoot, output.Data.Path)
+	if contentPath == "" {
+		return
+	}
+
 	artifact := &domain.Artifact{
 		ID:          uuid.NewString(),
 		TaskID:      task.ID,
 		ProjectID:   task.ProjectID,
 		Name:        output.Data.Path,
 		Type:        artType,
-		ContentPath: output.Data.Path,
+		ContentPath: contentPath,
 		Size:        output.Data.Size,
 		CreatedAt:   time.Now().UTC(),
 	}
@@ -435,6 +476,13 @@ func requiredOutputTool(task *domain.Task) string {
 	default:
 		return ""
 	}
+}
+
+func taskTemperature(task *domain.Task) float64 {
+	if requiredOutputTool(task) == "write_pptx" {
+		return 0.55
+	}
+	return 0.3
 }
 
 func containsTaskKeyword(text string, keywords ...string) bool {

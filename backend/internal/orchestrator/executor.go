@@ -124,7 +124,7 @@ func (e *Executor) Execute(
 			result.Completed++
 
 			// Detect artifact-producing tools and record them
-			e.maybeRecordArtifact(ctx, step, task)
+			e.maybeRecordArtifact(ctx, step, task, workspaceRoot)
 		}
 
 		_ = e.plans.UpdateStep(ctx, step)
@@ -189,7 +189,7 @@ var artifactTools = map[string]domain.ArtifactType{
 	"write_docx":            domain.ArtifactTypeFile,
 }
 
-func (e *Executor) maybeRecordArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task) {
+func (e *Executor) maybeRecordArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task, workspaceRoot string) {
 	artType, ok := artifactTools[step.ToolName]
 	if !ok {
 		return
@@ -206,13 +206,18 @@ func (e *Executor) maybeRecordArtifact(ctx context.Context, step *domain.PlanSte
 		return
 	}
 
+	contentPath := resolveArtifactContentPath(workspaceRoot, output.Data.Path)
+	if contentPath == "" {
+		return
+	}
+
 	artifact := &domain.Artifact{
 		ID:          uuid.NewString(),
 		TaskID:      task.ID,
 		ProjectID:   task.ProjectID,
 		Name:        output.Data.Path,
 		Type:        artType,
-		ContentPath: output.Data.Path,
+		ContentPath: contentPath,
 		Size:        output.Data.Size,
 		CreatedAt:   time.Now().UTC(),
 	}

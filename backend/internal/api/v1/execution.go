@@ -25,6 +25,26 @@ func parsePositiveInt(s string) (int, error) {
 	return n, nil
 }
 
+func artifactFullPath(serverRoot, contentPath string) (string, error) {
+	contentPath = strings.TrimSpace(contentPath)
+	if contentPath == "" {
+		return "", fmt.Errorf("artifact content path is empty")
+	}
+	if filepath.IsAbs(contentPath) {
+		return filepath.Clean(contentPath), nil
+	}
+	if strings.TrimSpace(serverRoot) == "" {
+		return "", fmt.Errorf("workspace root not configured")
+	}
+	root := filepath.Clean(serverRoot)
+	fullPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(contentPath)))
+	prefix := root + string(os.PathSeparator)
+	if fullPath != root && !strings.HasPrefix(fullPath, prefix) {
+		return "", fmt.Errorf("forbidden")
+	}
+	return fullPath, nil
+}
+
 // ─────────────────────────────────────────────
 // Port interfaces (narrow, owned by this layer)
 // ─────────────────────────────────────────────
@@ -253,17 +273,13 @@ func (h *ExecutionHandler) downloadArtifact(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Resolve full path: workspaceRoot + content_path
-	root := h.workspaceRoot
-	if root == "" {
-		http.Error(w, "workspace root not configured", http.StatusInternalServerError)
-		return
-	}
-
-	fullPath := filepath.Join(root, filepath.FromSlash(a.ContentPath))
-	// Security: ensure the resolved path is still under workspaceRoot
-	if !strings.HasPrefix(fullPath, filepath.Clean(root)) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+	fullPath, err := artifactFullPath(h.workspaceRoot, a.ContentPath)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err.Error() == "forbidden" {
+			status = http.StatusForbidden
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 
@@ -318,15 +334,13 @@ func (h *ExecutionHandler) previewArtifact(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	root := h.workspaceRoot
-	if root == "" {
-		http.Error(w, "workspace root not configured", http.StatusInternalServerError)
-		return
-	}
-
-	fullPath := filepath.Join(root, filepath.FromSlash(a.ContentPath))
-	if !strings.HasPrefix(fullPath, filepath.Clean(root)) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+	fullPath, err := artifactFullPath(h.workspaceRoot, a.ContentPath)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err.Error() == "forbidden" {
+			status = http.StatusForbidden
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 
