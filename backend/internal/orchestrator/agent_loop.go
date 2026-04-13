@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -325,7 +326,7 @@ func (a *AgentLoop) Run(
 				step.Status = domain.StepStatusCompleted
 				step.ToolOutput = toolOutput
 				result.Completed++
-				a.maybeRecordAgentArtifact(ctx, step, task)
+				a.maybeRecordAgentArtifact(ctx, step, task, workspaceRoot)
 			}
 			_ = a.plans.UpdateStep(ctx, step)
 
@@ -368,7 +369,21 @@ func (a *AgentLoop) executeToolCall(
 	return result.ToJSON(), nil
 }
 
-func (a *AgentLoop) maybeRecordAgentArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task) {
+func resolveArtifactContentPath(workspaceRoot, outputPath string) string {
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath == "" {
+		return ""
+	}
+	if filepath.IsAbs(outputPath) {
+		return filepath.Clean(outputPath)
+	}
+	if strings.TrimSpace(workspaceRoot) == "" {
+		return filepath.Clean(filepath.FromSlash(outputPath))
+	}
+	return filepath.Clean(filepath.Join(workspaceRoot, filepath.FromSlash(outputPath)))
+}
+
+func (a *AgentLoop) maybeRecordAgentArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task, workspaceRoot string) {
 	artType, ok := artifactTools[step.ToolName]
 	if !ok {
 		return
@@ -384,13 +399,18 @@ func (a *AgentLoop) maybeRecordAgentArtifact(ctx context.Context, step *domain.P
 		return
 	}
 
+	contentPath := resolveArtifactContentPath(workspaceRoot, output.Data.Path)
+	if contentPath == "" {
+		return
+	}
+
 	artifact := &domain.Artifact{
 		ID:          uuid.NewString(),
 		TaskID:      task.ID,
 		ProjectID:   task.ProjectID,
 		Name:        output.Data.Path,
 		Type:        artType,
-		ContentPath: output.Data.Path,
+		ContentPath: contentPath,
 		Size:        output.Data.Size,
 		CreatedAt:   time.Now().UTC(),
 	}
