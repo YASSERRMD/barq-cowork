@@ -39,7 +39,7 @@ const SUGGESTIONS = [
     icon: Presentation,
     label: "Create a presentation",
     prompt:
-      "Create a subject-specific PowerPoint presentation. Plan the deck first, choose a fresh visual style, cover style, color story, motif, kicker, full palette, and native render design directives from the subject, make the preview and downloaded PPTX look like the same deck, do not reuse an old cover pattern, vary slide types, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide.",
+      "Create a subject-specific PowerPoint presentation. Plan the deck first, choose a fresh visual style, cover style, color story, motif, kicker, full palette, and native render design directives from the subject, make the preview and downloaded PPTX look like the same deck, keep the deck refined and contemporary instead of dated corporate slideware, avoid classroom amber or old-business blue unless explicitly requested, do not reuse an old cover pattern, vary slide types, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide.",
   },
   {
     icon: FileSpreadsheet,

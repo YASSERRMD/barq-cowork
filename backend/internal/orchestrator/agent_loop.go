@@ -52,6 +52,8 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
 9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
 10. The HTML preview and the downloaded PPTX must look like the same deck. Choose design directives that the native renderer can follow, and add slide-level design objects when a slide needs a specific composition.
+11. Default to a refined contemporary presentation aesthetic. Avoid dated corporate blue-orange palettes, thick office-style borders, repetitive bullet slabs, and generic 2000s deck patterns unless the user explicitly asks for them.
+12. For AI, digital-future, innovation, or forward-looking subjects, prefer airy split/gallery compositions, restrained surfaces, and a fresh palette rather than classroom amber or old business-deck blue.
 
 TYPE REFERENCE — choose the right type per slide:
 
