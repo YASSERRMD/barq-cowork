@@ -85,6 +85,10 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 			VisualDirection string `json:"visual_direction"`
 			CoverStyle      string `json:"cover_style"`
 			Motif           string `json:"motif"`
+			Design          struct {
+				Composition string `json:"composition"`
+				AccentMode  string `json:"accent_mode"`
+			} `json:"design"`
 		} `json:"deck_plan"`
 	}
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
@@ -98,6 +102,9 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	}
 	if manifest.DeckPlan.CoverStyle != "editorial" || manifest.DeckPlan.Motif != "health" {
 		t.Fatalf("expected explicit deck design in manifest, got %+v", manifest.DeckPlan)
+	}
+	if manifest.DeckPlan.Design.Composition == "" || manifest.DeckPlan.Design.AccentMode == "" {
+		t.Fatalf("expected render design metadata in manifest, got %+v", manifest.DeckPlan.Design)
 	}
 	if manifest.Palette.Background == "" || manifest.Palette.Accent == "" {
 		t.Fatalf("expected palette in manifest, got %+v", manifest.Palette)

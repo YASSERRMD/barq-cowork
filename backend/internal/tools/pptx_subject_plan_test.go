@@ -89,6 +89,13 @@ func TestPlanPPTXPresentation_PrefersExplicitDeckDesign(t *testing.T) {
 			ColorStory:  "bright classroom tones with soft contrast",
 			Motif:       "learning",
 			Kicker:      "A visual guide for curious learners",
+			Design: &pptxDeckDesign{
+				Composition:   "float",
+				Density:       "dense",
+				ShapeLanguage: "soft",
+				AccentMode:    "chip",
+				HeroLayout:    "people",
+			},
 			Palette: &pptxPaletteInput{
 				Background: "FFF6E5",
 				Card:       "FFFDF7",
@@ -106,6 +113,12 @@ func TestPlanPPTXPresentation_PrefersExplicitDeckDesign(t *testing.T) {
 	}
 	if planned.DeckPlan.CoverStyle != "playful" || planned.DeckPlan.Motif != "learning" {
 		t.Fatalf("expected explicit deck design to be preserved, got %+v", planned.DeckPlan)
+	}
+	if planned.DeckPlan.Design.Composition != "float" || planned.DeckPlan.Design.AccentMode != "chip" {
+		t.Fatalf("expected explicit render design to be preserved, got %+v", planned.DeckPlan.Design)
+	}
+	if planned.Slides[0].Slide.Design == nil || planned.Slides[0].Slide.Design.LayoutStyle == "" {
+		t.Fatalf("expected slide design defaults to be assigned, got %+v", planned.Slides[0].Slide.Design)
 	}
 	if planned.Palette.bg != "FFF6E5" || planned.Palette.accent != "F59E0B" {
 		t.Fatalf("expected explicit palette override, got %+v", planned.Palette)

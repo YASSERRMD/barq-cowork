@@ -91,6 +91,28 @@ func (WritePPTXTool) InputSchema() map[string]any {
 		},
 		"required": []string{"background", "card", "accent", "accent2", "text", "muted", "border"},
 	}
+	deckDesignSchema := map[string]any{
+		"type":        "object",
+		"description": "Optional but strongly recommended LLM-chosen render directives for the native PowerPoint engine. Use these to avoid a templated look.",
+		"properties": map[string]any{
+			"composition":    map[string]any{"type": "string", "description": "Overall cover/content composition such as split, frame, stack, band, float, asym, or gallery"},
+			"density":        map[string]any{"type": "string", "description": "Visual density such as airy, balanced, or dense"},
+			"shape_language": map[string]any{"type": "string", "description": "Shape feel such as soft, crisp, or mixed"},
+			"accent_mode":    map[string]any{"type": "string", "description": "Accent treatment such as rail, band, chip, ribbon, glow, or block"},
+			"hero_layout":    map[string]any{"type": "string", "description": "Hero zone emphasis such as motif, figures, data, people, product, or abstract"},
+		},
+	}
+	slideDesignSchema := map[string]any{
+		"type":        "object",
+		"description": "Optional per-slide native render directives. Use these when the subject needs a specific composition instead of a generic slide pattern.",
+		"properties": map[string]any{
+			"layout_style": map[string]any{"type": "string", "description": "Layout styling such as stack, split, grid, rail, stage, matrix, or spotlight"},
+			"panel_style":  map[string]any{"type": "string", "description": "Panel treatment such as soft, solid, outline, glass, or tint"},
+			"accent_mode":  map[string]any{"type": "string", "description": "Accent treatment such as rail, chip, ribbon, band, marker, or glow"},
+			"density":      map[string]any{"type": "string", "description": "Content density such as airy, balanced, or dense"},
+			"visual_focus": map[string]any{"type": "string", "description": "Primary visual focus such as text, metric, icon, data, process, or compare"},
+		},
+	}
 	deckSchema := map[string]any{
 		"type":        "object",
 		"description": "Required deck-level design plan chosen by the model. Fill this completely so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults.",
@@ -104,6 +126,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"color_story":  map[string]any{"type": "string", "description": "Color mood like 'warm daylight', 'cool clinical', 'soft paper', or 'dark command center'"},
 			"motif":        map[string]any{"type": "string", "description": "Visual motif or semantic icon token for the cover, e.g. learning, spark, shield, leaf, chart"},
 			"kicker":       map[string]any{"type": "string", "description": "Short cover kicker shown above the title"},
+			"design":       deckDesignSchema,
 			"palette":      paletteSchema,
 		},
 		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette"},
@@ -132,6 +155,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 								"chart=data visualisation; timeline=milestone roadmap; compare=two-column; table=data table; blank=empty.",
 						},
 						"speaker_notes": map[string]any{"type": "string", "description": "Optional speaker notes for this slide"},
+						"design":        slideDesignSchema,
 
 						// bullets
 						"points": map[string]any{
@@ -225,7 +249,16 @@ type pptxDeckDesignInput struct {
 	ColorStory  string            `json:"color_story,omitempty"`
 	Motif       string            `json:"motif,omitempty"`
 	Kicker      string            `json:"kicker,omitempty"`
+	Design      *pptxDeckDesign   `json:"design,omitempty"`
 	Palette     *pptxPaletteInput `json:"palette,omitempty"`
+}
+
+type pptxDeckDesign struct {
+	Composition   string `json:"composition,omitempty"`
+	Density       string `json:"density,omitempty"`
+	ShapeLanguage string `json:"shape_language,omitempty"`
+	AccentMode    string `json:"accent_mode,omitempty"`
+	HeroLayout    string `json:"hero_layout,omitempty"`
 }
 
 // pptxStat is a KPI metric item for the stats layout.
@@ -274,6 +307,7 @@ type pptxSlide struct {
 	Type         string `json:"type"`   // primary field
 	Layout       string `json:"layout"` // backward-compat alias for Type
 	SpeakerNotes string `json:"speaker_notes"`
+	Design       *pptxSlideDesign `json:"design,omitempty"`
 	// bullets
 	Points []string `json:"points,omitempty"`
 	// stats
@@ -294,6 +328,14 @@ type pptxSlide struct {
 	RightColumn *pptxCompareColumn `json:"right_column,omitempty"`
 	// table
 	Table *pptxTableData `json:"table,omitempty"`
+}
+
+type pptxSlideDesign struct {
+	LayoutStyle string `json:"layout_style,omitempty"`
+	PanelStyle  string `json:"panel_style,omitempty"`
+	AccentMode  string `json:"accent_mode,omitempty"`
+	Density     string `json:"density,omitempty"`
+	VisualFocus string `json:"visual_focus,omitempty"`
 }
 
 // pptxPalette holds the full color palette for a presentation theme.

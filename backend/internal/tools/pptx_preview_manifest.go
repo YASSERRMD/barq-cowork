@@ -42,6 +42,7 @@ type pptxPreviewDeckPlan struct {
 	ColorStory      string   `json:"color_story,omitempty"`
 	Motif           string   `json:"motif,omitempty"`
 	Kicker          string   `json:"kicker,omitempty"`
+	Design          pptxDeckDesign `json:"design,omitempty"`
 	LayoutMix       []string `json:"layout_mix,omitempty"`
 }
 
@@ -53,6 +54,7 @@ type pptxPreviewSlide struct {
 	Purpose         string                `json:"purpose,omitempty"`
 	Visual          string                `json:"visual,omitempty"`
 	ContentSource   string                `json:"content_source,omitempty"`
+	Design          *pptxSlideDesign      `json:"design,omitempty"`
 	Audit           plannedPPTXSlideAudit `json:"audit"`
 	SpeakerNotes    string                `json:"speaker_notes,omitempty"`
 	Points          []string              `json:"points,omitempty"`
@@ -94,6 +96,7 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			ColorStory:      planned.DeckPlan.ColorStory,
 			Motif:           planned.DeckPlan.Motif,
 			Kicker:          planned.DeckPlan.Kicker,
+			Design:          planned.DeckPlan.Design,
 			LayoutMix:       append([]string(nil), planned.DeckPlan.LayoutMix...),
 		},
 		Narrative: firstNonEmpty(strings.TrimSpace(planned.DeckPlan.NarrativeArc), previewNarrative(planned.Slides)),
@@ -110,6 +113,7 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			Purpose:         firstNonEmpty(slide.Plan.Purpose, previewPurpose(slide.Layout)),
 			Visual:          firstNonEmpty(slide.Plan.Visual, previewVisual(slide.Layout)),
 			ContentSource:   slide.Plan.ContentSource,
+			Design:          cloneSlideDesign(slide.Slide.Design),
 			Audit:           slide.Audit,
 			SpeakerNotes:    strings.TrimSpace(slide.Slide.SpeakerNotes),
 			Points:          append([]string(nil), slide.Slide.Points...),
@@ -128,6 +132,14 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 	}
 
 	return json.MarshalIndent(manifest, "", "  ")
+}
+
+func cloneSlideDesign(design *pptxSlideDesign) *pptxSlideDesign {
+	if design == nil {
+		return nil
+	}
+	copy := *design
+	return &copy
 }
 
 func loadPPTXPreviewManifest(data []byte) (pptxPreviewManifest, bool, error) {

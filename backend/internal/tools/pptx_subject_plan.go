@@ -24,6 +24,7 @@ type plannedPPTXDeckPlan struct {
 	ColorStory      string   `json:"color_story,omitempty"`
 	Motif           string   `json:"motif,omitempty"`
 	Kicker          string   `json:"kicker,omitempty"`
+	Design          pptxDeckDesign `json:"design,omitempty"`
 	LayoutMix       []string `json:"layout_mix,omitempty"`
 }
 
@@ -203,6 +204,10 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 		}
 		planned.Points = points
 	}
+	if planned.Design == nil {
+		design := defaultSlideDesign(deck, layout)
+		planned.Design = &design
+	}
 
 	plan := plannedPPTXSlidePlan{
 		Purpose:       slidePurpose(deck, layout, planned.Heading),
@@ -238,8 +243,141 @@ func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string
 		ColorStory:      strings.TrimSpace(firstNonEmpty(deckInput.ColorStory, defaultColorStory(themeName, audience))),
 		Motif:           strings.TrimSpace(firstNonEmpty(deckInput.Motif, defaultMotif(themeName, audience))),
 		Kicker:          strings.TrimSpace(firstNonEmpty(deckInput.Kicker, defaultDeckKicker(themeName, audience, subject))),
+		Design:          defaultDeckDesign(themeName, audience, deckInput),
 		LayoutMix:       plannedLayoutMixFromInputs(slides),
 	}
+}
+
+func defaultDeckDesign(themeName, audience string, deckInput pptxDeckDesignInput) pptxDeckDesign {
+	design := pptxDeckDesign{}
+	if deckInput.Design != nil {
+		design = *deckInput.Design
+	}
+	if strings.TrimSpace(design.Composition) == "" {
+		switch normalizeCoverStyleToken(deckInput.CoverStyle) {
+		case "poster":
+			design.Composition = "band"
+		case "mosaic":
+			design.Composition = "asym"
+		case "playful":
+			design.Composition = "float"
+		case "orbit":
+			design.Composition = "frame"
+		default:
+			if containsAny(strings.ToLower(deckInput.VisualStyle), "gallery", "showcase", "collage", "modular") {
+				design.Composition = "gallery"
+			} else {
+				design.Composition = "split"
+			}
+		}
+	}
+	if strings.TrimSpace(design.Density) == "" {
+		switch {
+		case containsAny(strings.ToLower(strings.Join([]string{audience, deckInput.VisualStyle}, " ")), "kids", "children", "classroom", "playful"):
+			design.Density = "dense"
+		case containsAny(strings.ToLower(deckInput.VisualStyle), "minimal", "editorial", "premium", "calm"):
+			design.Density = "airy"
+		default:
+			design.Density = "balanced"
+		}
+	}
+	if strings.TrimSpace(design.ShapeLanguage) == "" {
+		switch themeName {
+		case "security", "finance", "data":
+			design.ShapeLanguage = "crisp"
+		case "education", "hr", "retail":
+			design.ShapeLanguage = "soft"
+		default:
+			design.ShapeLanguage = "mixed"
+		}
+	}
+	if strings.TrimSpace(design.AccentMode) == "" {
+		switch normalizeCoverStyleToken(deckInput.CoverStyle) {
+		case "poster":
+			design.AccentMode = "band"
+		case "playful":
+			design.AccentMode = "chip"
+		case "orbit":
+			design.AccentMode = "glow"
+		case "mosaic":
+			design.AccentMode = "block"
+		default:
+			design.AccentMode = "rail"
+		}
+	}
+	if strings.TrimSpace(design.HeroLayout) == "" {
+		switch normalizeIconToken(deckInput.Motif) {
+		case "people", "learning", "health":
+			design.HeroLayout = "people"
+		case "chart", "growth":
+			design.HeroLayout = "data"
+		case "logistics", "integration":
+			design.HeroLayout = "product"
+		default:
+			design.HeroLayout = "motif"
+		}
+	}
+	return design
+}
+
+func defaultSlideDesign(deck plannedPPTXDeckPlan, layout string) pptxSlideDesign {
+	design := pptxSlideDesign{
+		Density: firstNonEmpty(deck.Design.Density, "balanced"),
+	}
+	switch layout {
+	case "stats":
+		design.LayoutStyle = "grid"
+		design.PanelStyle = "soft"
+		design.AccentMode = firstNonEmpty(deck.Design.AccentMode, "chip")
+		design.VisualFocus = "metric"
+	case "steps":
+		design.LayoutStyle = "stack"
+		if containsAny(strings.ToLower(deck.Design.Composition), "band", "frame") {
+			design.LayoutStyle = "rail"
+		}
+		design.PanelStyle = "soft"
+		design.AccentMode = "marker"
+		design.VisualFocus = "process"
+	case "cards":
+		design.LayoutStyle = "grid"
+		design.PanelStyle = "soft"
+		design.AccentMode = "chip"
+		design.VisualFocus = "icon"
+	case "chart":
+		design.LayoutStyle = "split"
+		design.PanelStyle = "soft"
+		design.AccentMode = "band"
+		design.VisualFocus = "data"
+	case "timeline":
+		design.LayoutStyle = "rail"
+		design.PanelStyle = "soft"
+		design.AccentMode = "marker"
+		design.VisualFocus = "process"
+	case "compare":
+		design.LayoutStyle = "split"
+		design.PanelStyle = "soft"
+		design.AccentMode = "ribbon"
+		design.VisualFocus = "compare"
+	case "table":
+		design.LayoutStyle = "matrix"
+		design.PanelStyle = "outline"
+		design.AccentMode = "band"
+		design.VisualFocus = "data"
+	case "title", "blank":
+		design.LayoutStyle = "stage"
+		design.PanelStyle = "soft"
+		design.AccentMode = firstNonEmpty(deck.Design.AccentMode, "chip")
+		design.VisualFocus = "text"
+	default:
+		design.LayoutStyle = "stack"
+		if containsAny(strings.ToLower(deck.Design.Composition), "split", "gallery") {
+			design.LayoutStyle = "split"
+		}
+		design.PanelStyle = "soft"
+		design.AccentMode = firstNonEmpty(deck.Design.AccentMode, "rail")
+		design.VisualFocus = "text"
+	}
+	return design
 }
 
 func resolveDeckThemeName(title, subtitle string, deckInput pptxDeckDesignInput) string {
