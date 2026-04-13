@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +51,34 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	}
 	if !contains(entries, "customXml/barq-presentation.json") {
 		t.Fatalf("pptx missing structured preview manifest: %v", entries)
+	}
+	manifestBytes := unzipEntryData(t, data, "customXml/barq-presentation.json")
+	var manifest struct {
+		Theme    string `json:"theme"`
+		DeckPlan struct {
+			Subject         string `json:"subject"`
+			Audience        string `json:"audience"`
+			VisualDirection string `json:"visual_direction"`
+		} `json:"deck_plan"`
+	}
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
+	if manifest.Theme != "healthcare" {
+		t.Fatalf("expected healthcare manifest theme, got %q", manifest.Theme)
+	}
+	if manifest.DeckPlan.Subject == "" || manifest.DeckPlan.Audience == "" || manifest.DeckPlan.VisualDirection == "" {
+		t.Fatalf("expected populated deck plan in manifest, got %+v", manifest.DeckPlan)
+	}
+	coverXML := strings.ToUpper(string(unzipEntryData(t, data, "ppt/slides/slide1.xml")))
+	if !strings.Contains(coverXML, "AUDIENCE") &&
+		!strings.Contains(coverXML, "STORY STRUCTURE") &&
+		!strings.Contains(coverXML, "VISUAL DIRECTION") &&
+		!strings.Contains(coverXML, "PRIORITY") {
+		t.Fatalf("expected planned cover metadata, got %s", coverXML)
+	}
+	if !strings.Contains(coverXML, "BULLETS") && !strings.Contains(coverXML, "STATS") && !strings.Contains(coverXML, "TIMELINE") {
+		t.Fatalf("expected subject-driven cover metadata, got %s", coverXML)
 	}
 
 	html, err := tools.PreviewOfficeArtifact(pptxPath)
@@ -110,6 +140,31 @@ func unzipEntryNames(t *testing.T, data []byte) []string {
 		names = append(names, file.Name)
 	}
 	return names
+}
+
+func unzipEntryData(t *testing.T, data []byte, target string) []byte {
+	t.Helper()
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, file := range reader.File {
+		if file.Name != target {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open zip entry %s: %v", target, err)
+		}
+		defer rc.Close()
+		payload, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("read zip entry %s: %v", target, err)
+		}
+		return payload
+	}
+	t.Fatalf("zip entry not found: %s", target)
+	return nil
 }
 
 func contains(values []string, target string) bool {

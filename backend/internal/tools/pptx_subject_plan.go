@@ -234,6 +234,8 @@ func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string
 func deriveAudience(subtitle, title string) string {
 	text := strings.ToLower(strings.TrimSpace(title + " " + subtitle))
 	switch {
+	case containsAny(text, "kid", "kids", "child", "children", "young learner", "classroom"):
+		return "young learners"
 	case containsAny(text, "executive", "board", "leadership", "steering", "investor"):
 		return "executive stakeholders"
 	case containsAny(text, "sales", "go to market", "customer", "prospect"):
@@ -558,10 +560,10 @@ func themedFallbackSteps(deck plannedPPTXDeckPlan, heading string) []string {
 func themedFallbackCards(deck plannedPPTXDeckPlan, heading string) []pptxCard {
 	subject := shortSubject(deck.Subject, heading)
 	return []pptxCard{
-		{Icon: "⚡", Title: "Faster Flow", Desc: subject + " moves with less friction"},
-		{Icon: "🔒", Title: "Better Control", Desc: "Clear governance and safer execution"},
-		{Icon: "📊", Title: "Visible Signal", Desc: "Progress is measurable and reviewable"},
-		{Icon: "🧩", Title: "Operational Fit", Desc: "Fits existing teams, systems, and decisions"},
+		{Icon: "automation", Title: "Faster Flow", Desc: subject + " moves with less friction"},
+		{Icon: "shield", Title: "Better Control", Desc: "Clear governance and safer execution"},
+		{Icon: "chart", Title: "Visible Signal", Desc: "Progress is measurable and reviewable"},
+		{Icon: "integration", Title: "Operational Fit", Desc: "Fits existing teams, systems, and decisions"},
 	}
 }
 

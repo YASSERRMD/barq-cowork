@@ -63,3 +63,27 @@ func TestPlanPPTXPresentation_FillsSubjectAwareFallbacks(t *testing.T) {
 		t.Fatalf("expected fallback table, got %+v", planned.Slides[2].Slide.Table)
 	}
 }
+
+func TestPickThemeName_PrefersEducationForKidsAudience(t *testing.T) {
+	theme := pickThemeName(
+		"Generative AI: Amazing Creativity for Kids!",
+		"Classroom introduction for children",
+	)
+	if theme != "education" {
+		t.Fatalf("expected education theme, got %q", theme)
+	}
+}
+
+func TestInferCardIcon_NormalizesLegacyEmojiToSemanticToken(t *testing.T) {
+	icon := inferCardIcon(pptxCard{Icon: "📊", Title: "Insights", Desc: "Data visibility"}, 0)
+	if icon != "chart" {
+		t.Fatalf("expected chart token, got %q", icon)
+	}
+}
+
+func TestDeriveAudience_DetectsYoungLearners(t *testing.T) {
+	audience := deriveAudience("Discover how computers can draw and create", "Generative AI for Kids")
+	if audience != "young learners" {
+		t.Fatalf("expected young learners, got %q", audience)
+	}
+}
