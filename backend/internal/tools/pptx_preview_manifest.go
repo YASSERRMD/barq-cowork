@@ -33,17 +33,17 @@ type pptxPreviewPalette struct {
 }
 
 type pptxPreviewDeckPlan struct {
-	Subject         string   `json:"subject"`
-	Audience        string   `json:"audience"`
-	NarrativeArc    string   `json:"narrative_arc"`
-	VisualDirection string   `json:"visual_direction"`
-	DominantNeed    string   `json:"dominant_need"`
-	CoverStyle      string   `json:"cover_style,omitempty"`
-	ColorStory      string   `json:"color_story,omitempty"`
-	Motif           string   `json:"motif,omitempty"`
-	Kicker          string   `json:"kicker,omitempty"`
+	Subject         string         `json:"subject"`
+	Audience        string         `json:"audience"`
+	NarrativeArc    string         `json:"narrative_arc"`
+	VisualDirection string         `json:"visual_direction"`
+	DominantNeed    string         `json:"dominant_need"`
+	CoverStyle      string         `json:"cover_style,omitempty"`
+	ColorStory      string         `json:"color_story,omitempty"`
+	Motif           string         `json:"motif,omitempty"`
+	Kicker          string         `json:"kicker,omitempty"`
 	Design          pptxDeckDesign `json:"design,omitempty"`
-	LayoutMix       []string `json:"layout_mix,omitempty"`
+	LayoutMix       []string       `json:"layout_mix,omitempty"`
 }
 
 type pptxPreviewSlide struct {
@@ -160,17 +160,21 @@ func loadPPTXPreviewManifest(data []byte) (pptxPreviewManifest, bool, error) {
 
 func renderPPTXPreviewManifest(manifest pptxPreviewManifest) string {
 	pal := previewManifestPalette(manifest)
+	family := previewDeckRenderFamily(manifest)
 	var body strings.Builder
 
 	body.WriteString(renderPPTXPreviewCover(manifest, pal))
 	for _, slide := range manifest.Slides {
-		body.WriteString(renderPPTXPreviewSlide(slide, pal, len(manifest.Slides)+1))
+		body.WriteString(renderPPTXPreviewSlide(slide, pal, len(manifest.Slides)+1, family))
 	}
 
 	return pptxPreviewHTMLShell(body.String(), manifest, pal)
 }
 
 func renderPPTXPreviewCover(manifest pptxPreviewManifest, pal pptxPalette) string {
+	if previewDeckRenderFamily(manifest) == "proposal" {
+		return renderPPTXPreviewProposalCover(manifest, pal)
+	}
 	kicker := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Kicker), "Subject-specific presentation"))
 	subtitle := ""
 	if text := strings.TrimSpace(manifest.Subtitle); text != "" {
@@ -202,7 +206,10 @@ func renderPPTXPreviewCover(manifest pptxPreviewManifest, pal pptxPalette) strin
 </section>`
 }
 
-func renderPPTXPreviewSlide(slide pptxPreviewSlide, pal pptxPalette, totalSlides int) string {
+func renderPPTXPreviewSlide(slide pptxPreviewSlide, pal pptxPalette, totalSlides int, family string) string {
+	if family == "proposal" {
+		return renderPPTXPreviewProposalSlide(slide, pal, totalSlides)
+	}
 	design := previewSlideRenderDesign(slide)
 	meta := `<div class="barq-preview-meta">
   <span class="barq-preview-kicker">Slide ` + fmt.Sprintf("%d of %d", slide.Number, totalSlides) + `</span>
@@ -249,6 +256,101 @@ func previewSlideRenderDesign(slide pptxPreviewSlide) pptxSlideDesign {
 		Density:     "balanced",
 		VisualFocus: "text",
 	}
+}
+
+func previewDeckRenderFamily(manifest pptxPreviewManifest) string {
+	text := strings.ToLower(strings.Join([]string{
+		manifest.Title,
+		manifest.Subtitle,
+		manifest.Theme,
+		manifest.DeckPlan.Subject,
+		manifest.DeckPlan.Audience,
+		manifest.DeckPlan.NarrativeArc,
+		manifest.DeckPlan.VisualDirection,
+		manifest.DeckPlan.ColorStory,
+		manifest.DeckPlan.DominantNeed,
+	}, " "))
+
+	switch {
+	case containsAny(text, "playful", "storybook", "collage", "cartoon", "fun") &&
+		!containsAny(text, "refined", "structured", "proposal", "report", "executive", "premium"):
+		return "playful"
+	case containsAny(text, "poster", "campaign", "showcase", "gallery", "bold studio") &&
+		!containsAny(text, "proposal", "report", "summary", "brief", "guide"):
+		return "studio"
+	default:
+		return "proposal"
+	}
+}
+
+func previewProposalSlideTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if len([]rune(title)) <= 28 {
+		return strings.ToUpper(title)
+	}
+	return title
+}
+
+func previewProposalSlideIconToken(slide pptxPreviewSlide) string {
+	switch slide.Layout {
+	case "stats", "chart":
+		return "chart"
+	case "steps", "timeline":
+		return "strategy"
+	case "compare":
+		return "integration"
+	case "table":
+		return "shield"
+	case "cards":
+		if len(slide.Cards) > 0 {
+			return inferCardIcon(slide.Cards[0], 0)
+		}
+		return "spark"
+	default:
+		return firstNonEmpty(normalizeIconToken(slide.Heading), inferIconFromText(slide.Heading+" "+slide.Layout), "spark")
+	}
+}
+
+func renderPPTXPreviewProposalCover(manifest pptxPreviewManifest, pal pptxPalette) string {
+	kicker := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Kicker), "Subject-specific presentation"))
+	subtitle := ""
+	if text := strings.TrimSpace(manifest.Subtitle); text != "" {
+		subtitle = `<p class="barq-preview-subtitle">` + html.EscapeString(text) + `</p>`
+	}
+	support := ""
+	if audience := strings.TrimSpace(manifest.DeckPlan.Audience); audience != "" {
+		support = `<p class="barq-preview-support">For ` + html.EscapeString(audience) + `</p>`
+	}
+	footer := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Subject), manifest.Title, "Presentation"))
+	return `<section class="barq-preview-cover" data-family="proposal">
+  <div class="barq-preview-cover-stage">
+    <div class="barq-preview-proposal-cover-panel">
+      <p class="barq-preview-eyebrow">` + kicker + `</p>
+      <div class="barq-preview-cover-rule"></div>
+      <h1>` + html.EscapeString(firstNonEmpty(manifest.Title, "Presentation")) + `</h1>
+      ` + subtitle + `
+      ` + support + `
+    </div>
+    <div class="barq-preview-proposal-footer">` + footer + `</div>
+  </div>
+</section>`
+}
+
+func renderPPTXPreviewProposalSlide(slide pptxPreviewSlide, pal pptxPalette, totalSlides int) string {
+	iconPal := pal
+	iconPal.text = "FFFFFF"
+	iconPal.accent = mixHex(proposalHeaderFill(pal), pal.accent, 0.22)
+	body := renderPPTXPreviewBody(slide, pal)
+	return `<section class="barq-preview-slide" data-family="proposal" data-layout="` + html.EscapeString(slide.Layout) + `">
+  <div class="barq-preview-slide-stage">
+    <div class="barq-preview-proposal-head">
+      <div class="barq-preview-proposal-icon">` + previewCardIconSVG(previewProposalSlideIconToken(slide), iconPal) + `</div>
+      <h2>` + html.EscapeString(previewProposalSlideTitle(firstNonEmpty(slide.Heading, "Untitled Slide"))) + `</h2>
+      <span class="barq-preview-proposal-meta">Slide ` + fmt.Sprintf("%d of %d", slide.Number, totalSlides) + `</span>
+    </div>
+    <div class="barq-preview-slide-body">` + body + `</div>
+  </div>
+</section>`
 }
 
 func renderPPTXPreviewCoverFigure(manifest pptxPreviewManifest, pal pptxPalette, design pptxDeckDesign) string {
@@ -530,6 +632,10 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     --border-soft: ` + hexColor(mixHex(pal.bg, pal.border, 0.72)) + `;
     --surface-soft: ` + hexColor(mixHex(pal.bg, pal.card, 0.88)) + `;
     --track-soft: ` + hexColor(mixHex(pal.bg, pal.border, 0.18)) + `;
+    --proposal-bg: ` + hexColor(proposalCanvasFill(pal)) + `;
+    --proposal-header: ` + hexColor(proposalHeaderFill(pal)) + `;
+    --proposal-footer: ` + hexColor(proposalFooterFill(pal)) + `;
+    --proposal-muted: ` + hexColor(proposalMutedOnDark(pal)) + `;
   }
   * { box-sizing: border-box; }
   body {
@@ -559,6 +665,60 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     display: grid;
     grid-template-columns: minmax(0, 1fr) 280px;
     padding: 34px;
+  }
+  .barq-preview-cover[data-family="proposal"] .barq-preview-cover-stage {
+    min-height: 420px;
+    display: block;
+    padding: 0;
+    border-radius: 26px;
+    border: none;
+    background: var(--proposal-header);
+    box-shadow: 0 28px 64px rgba(10, 20, 32, 0.28);
+  }
+  .barq-preview-cover[data-family="proposal"] .barq-preview-cover-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 6px;
+    background: var(--accent);
+  }
+  .barq-preview-proposal-cover-panel {
+    padding: 60px 56px 40px;
+    max-width: 720px;
+  }
+  .barq-preview-cover[data-family="proposal"] .barq-preview-eyebrow {
+    color: var(--accent);
+  }
+  .barq-preview-cover[data-family="proposal"] .barq-preview-cover-rule {
+    background: var(--accent-2);
+    margin: 14px 0 24px;
+  }
+  .barq-preview-cover[data-family="proposal"] h1 {
+    color: #fff;
+    max-width: 13ch;
+    margin-bottom: 18px;
+  }
+  .barq-preview-cover[data-family="proposal"] .barq-preview-subtitle,
+  .barq-preview-cover[data-family="proposal"] .barq-preview-support,
+  .barq-preview-cover[data-family="proposal"] .barq-preview-subject {
+    color: var(--proposal-muted);
+    max-width: 34ch;
+  }
+  .barq-preview-cover[data-family="proposal"] .barq-preview-cover-figure {
+    display: none;
+  }
+  .barq-preview-proposal-footer {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    padding: 0 56px;
+    background: var(--proposal-footer);
+    color: var(--proposal-muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .barq-preview-cover-panel { padding: 8px 12px 8px; max-width: 560px; }
   .barq-preview-cover-rule {
@@ -699,6 +859,56 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
   .barq-preview-slide-stage {
     padding: 28px 28px 30px;
   }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-slide-stage {
+    padding: 0 0 24px;
+    border-radius: 18px;
+    background: var(--proposal-bg);
+    box-shadow: none;
+  }
+  .barq-preview-proposal-head {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px 24px;
+    background: var(--proposal-header);
+    color: #fff;
+  }
+  .barq-preview-proposal-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .barq-preview-proposal-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .barq-preview-slide[data-family="proposal"] h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 20px;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    max-width: none;
+  }
+  .barq-preview-proposal-meta {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-slide-body {
+    padding: 18px 24px 0;
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-meta {
+    display: none;
+  }
   .barq-preview-slide-stage::before {
     content: "";
     position: absolute;
@@ -781,6 +991,16 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     border-radius: 999px;
     background: var(--accent);
   }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-list li {
+    padding: 14px 16px 14px 18px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-left: 4px solid var(--accent);
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-list li::before {
+    display: none;
+  }
   .barq-preview-stats-grid, .barq-preview-cards-grid, .barq-preview-compare {
     display: grid;
     gap: 14px;
@@ -792,6 +1012,23 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     border: 1px solid var(--border-soft);
     border-radius: 18px;
     padding: 16px;
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-stat,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-card,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-compare-col,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-blank,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-section-break {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-stat {
+    border-top: 4px solid var(--accent);
+    padding-top: 14px;
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-card,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-compare-col {
+    border-left: 4px solid var(--accent);
   }
   .barq-preview-stat-value {
     font-size: 28px;
@@ -822,6 +1059,11 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     border-radius: 16px;
     border: 1px solid var(--border-soft);
     background: var(--surface-soft);
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-step {
+    border-radius: 8px;
+    background: #fff;
+    border-left: 4px solid var(--accent);
   }
   .barq-preview-step-num, .barq-preview-card-icon {
     width: 36px;
@@ -860,6 +1102,13 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     border-radius: 18px;
     background: var(--surface-soft);
     border: 1px solid var(--border-soft);
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-bars,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-timeline-item,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-table td,
+  .barq-preview-slide[data-family="proposal"] .barq-preview-table-wrap {
+    background: #fff;
+    border-radius: 8px;
   }
   .barq-preview-bar-group {
     min-height: 210px;
@@ -909,6 +1158,11 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     background: var(--surface-soft);
     border: 1px solid var(--border-soft);
   }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-timeline-item {
+    border-radius: 8px;
+    background: #fff;
+    border-left: 4px solid var(--accent);
+  }
   .barq-preview-timeline-date {
     color: var(--accent-2);
     font-size: 12px;
@@ -930,6 +1184,10 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+  }
+  .barq-preview-slide[data-family="proposal"] .barq-preview-table thead th {
+    background: rgba(15, 23, 42, 0.06);
+    color: var(--text);
   }
   .barq-preview-table th, .barq-preview-table td {
     padding: 12px 14px;

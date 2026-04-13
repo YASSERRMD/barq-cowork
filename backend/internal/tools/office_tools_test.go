@@ -126,13 +126,14 @@ func TestWritePPTXTool_CreatesMixedDeck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preview pptx: %v", err)
 	}
-	if !strings.Contains(html, "Impact snapshot") || !strings.Contains(html, "Implementation roadmap") {
+	htmlUpper := strings.ToUpper(html)
+	if !strings.Contains(htmlUpper, "IMPACT SNAPSHOT") || !strings.Contains(htmlUpper, "IMPLEMENTATION ROADMAP") {
 		t.Fatalf("pptx preview missing expected headings: %s", html)
 	}
 	if strings.Contains(html, "Audience:") || strings.Contains(html, "AUDITED") {
 		t.Fatalf("pptx preview leaked planning metadata: %s", html)
 	}
-	if !strings.Contains(html, `data-layout="chart"`) || !strings.Contains(html, `data-layout="timeline"`) || !strings.Contains(html, `barq-preview-card-icon`) {
+	if !strings.Contains(html, `data-family="proposal"`) || !strings.Contains(html, `data-layout="chart"`) || !strings.Contains(html, `data-layout="timeline"`) || !strings.Contains(html, `barq-preview-proposal-icon`) {
 		t.Fatalf("pptx preview did not render structured slide layouts: %s", html)
 	}
 }
