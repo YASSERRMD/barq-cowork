@@ -218,6 +218,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Run tests
         working-directory: backend
         run: go test ./... -race -timeout 60s
