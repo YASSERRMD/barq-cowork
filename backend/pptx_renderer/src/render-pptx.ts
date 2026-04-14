@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { chromium } from "playwright-core";
 import PptxGenJS from "pptxgenjs";
 
 type PptxSlide = any;
@@ -17,6 +18,7 @@ type Manifest = {
   narrative?: string;
   layout_mix?: string[];
   slides: SlidePlan[];
+  html_document?: string;
 };
 
 type Palette = {
@@ -42,6 +44,8 @@ type DeckPlan = {
   kicker?: string;
   design?: DeckDesign;
   layout_mix?: string[];
+  theme_css?: string;
+  cover_html?: string;
 };
 
 type DeckDesign = {
@@ -70,6 +74,7 @@ type SlidePlan = {
   content_source?: string;
   design?: SlideDesign;
   speaker_notes?: string;
+  html?: string;
   points?: string[];
   stats?: Stat[];
   steps?: string[];
@@ -856,9 +861,18 @@ function proposalStatsTakeaway(stats: Stat[]): string {
 }
 
 function proposalLeadText(plan: SlidePlan, points: string[]): string {
+  const cleanPoints = points.map(cleanVisibleText).filter(Boolean);
+  if (plan.layout === "bullets" && cleanPoints.length >= 3) {
+    const titles = cleanPoints
+      .slice(0, 3)
+      .map((point) => trimSentence(splitCardText(point).title, 34).replace(/[.]+$/g, ""))
+      .filter(Boolean);
+    if (titles.length === 3) {
+      return `The case for action is defined by ${titles[0]}, ${titles[1]}, and ${titles[2]}.`;
+    }
+  }
   const lead = contentLead(plan);
   if (lead) return lead;
-  const cleanPoints = points.map(cleanVisibleText).filter(Boolean);
   if (cleanPoints.length >= 2) {
     const left = splitCardText(cleanPoints[0]).title;
     const right = splitCardText(cleanPoints[1]).title;
@@ -912,7 +926,27 @@ function coverWordmark(title: string): string {
 }
 
 function sectionKicker(plan: SlidePlan): string {
-  return slideChipLabel(plan);
+  switch (plan.layout) {
+    case "stats":
+      return "EXECUTIVE READOUT";
+    case "chart":
+      return "TREND SIGNAL";
+    case "steps":
+      return "DELIVERY SEQUENCE";
+    case "timeline":
+      return "MILESTONE PLAN";
+    case "compare":
+      return "DECISION SHIFT";
+    case "table":
+      return "STRUCTURED VIEW";
+    case "cards":
+      return "CAPABILITY SYSTEM";
+    case "title":
+    case "blank":
+      return "SECTION TRANSITION";
+    default:
+      return "EXECUTIVE CONTEXT";
+  }
 }
 
 function trimSentence(value: string, limit = 120): string {
@@ -1288,7 +1322,7 @@ function renderCover(slide: PptxSlide, manifest: Manifest, family: RenderFamily,
   const titleY = family === "proposal" ? (wordmark ? 2.54 : 1.92) : 1.54;
   const titleH = family === "proposal" ? 1.04 : 1.78;
   const titleColor = family === "proposal" ? "FFFFFF" : (family === "studio" ? "FFFFFF" : pal.header);
-  addText(slide, family === "proposal" ? (titleRemainder || title) : title, { x: 1.0, y: titleY, w: 7.6, h: titleH }, {
+  addText(slide, family === "proposal" ? (titleRemainder || title) : title, { x: 1.0, y: titleY, w: family === "proposal" ? 6.7 : 7.6, h: titleH }, {
     fontFace: FONT_HEAD,
     fontSize: family === "proposal" ? 27.5 : (family === "playful" ? 25 : 30),
     bold: true,
@@ -1303,21 +1337,37 @@ function renderCover(slide: PptxSlide, manifest: Manifest, family: RenderFamily,
   }
 
   if (subtitle) {
-    addText(slide, subtitle, { x: 1.02, y: family === "proposal" ? 4.02 : 3.18, w: 7.4, h: 0.66 }, {
-      fontFace: FONT_BODY,
-      fontSize: family === "proposal" ? 16.5 : 17,
+    addText(slide, subtitle, { x: 1.02, y: family === "proposal" ? 4.02 : 3.18, w: family === "proposal" ? 6.55 : 7.4, h: 0.66 }, {
+      fontFace: family === "proposal" ? "Georgia" : FONT_BODY,
+      fontSize: family === "proposal" ? 16.2 : 17,
+      italic: family === "proposal",
       color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.22) : "FFFFFF",
       breakLine: true,
     });
   }
   if (support) {
-    addText(slide, support, { x: 1.04, y: family === "proposal" ? 4.84 : 4.02, w: 6.8, h: 0.28 }, {
+    addText(slide, support, { x: 1.04, y: family === "proposal" ? 4.86 : 4.02, w: family === "proposal" ? 6.4 : 6.8, h: 0.28 }, {
       fontFace: FONT_BODY,
       fontSize: family === "proposal" ? 10.5 : 11,
       color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.42) : pal.darkMuted,
     });
   }
   if (family === "proposal") {
+    const coverSlides = manifest.slides.slice(0, 3);
+    addMetaPill(slide, "STRUCTURED OPERATING PLAN", 8.88, 1.08, 3.08, pal);
+    coverSlides.forEach((entry, index) => {
+      addCoverSideCard(
+        slide,
+        slideChipLabel(entry),
+        entry.heading || `Section ${index + 1}`,
+        proposalLeadText(entry, entry.points ?? []),
+        { x: 8.88, y: 1.62 + index * 1.38, w: 3.08, h: 1.18 },
+        slideIconToken(entry),
+        pal,
+      );
+    });
+    const proposalMetaLabel = manifest.deck_plan.audience?.trim() || manifest.deck_plan.subject?.trim() || "Confidential";
+    addMetaPill(slide, proposalMetaLabel, 8.88, 5.86, 3.08, pal);
     const footer = manifest.deck_plan.subject.trim() || manifest.title;
     addText(slide, footer, { x: 1.08, y: 7.02, w: 7.6, h: 0.22 }, {
       fontFace: FONT_BODY,
@@ -2055,7 +2105,76 @@ async function readStdin(): Promise<string> {
   });
 }
 
-async function buildPresentation(manifest: Manifest, outputPath: string): Promise<void> {
+function resolveBrowserExecutable(): string {
+  const candidates = [
+    process.env.PPTX_RENDER_BROWSER,
+    process.env.CHROME_PATH,
+    process.env.GOOGLE_CHROME_BIN,
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "",
+    process.platform === "darwin" ? "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" : "",
+    process.platform === "linux" ? "/usr/bin/google-chrome" : "",
+    process.platform === "linux" ? "/usr/bin/google-chrome-stable" : "",
+    process.platform === "linux" ? "/usr/bin/chromium-browser" : "",
+    process.platform === "linux" ? "/usr/bin/chromium" : "",
+  ].filter((value): value is string => Boolean(value && value.trim()));
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+async function buildPresentationFromHTML(htmlDocument: string, outputPath: string, domBundlePath: string): Promise<void> {
+  const executablePath = resolveBrowserExecutable();
+  if (!executablePath) {
+    throw new Error("no compatible Chrome/Chromium executable found for DOM-to-PPTX export");
+  }
+  if (!fs.existsSync(domBundlePath)) {
+    throw new Error(`missing dom-to-pptx browser bundle at ${domBundlePath}`);
+  }
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath,
+    args: ["--allow-file-access-from-files"],
+  });
+
+  try {
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      viewport: { width: 1920, height: 1080 },
+      deviceScaleFactor: 1,
+    });
+    const page = await context.newPage();
+    await page.setContent(htmlDocument, { waitUntil: "domcontentloaded" });
+    await page.addScriptTag({ path: domBundlePath });
+    await page.waitForFunction(() => Boolean((window as any).domToPptx?.exportToPptx));
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.evaluate((fileName) => {
+      const slides = Array.from(document.querySelectorAll(".barq-pptx-slide"));
+      if (!slides.length) {
+        throw new Error("html deck does not contain any .barq-pptx-slide elements");
+      }
+      return (window as any).domToPptx.exportToPptx(slides, {
+        fileName,
+        svgAsVector: true,
+      });
+    }, path.basename(outputPath));
+
+    const download = await downloadPromise;
+    await download.saveAs(outputPath);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+}
+
+async function buildPresentationFromStructuredManifest(manifest: Manifest, outputPath: string): Promise<void> {
   const family = previewFamily(manifest);
   const pal = buildPalette(manifest, family);
   const PPTXRuntime = PptxGenJS as unknown as new () => any;
@@ -2089,19 +2208,29 @@ async function buildPresentation(manifest: Manifest, outputPath: string): Promis
   await pptx.writeFile({ fileName: outputPath, compression: true });
 }
 
+async function buildPresentation(manifest: Manifest, outputPath: string, domBundlePath: string): Promise<void> {
+  if (manifest.html_document?.trim()) {
+    await buildPresentationFromHTML(manifest.html_document, outputPath, domBundlePath);
+    return;
+  }
+  await buildPresentationFromStructuredManifest(manifest, outputPath);
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const outIndex = args.indexOf("--output");
-  if (outIndex === -1 || outIndex === args.length - 1) {
-    throw new Error("missing --output <path>");
+  const bundleIndex = args.indexOf("--dom-bundle");
+  if (outIndex === -1 || outIndex === args.length - 1 || bundleIndex === -1 || bundleIndex === args.length - 1) {
+    throw new Error("missing --output <path> or --dom-bundle <path>");
   }
   const outputPath = path.resolve(args[outIndex + 1]);
+  const domBundlePath = path.resolve(args[bundleIndex + 1]);
   const payload = await readStdin();
   if (!payload.trim()) {
     throw new Error("missing manifest payload on stdin");
   }
   const manifest = validateManifest(JSON.parse(payload));
-  await buildPresentation(manifest, outputPath);
+  await buildPresentation(manifest, outputPath, domBundlePath);
   process.stdout.write(JSON.stringify({ status: "ok", output: outputPath }) + "\n");
 }
 

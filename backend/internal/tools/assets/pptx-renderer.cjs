@@ -9760,6 +9760,7 @@ var require_lib3 = __commonJS({
 // src/render-pptx.ts
 var import_node_fs = __toESM(require("node:fs"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
+var import_playwright_core = require("playwright-core");
 
 // node_modules/pptxgenjs/dist/pptxgen.es.js
 var import_jszip = __toESM(require_lib3());
@@ -15681,9 +15682,15 @@ function proposalStatsTakeaway(stats) {
   return `Decision signals: ${labels[0]}, ${labels[1]}, and ${labels[2]}.`;
 }
 function proposalLeadText(plan, points) {
+  const cleanPoints = points.map(cleanVisibleText).filter(Boolean);
+  if (plan.layout === "bullets" && cleanPoints.length >= 3) {
+    const titles = cleanPoints.slice(0, 3).map((point) => trimSentence(splitCardText(point).title, 34).replace(/[.]+$/g, "")).filter(Boolean);
+    if (titles.length === 3) {
+      return `The case for action is defined by ${titles[0]}, ${titles[1]}, and ${titles[2]}.`;
+    }
+  }
   const lead = contentLead(plan);
   if (lead) return lead;
-  const cleanPoints = points.map(cleanVisibleText).filter(Boolean);
   if (cleanPoints.length >= 2) {
     const left = splitCardText(cleanPoints[0]).title;
     const right = splitCardText(cleanPoints[1]).title;
@@ -15733,7 +15740,27 @@ function coverWordmark(title) {
   return "";
 }
 function sectionKicker(plan) {
-  return slideChipLabel(plan);
+  switch (plan.layout) {
+    case "stats":
+      return "EXECUTIVE READOUT";
+    case "chart":
+      return "TREND SIGNAL";
+    case "steps":
+      return "DELIVERY SEQUENCE";
+    case "timeline":
+      return "MILESTONE PLAN";
+    case "compare":
+      return "DECISION SHIFT";
+    case "table":
+      return "STRUCTURED VIEW";
+    case "cards":
+      return "CAPABILITY SYSTEM";
+    case "title":
+    case "blank":
+      return "SECTION TRANSITION";
+    default:
+      return "EXECUTIVE CONTEXT";
+  }
 }
 function trimSentence(value, limit = 120) {
   const clean = value.trim();
@@ -15742,6 +15769,51 @@ function trimSentence(value, limit = 120) {
   const parts = clipped.split(/[.!?]/);
   if (parts[0]?.trim()) return `${parts[0].trim()}.`;
   return `${clipped}\u2026`;
+}
+function addMetaPill(slide, text, x, y, w, pal) {
+  addPanel(slide, { x, y, w, h: 0.34 }, mixHex(pal.header, pal.card, 0.08), mixHex(pal.header, pal.card, 0.14), 0.08);
+  addText(slide, text, { x: x + 0.12, y: y + 0.08, w: w - 0.24, h: 0.16 }, {
+    fontFace: FONT_BODY,
+    fontSize: 9,
+    color: pal.darkMuted,
+    bold: true,
+    align: "center",
+    fit: "shrink"
+  });
+}
+function addCoverSideCard(slide, label, title, body, bounds, token, pal) {
+  addPanel(slide, bounds, mixHex(pal.header, pal.card, 0.06), mixHex(pal.header, pal.card, 0.12), 0.08);
+  addIcon(slide, token, bounds.x + 0.18, bounds.y + 0.18, 0.34, {
+    ...pal,
+    accent: accentColor(pal, label.length),
+    accent2: mixHex(accentColor(pal, label.length), pal.card, 0.44),
+    text: "FFFFFF"
+  });
+  addText(slide, label.toUpperCase(), { x: bounds.x + 0.62, y: bounds.y + 0.16, w: bounds.w - 0.82, h: 0.16 }, {
+    fontFace: FONT_BODY,
+    fontSize: 8.5,
+    color: pal.darkMuted,
+    charSpace: 0.8,
+    bold: true
+  });
+  addText(slide, title, { x: bounds.x + 0.18, y: bounds.y + 0.62, w: bounds.w - 0.36, h: 0.34 }, {
+    fontFace: FONT_HEAD,
+    fontSize: 13,
+    bold: true,
+    color: "FFFFFF",
+    breakLine: true,
+    valign: "top"
+  });
+  if (body.trim()) {
+    addText(slide, trimSentence(body, 72), { x: bounds.x + 0.18, y: bounds.y + 1.02, w: bounds.w - 0.36, h: bounds.h - 1.16 }, {
+      fontFace: FONT_BODY,
+      fontSize: 10,
+      color: pal.darkMuted,
+      breakLine: true,
+      valign: "top",
+      fit: "shrink"
+    });
+  }
 }
 function addTopSummaryStrip(slide, plan, bounds, pal, token) {
   const stripH = 0.64;
@@ -16022,7 +16094,7 @@ function renderCover(slide, manifest, family, pal) {
   const titleY = family === "proposal" ? wordmark ? 2.54 : 1.92 : 1.54;
   const titleH = family === "proposal" ? 1.04 : 1.78;
   const titleColor = family === "proposal" ? "FFFFFF" : family === "studio" ? "FFFFFF" : pal.header;
-  addText(slide, family === "proposal" ? titleRemainder || title : title, { x: 1, y: titleY, w: 7.6, h: titleH }, {
+  addText(slide, family === "proposal" ? titleRemainder || title : title, { x: 1, y: titleY, w: family === "proposal" ? 6.7 : 7.6, h: titleH }, {
     fontFace: FONT_HEAD,
     fontSize: family === "proposal" ? 27.5 : family === "playful" ? 25 : 30,
     bold: true,
@@ -16035,21 +16107,37 @@ function renderCover(slide, manifest, family, pal) {
     addLine(slide, 1.06, titleY + titleH + 0.1, 2.7, 0, "D6A33E", 2.5);
   }
   if (subtitle) {
-    addText(slide, subtitle, { x: 1.02, y: family === "proposal" ? 4.02 : 3.18, w: 7.4, h: 0.66 }, {
-      fontFace: FONT_BODY,
-      fontSize: family === "proposal" ? 16.5 : 17,
+    addText(slide, subtitle, { x: 1.02, y: family === "proposal" ? 4.02 : 3.18, w: family === "proposal" ? 6.55 : 7.4, h: 0.66 }, {
+      fontFace: family === "proposal" ? "Georgia" : FONT_BODY,
+      fontSize: family === "proposal" ? 16.2 : 17,
+      italic: family === "proposal",
       color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.22) : "FFFFFF",
       breakLine: true
     });
   }
   if (support) {
-    addText(slide, support, { x: 1.04, y: family === "proposal" ? 4.84 : 4.02, w: 6.8, h: 0.28 }, {
+    addText(slide, support, { x: 1.04, y: family === "proposal" ? 4.86 : 4.02, w: family === "proposal" ? 6.4 : 6.8, h: 0.28 }, {
       fontFace: FONT_BODY,
       fontSize: family === "proposal" ? 10.5 : 11,
       color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.42) : pal.darkMuted
     });
   }
   if (family === "proposal") {
+    const coverSlides = manifest.slides.slice(0, 3);
+    addMetaPill(slide, "STRUCTURED OPERATING PLAN", 8.88, 1.08, 3.08, pal);
+    coverSlides.forEach((entry, index) => {
+      addCoverSideCard(
+        slide,
+        slideChipLabel(entry),
+        entry.heading || `Section ${index + 1}`,
+        proposalLeadText(entry, entry.points ?? []),
+        { x: 8.88, y: 1.62 + index * 1.38, w: 3.08, h: 1.18 },
+        slideIconToken(entry),
+        pal
+      );
+    });
+    const proposalMetaLabel = manifest.deck_plan.audience?.trim() || manifest.deck_plan.subject?.trim() || "Confidential";
+    addMetaPill(slide, proposalMetaLabel, 8.88, 5.86, 3.08, pal);
     const footer = manifest.deck_plan.subject.trim() || manifest.title;
     addText(slide, footer, { x: 1.08, y: 7.02, w: 7.6, h: 0.22 }, {
       fontFace: FONT_BODY,
@@ -16751,7 +16839,69 @@ async function readStdin() {
     process.stdin.on("error", reject);
   });
 }
-async function buildPresentation(manifest, outputPath) {
+function resolveBrowserExecutable() {
+  const candidates = [
+    process.env.PPTX_RENDER_BROWSER,
+    process.env.CHROME_PATH,
+    process.env.GOOGLE_CHROME_BIN,
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "",
+    process.platform === "darwin" ? "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" : "",
+    process.platform === "linux" ? "/usr/bin/google-chrome" : "",
+    process.platform === "linux" ? "/usr/bin/google-chrome-stable" : "",
+    process.platform === "linux" ? "/usr/bin/chromium-browser" : "",
+    process.platform === "linux" ? "/usr/bin/chromium" : ""
+  ].filter((value) => Boolean(value && value.trim()));
+  for (const candidate of candidates) {
+    if (import_node_fs.default.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+async function buildPresentationFromHTML(htmlDocument, outputPath, domBundlePath) {
+  const executablePath = resolveBrowserExecutable();
+  if (!executablePath) {
+    throw new Error("no compatible Chrome/Chromium executable found for DOM-to-PPTX export");
+  }
+  if (!import_node_fs.default.existsSync(domBundlePath)) {
+    throw new Error(`missing dom-to-pptx browser bundle at ${domBundlePath}`);
+  }
+  import_node_fs.default.mkdirSync(import_node_path.default.dirname(outputPath), { recursive: true });
+  const browser = await import_playwright_core.chromium.launch({
+    headless: true,
+    executablePath,
+    args: ["--allow-file-access-from-files"]
+  });
+  try {
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      viewport: { width: 1920, height: 1080 },
+      deviceScaleFactor: 1
+    });
+    const page = await context.newPage();
+    await page.setContent(htmlDocument, { waitUntil: "domcontentloaded" });
+    await page.addScriptTag({ path: domBundlePath });
+    await page.waitForFunction(() => Boolean(window.domToPptx?.exportToPptx));
+    const downloadPromise = page.waitForEvent("download");
+    await page.evaluate((fileName) => {
+      const slides = Array.from(document.querySelectorAll(".barq-pptx-slide"));
+      if (!slides.length) {
+        throw new Error("html deck does not contain any .barq-pptx-slide elements");
+      }
+      return window.domToPptx.exportToPptx(slides, {
+        fileName,
+        svgAsVector: true
+      });
+    }, import_node_path.default.basename(outputPath));
+    const download = await downloadPromise;
+    await download.saveAs(outputPath);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+}
+async function buildPresentationFromStructuredManifest(manifest, outputPath) {
   const family = previewFamily(manifest);
   const pal = buildPalette(manifest, family);
   const PPTXRuntime = PptxGenJS;
@@ -16781,19 +16931,28 @@ async function buildPresentation(manifest, outputPath) {
   import_node_fs.default.mkdirSync(import_node_path.default.dirname(outputPath), { recursive: true });
   await pptx.writeFile({ fileName: outputPath, compression: true });
 }
+async function buildPresentation(manifest, outputPath, domBundlePath) {
+  if (manifest.html_document?.trim()) {
+    await buildPresentationFromHTML(manifest.html_document, outputPath, domBundlePath);
+    return;
+  }
+  await buildPresentationFromStructuredManifest(manifest, outputPath);
+}
 async function main() {
   const args = process.argv.slice(2);
   const outIndex = args.indexOf("--output");
-  if (outIndex === -1 || outIndex === args.length - 1) {
-    throw new Error("missing --output <path>");
+  const bundleIndex = args.indexOf("--dom-bundle");
+  if (outIndex === -1 || outIndex === args.length - 1 || bundleIndex === -1 || bundleIndex === args.length - 1) {
+    throw new Error("missing --output <path> or --dom-bundle <path>");
   }
   const outputPath = import_node_path.default.resolve(args[outIndex + 1]);
+  const domBundlePath = import_node_path.default.resolve(args[bundleIndex + 1]);
   const payload = await readStdin();
   if (!payload.trim()) {
     throw new Error("missing manifest payload on stdin");
   }
   const manifest = validateManifest(JSON.parse(payload));
-  await buildPresentation(manifest, outputPath);
+  await buildPresentation(manifest, outputPath, domBundlePath);
   process.stdout.write(JSON.stringify({ status: "ok", output: outputPath }) + "\n");
 }
 main().catch((err) => {

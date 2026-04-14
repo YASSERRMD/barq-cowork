@@ -27,6 +27,8 @@ type plannedPPTXDeckPlan struct {
 	Kicker          string         `json:"kicker,omitempty"`
 	Design          pptxDeckDesign `json:"design,omitempty"`
 	LayoutMix       []string       `json:"layout_mix,omitempty"`
+	ThemeCSS        string         `json:"theme_css,omitempty"`
+	CoverHTML       string         `json:"cover_html,omitempty"`
 }
 
 type plannedPPTXSlide struct {
@@ -108,6 +110,10 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 	contentSource := "explicit"
 
 	switch layout {
+	case "html":
+		if strings.TrimSpace(planned.HTML) == "" {
+			contentSource = "subject-default"
+		}
 	case "stats":
 		stats := effectiveStats(planned)
 		switch {
@@ -237,6 +243,7 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 func sanitizePlannedSlide(slide pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, index int) pptxSlide {
 	slide.Points = sanitizeVisiblePoints(slide.Points)
 	slide.Steps = sanitizeVisiblePoints(slide.Steps)
+	slide.HTML = sanitizeHTMLMarkup(slide.HTML)
 
 	if index == 0 && effectivePPTXLayout(slide) == "bullets" {
 		if sameDisplayTopic(slide.Heading, deckTitle) || sameDisplayTopic(slide.Heading, deck.Subject) {
@@ -343,6 +350,8 @@ func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string
 		Kicker:          strings.TrimSpace(firstNonEmpty(deckInput.Kicker, defaultDeckKicker(themeName, audience, subject))),
 		Design:          defaultDeckDesign(themeName, audience, deckInput),
 		LayoutMix:       plannedLayoutMixFromInputs(slides),
+		ThemeCSS:        sanitizeCSSMarkup(deckInput.ThemeCSS),
+		CoverHTML:       sanitizeHTMLMarkup(deckInput.CoverHTML),
 	}
 }
 
@@ -491,6 +500,11 @@ func defaultSlideDesign(deck plannedPPTXDeckPlan, layout string) pptxSlideDesign
 		Density: firstNonEmpty(deck.Design.Density, "balanced"),
 	}
 	switch layout {
+	case "html":
+		design.LayoutStyle = "custom"
+		design.PanelStyle = "none"
+		design.AccentMode = firstNonEmpty(deck.Design.AccentMode, "band")
+		design.VisualFocus = "custom"
 	case "stats":
 		design.LayoutStyle = "grid"
 		design.PanelStyle = "soft"
@@ -830,6 +844,8 @@ func plannedLayoutMixFromInputs(slides []pptxSlide) []string {
 func slidePurpose(deck plannedPPTXDeckPlan, layout, heading string) string {
 	subject := shortSubject(deck.Subject, heading)
 	switch layout {
+	case "html":
+		return "Present a fully custom slide composition for " + subject + "."
 	case "stats":
 		return "Prove the scale of " + subject + " with headline metrics."
 	case "steps":
@@ -855,6 +871,8 @@ func slidePurpose(deck plannedPPTXDeckPlan, layout, heading string) string {
 
 func slideVisual(layout, heading string) string {
 	switch layout {
+	case "html":
+		return "custom-authored HTML composition"
 	case "stats":
 		return "metric cards with quick scan emphasis"
 	case "steps":
@@ -881,6 +899,8 @@ func slideVisual(layout, heading string) string {
 func generatedSpeakerNotes(slide pptxSlide, plan plannedPPTXSlidePlan) string {
 	anchor := firstNonEmpty(slide.Heading, "this topic")
 	switch slide.Type {
+	case "html":
+		return fmt.Sprintf("Use %s to deliver a designed argument in one composed slide.", anchor)
 	case "stats":
 		return fmt.Sprintf("Lead with %s and explain the few numbers that matter most. Use this slide to %s", anchor, strings.ToLower(plan.Purpose))
 	case "chart":
@@ -895,6 +915,11 @@ func generatedSpeakerNotes(slide pptxSlide, plan plannedPPTXSlidePlan) string {
 func auditPlannedSlide(slide pptxSlide, layout string) plannedPPTXSlideAudit {
 	audit := plannedPPTXSlideAudit{}
 	switch layout {
+	case "html":
+		text := htmlVisibleText(slide.HTML)
+		audit.ContentFit = len(text) >= 24
+		audit.LayoutFit = strings.TrimSpace(slide.HTML) != ""
+		audit.VisualFit = htmlHasStructuredBlocks(slide.HTML)
 	case "stats":
 		audit.ContentFit = len(slide.Stats) >= 2 && len(slide.Stats) <= 4
 		audit.LayoutFit = audit.ContentFit
@@ -947,6 +972,8 @@ func auditPlannedSlide(slide pptxSlide, layout string) plannedPPTXSlideAudit {
 
 func defaultSlideHeading(layout, deckTitle string, index int) string {
 	switch layout {
+	case "html":
+		return "Custom Composition"
 	case "title":
 		return "Section"
 	case "stats":

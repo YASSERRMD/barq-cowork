@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/render-pptx.ts --bundle --platform=node --format=cjs --target=node20 --outfile=../internal/tools/assets/pptx-renderer.cjs",
+    "build": "node build.mjs",
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "dom-to-pptx": "^1.1.6",
+    "playwright-core": "^1.56.0",
     "pptxgenjs": "^4.0.1"
   },
   "devDependencies": {
