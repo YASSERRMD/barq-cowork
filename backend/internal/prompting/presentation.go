@@ -17,6 +17,7 @@ WORKFLOW
    - educational explainer
    - another subject-specific system if the request calls for it
 3. Build the deck brief first:
+   - archetype
    - subject
    - audience
    - narrative
@@ -53,6 +54,9 @@ DECK BRIEF QUALITY BAR
 - If the user provides a reference deck, infer its design system: pacing, hierarchy, cover discipline, spacing, table chrome, chart treatment, and closing style.
 - Proposal / report / business decks should feel like designed documents, not classroom slides or startup pitch templates.
 - AI / future / technology subjects should not automatically fall back to the same teal-blue corporate pattern.
+- Civic / national / policy decks should not reuse the same dark proposal shell as cost proposals or rollout plans.
+- Technology narratives should not automatically collapse into the proposal shell unless the request is explicitly a plan, proposal, or operating review.
+- Rollout, implementation, budget, costing, and delivery-roadmap decks should be treated as structured proposal/report systems even when the subject is AI, healthcare, or technology.
 - Choose one coherent deck system and stay inside it:
   - cover language
   - header treatment

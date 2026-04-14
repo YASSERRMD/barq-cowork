@@ -33,6 +33,7 @@ type pptxPreviewPalette struct {
 }
 
 type pptxPreviewDeckPlan struct {
+	Archetype       string         `json:"archetype,omitempty"`
 	Subject         string         `json:"subject"`
 	Audience        string         `json:"audience"`
 	NarrativeArc    string         `json:"narrative_arc"`
@@ -87,6 +88,7 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			Border:     planned.Palette.border,
 		},
 		DeckPlan: pptxPreviewDeckPlan{
+			Archetype:       planned.DeckPlan.Archetype,
 			Subject:         planned.DeckPlan.Subject,
 			Audience:        planned.DeckPlan.Audience,
 			NarrativeArc:    planned.DeckPlan.NarrativeArc,
@@ -191,7 +193,7 @@ func renderPPTXPreviewCover(manifest pptxPreviewManifest, pal pptxPalette) strin
 	coverStyle := html.EscapeString(previewCoverStyle(manifest))
 	design := previewDeckRenderDesign(manifest)
 
-	return `<section class="barq-preview-cover" data-cover-style="` + coverStyle + `" data-composition="` + html.EscapeString(design.Composition) + `" data-accent-mode="` + html.EscapeString(design.AccentMode) + `">
+	return `<section class="barq-preview-cover" data-family="` + html.EscapeString(previewDeckRenderFamily(manifest)) + `" data-cover-style="` + coverStyle + `" data-composition="` + html.EscapeString(design.Composition) + `" data-accent-mode="` + html.EscapeString(design.AccentMode) + `">
   <div class="barq-preview-cover-stage">
     <div class="barq-preview-cover-panel">
       <p class="barq-preview-eyebrow">` + kicker + `</p>
@@ -212,7 +214,7 @@ func renderPPTXPreviewSlide(slide pptxPreviewSlide, pal pptxPalette, totalSlides
 	}
 	design := previewSlideRenderDesign(slide)
 	meta := `<div class="barq-preview-meta">
-  <span class="barq-preview-kicker">Slide ` + fmt.Sprintf("%d of %d", slide.Number, totalSlides) + `</span>
+  <span class="barq-preview-kicker">` + html.EscapeString(previewProposalSlideChipLabel(slide)) + `</span>
 </div>`
 
 	body := renderPPTXPreviewBody(slide, pal)
@@ -263,6 +265,7 @@ func previewDeckRenderFamily(manifest pptxPreviewManifest) string {
 		manifest.Title,
 		manifest.Subtitle,
 		manifest.Theme,
+		manifest.DeckPlan.Archetype,
 		manifest.DeckPlan.Subject,
 		manifest.DeckPlan.Audience,
 		manifest.DeckPlan.NarrativeArc,
@@ -270,16 +273,57 @@ func previewDeckRenderFamily(manifest pptxPreviewManifest) string {
 		manifest.DeckPlan.ColorStory,
 		manifest.DeckPlan.DominantNeed,
 	}, " "))
+	dominant := previewDominantFamilyHint(text)
+	archetypeFamily := previewFamilyFromArchetype(manifest.DeckPlan.Archetype)
 
 	switch {
-	case containsAny(text, "playful", "storybook", "collage", "cartoon", "fun") &&
-		!containsAny(text, "refined", "structured", "proposal", "report", "executive", "premium"):
-		return "playful"
-	case containsAny(text, "poster", "campaign", "showcase", "gallery", "bold studio") &&
-		!containsAny(text, "proposal", "report", "summary", "brief", "guide"):
-		return "studio"
+	case dominant == "proposal":
+		return "proposal"
+	case dominant == "civic" && archetypeFamily != "proposal":
+		return "civic"
+	case dominant == "tech" && archetypeFamily != "proposal" && archetypeFamily != "civic":
+		return "tech"
+	case archetypeFamily != "":
+		return archetypeFamily
+	case dominant != "":
+		return dominant
 	default:
 		return "proposal"
+	}
+}
+
+func previewDominantFamilyHint(text string) string {
+	switch {
+	case containsAny(text, "proposal", "cost", "pricing", "budget", "business case", "implementation plan", "delivery roadmap", "rollout", "scope", "rate card"):
+		return "proposal"
+	case containsAny(text, "policy", "government", "public sector", "national", "regulatory", "uae", "ministry", "authority", "civic"):
+		return "civic"
+	case containsAny(text, "technology", "platform", "software", "product", "innovation", "future", "digital", "ai"):
+		return "tech"
+	case containsAny(text, "poster", "campaign", "showcase", "gallery", "bold studio"):
+		return "studio"
+	case containsAny(text, "playful", "storybook", "collage", "cartoon", "fun", "kids", "children", "classroom"):
+		return "playful"
+	default:
+		return ""
+	}
+}
+
+func previewFamilyFromArchetype(archetype string) string {
+	text := strings.ToLower(strings.TrimSpace(archetype))
+	switch {
+	case containsAny(text, "playful", "storybook", "classroom", "kids"):
+		return "playful"
+	case containsAny(text, "poster", "studio", "campaign", "showcase"):
+		return "studio"
+	case containsAny(text, "policy", "civic", "government", "public sector", "national", "regulatory", "institutional"):
+		return "civic"
+	case containsAny(text, "technology", "product narrative", "innovation narrative", "platform narrative", "technology showcase", "future narrative"):
+		return "tech"
+	case containsAny(text, "proposal", "operating plan", "cost proposal", "business case", "executive brief", "board brief", "implementation plan"):
+		return "proposal"
+	default:
+		return ""
 	}
 }
 

@@ -123,6 +123,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 		"type":        "object",
 		"description": "Required deck-level design plan chosen by the model. Fill this completely so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults.",
 		"properties": map[string]any{
+			"archetype":    map[string]any{"type": "string", "description": "Deck archetype such as proposal, operating plan, executive brief, policy brief, civic strategy, product narrative, technology showcase, or educational explainer"},
 			"subject":      map[string]any{"type": "string", "description": "Explicit subject framing if it should differ from the title"},
 			"audience":     map[string]any{"type": "string", "description": "Who this presentation is for, e.g. 'parents and educators' or 'board members'"},
 			"narrative":    map[string]any{"type": "string", "description": "High-level story arc for the deck"},
@@ -246,6 +247,7 @@ type pptxPaletteInput struct {
 }
 
 type pptxDeckDesignInput struct {
+	Archetype   string            `json:"archetype,omitempty"`
 	Subject     string            `json:"subject,omitempty"`
 	Audience    string            `json:"audience,omitempty"`
 	Narrative   string            `json:"narrative,omitempty"`

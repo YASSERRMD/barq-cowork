@@ -55,6 +55,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 11. Default to a refined contemporary presentation aesthetic. Avoid dated corporate blue-orange palettes, thick office-style borders, repetitive bullet slabs, and generic 2000s deck patterns unless the user explicitly asks for them.
 12. For AI, digital-future, innovation, or forward-looking subjects, prefer airy split/gallery compositions, restrained surfaces, and a fresh palette rather than classroom amber or old business-deck blue.
 13. Keep one coherent deck system across the full presentation: cover language, header treatment, spacing, card style, and table/chart chrome should feel like one designed document, not a different template on every slide.
+14. If the request is a rollout, proposal, cost estimate, implementation plan, or delivery roadmap, treat it as a structured proposal/report system even if the subject is AI, healthcare, or technology.
 
 TYPE REFERENCE — choose the right type per slide:
 

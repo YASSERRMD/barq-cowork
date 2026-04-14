@@ -15,6 +15,7 @@ type plannedPPTXPresentation struct {
 }
 
 type plannedPPTXDeckPlan struct {
+	Archetype       string         `json:"archetype,omitempty"`
 	Subject         string         `json:"subject"`
 	Audience        string         `json:"audience"`
 	NarrativeArc    string         `json:"narrative_arc"`
@@ -328,7 +329,9 @@ func openingSupportPoint(deck plannedPPTXDeckPlan) string {
 func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string, deckInput pptxDeckDesignInput) plannedPPTXDeckPlan {
 	subject := strings.TrimSpace(firstNonEmpty(deckInput.Subject, title, subtitle, "Presentation"))
 	audience := strings.TrimSpace(firstNonEmpty(deckInput.Audience, deriveAudience(subtitle, title)))
+	archetype := resolveDeckArchetype(deckInput.Archetype, subject, audience, themeName, deckInput.VisualStyle, deckInput.Narrative)
 	return plannedPPTXDeckPlan{
+		Archetype:       archetype,
 		Subject:         subject,
 		Audience:        audience,
 		NarrativeArc:    strings.TrimSpace(firstNonEmpty(deckInput.Narrative, deriveNarrativeArcFromInputs(slides))),
@@ -340,6 +343,64 @@ func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string
 		Kicker:          strings.TrimSpace(firstNonEmpty(deckInput.Kicker, defaultDeckKicker(themeName, audience, subject))),
 		Design:          defaultDeckDesign(themeName, audience, deckInput),
 		LayoutMix:       plannedLayoutMixFromInputs(slides),
+	}
+}
+
+func resolveDeckArchetype(explicit, subject, audience, themeName, visualStyle, narrative string) string {
+	explicit = strings.TrimSpace(explicit)
+	inferred := inferDeckArchetype(subject, audience, themeName, visualStyle, narrative)
+	if explicit == "" {
+		return inferred
+	}
+
+	forced := inferDeckArchetype(strings.Join([]string{subject, explicit}, " "), audience, themeName, visualStyle, narrative)
+	if forced != "executive presentation" {
+		return forced
+	}
+
+	if canonical := canonicalDeckArchetype(explicit); canonical != "" {
+		return canonical
+	}
+	return explicit
+}
+
+func inferDeckArchetype(subject, audience, themeName, visualStyle, narrative string) string {
+	text := strings.ToLower(strings.Join([]string{
+		subject,
+		audience,
+		themeName,
+		visualStyle,
+		narrative,
+	}, " "))
+
+	switch {
+	case containsAny(text, "cost proposal", "proposal", "budget", "pricing", "business case", "operating plan", "implementation plan", "rollout", "scope", "delivery roadmap"):
+		return "proposal"
+	case containsAny(text, "policy", "government", "public sector", "national", "regulatory", "framework", "ministry", "authority", "uae", "civic", "institutional strategy"):
+		return "civic brief"
+	case containsAny(text, "product", "platform", "launch", "showcase", "innovation", "technology", "software", "developer", "future", "digital") &&
+		!containsAny(text, "proposal", "budget", "rollout", "policy", "government", "operating plan"):
+		return "technology narrative"
+	case containsAny(text, "education", "school", "classroom", "learning", "students", "teachers"):
+		return "educational explainer"
+	default:
+		return "executive presentation"
+	}
+}
+
+func canonicalDeckArchetype(raw string) string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case containsAny(text, "cost proposal", "proposal", "budget", "pricing", "business case", "operating plan", "implementation plan", "rollout", "scope", "delivery roadmap", "executive brief", "board brief"):
+		return "proposal"
+	case containsAny(text, "policy", "government", "public sector", "national", "regulatory", "framework", "ministry", "authority", "uae", "civic", "institutional strategy"):
+		return "civic brief"
+	case containsAny(text, "education", "school", "classroom", "learning", "students", "teachers"):
+		return "educational explainer"
+	case containsAny(text, "product", "platform", "launch", "showcase", "innovation", "technology", "software", "developer", "future", "digital"):
+		return "technology narrative"
+	default:
+		return ""
 	}
 }
 
@@ -370,10 +431,14 @@ func defaultDeckDesign(themeName, audience string, deckInput pptxDeckDesignInput
 	}
 	if strings.TrimSpace(design.Density) == "" {
 		switch {
+		case containsAny(strings.ToLower(strings.Join([]string{audience, deckInput.VisualStyle, deckInput.Archetype}, " ")), "proposal", "operating plan", "board", "executive", "civic", "policy", "rollout", "brief"):
+			design.Density = "dense"
 		case containsAny(strings.ToLower(strings.Join([]string{audience, deckInput.VisualStyle}, " ")), "kids", "children", "classroom", "playful"):
 			design.Density = "dense"
+		case containsAny(strings.ToLower(strings.Join([]string{deckInput.Archetype, deckInput.VisualStyle}, " ")), "technology", "product", "future", "innovation", "digital"):
+			design.Density = "balanced"
 		case containsAny(strings.ToLower(deckInput.VisualStyle), "minimal", "editorial", "premium", "calm", "contemporary", "modern", "refined", "future"):
-			design.Density = "airy"
+			design.Density = "balanced"
 		default:
 			design.Density = "balanced"
 		}
