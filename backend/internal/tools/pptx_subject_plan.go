@@ -15,17 +15,17 @@ type plannedPPTXPresentation struct {
 }
 
 type plannedPPTXDeckPlan struct {
-	Subject         string   `json:"subject"`
-	Audience        string   `json:"audience"`
-	NarrativeArc    string   `json:"narrative_arc"`
-	VisualDirection string   `json:"visual_direction"`
-	DominantNeed    string   `json:"dominant_need"`
-	CoverStyle      string   `json:"cover_style,omitempty"`
-	ColorStory      string   `json:"color_story,omitempty"`
-	Motif           string   `json:"motif,omitempty"`
-	Kicker          string   `json:"kicker,omitempty"`
+	Subject         string         `json:"subject"`
+	Audience        string         `json:"audience"`
+	NarrativeArc    string         `json:"narrative_arc"`
+	VisualDirection string         `json:"visual_direction"`
+	DominantNeed    string         `json:"dominant_need"`
+	CoverStyle      string         `json:"cover_style,omitempty"`
+	ColorStory      string         `json:"color_story,omitempty"`
+	Motif           string         `json:"motif,omitempty"`
+	Kicker          string         `json:"kicker,omitempty"`
 	Design          pptxDeckDesign `json:"design,omitempty"`
-	LayoutMix       []string `json:"layout_mix,omitempty"`
+	LayoutMix       []string       `json:"layout_mix,omitempty"`
 }
 
 type plannedPPTXSlide struct {
@@ -204,6 +204,9 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 		}
 		planned.Points = points
 	}
+
+	planned = sanitizePlannedSlide(planned, deck, deckTitle, index)
+
 	if planned.Design == nil {
 		design := defaultSlideDesign(deck, layout)
 		planned.Design = &design
@@ -227,6 +230,98 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 		Variant: variant,
 		Plan:    plan,
 		Audit:   audit,
+	}
+}
+
+func sanitizePlannedSlide(slide pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, index int) pptxSlide {
+	slide.Points = sanitizeVisiblePoints(slide.Points)
+	slide.Steps = sanitizeVisiblePoints(slide.Steps)
+
+	if index == 0 && effectivePPTXLayout(slide) == "bullets" {
+		if sameDisplayTopic(slide.Heading, deckTitle) || sameDisplayTopic(slide.Heading, deck.Subject) {
+			slide.Heading = openingSlideHeading(deck)
+		}
+		if len(slide.Points) > 0 && len(slide.Points) < 3 {
+			slide.Points = append(slide.Points, openingSupportPoint(deck))
+		}
+	}
+	return slide
+}
+
+func sanitizeVisiblePoints(points []string) []string {
+	out := make([]string, 0, len(points))
+	for _, point := range points {
+		point = strings.TrimSpace(point)
+		if point == "" || isMetaInstructionText(point) {
+			continue
+		}
+		out = append(out, point)
+	}
+	return out
+}
+
+func isMetaInstructionText(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	switch {
+	case strings.HasPrefix(normalized, "close with "),
+		strings.HasPrefix(normalized, "open with "),
+		strings.HasPrefix(normalized, "show the "),
+		strings.HasPrefix(normalized, "show how "),
+		strings.HasPrefix(normalized, "frame the "),
+		strings.HasPrefix(normalized, "explain how "),
+		strings.HasPrefix(normalized, "explain why "),
+		strings.HasPrefix(normalized, "sequence the "),
+		strings.HasPrefix(normalized, "give a structured "),
+		strings.HasPrefix(normalized, "prove the "),
+		strings.HasPrefix(normalized, "use this slide "),
+		strings.HasPrefix(normalized, "lead with "):
+		return true
+	default:
+		return false
+	}
+}
+
+func displayTopicKey(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	text = strings.ReplaceAll(text, "&", "and")
+	var b strings.Builder
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func sameDisplayTopic(left, right string) bool {
+	lk := displayTopicKey(left)
+	rk := displayTopicKey(right)
+	return lk != "" && rk != "" && (lk == rk || strings.Contains(lk, rk) || strings.Contains(rk, lk))
+}
+
+func openingSlideHeading(deck plannedPPTXDeckPlan) string {
+	switch deck.DominantNeed {
+	case "governance":
+		return "Executive Summary"
+	case "impact":
+		return "Why This Rollout Matters"
+	case "operations":
+		return "What Operational Scale Requires"
+	default:
+		return "Executive Summary"
+	}
+}
+
+func openingSupportPoint(deck plannedPPTXDeckPlan) string {
+	switch deck.DominantNeed {
+	case "impact":
+		return "Success depends on operational governance, measurable outcomes, and integration with frontline workflows."
+	case "operations":
+		return "Enterprise deployment requires clear ownership, phased execution, and production-ready monitoring."
+	case "governance":
+		return "A durable rollout depends on control points, accountability, and decision-ready reporting."
+	default:
+		return "The rollout needs clear ownership, disciplined execution, and measurable business value."
 	}
 }
 

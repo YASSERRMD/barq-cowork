@@ -334,6 +334,10 @@ func previewCoverWordmark(title string) string {
 	if first == "" {
 		return ""
 	}
+	switch first {
+	case "AI", "IT", "HR", "DR", "CRM", "ERP", "API", "BI":
+		return ""
+	}
 	if len(first) <= 4 || (len(first) <= 8 && first == strings.ToUpper(first)) {
 		return first
 	}
