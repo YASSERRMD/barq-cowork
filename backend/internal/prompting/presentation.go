@@ -69,6 +69,15 @@ PRIMARY RENDERING MODE
 - The write_pptx tool rejects incomplete HTML/CSS deck contracts, so do not stop at a deck brief or structured-only slide list.
 - Use the legacy structured slide types only when the user explicitly asks for a very simple internal draft.
 - Available baseline class kit for authored slides:
+  - cover-shell
+  - cover-grid
+  - cover-stack
+  - cover-aside
+  - slide-shell
+  - slide-head
+  - slide-grid
+  - slide-main
+  - slide-side
   - eyebrow
   - display-title
   - section-title
@@ -82,9 +91,12 @@ PRIMARY RENDERING MODE
   - grid-2, grid-3, grid-4
   - stat-card, stat-value, stat-label, stat-desc
   - bullet-list, bullet-item
+  - steps-flow, step-item, step-num, step-title, step-desc
   - timeline-list, timeline-row, timeline-date
   - compare-grid, compare-col
 - You may define additional classes in deck.theme_css as needed. The goal is a custom deck system, not a fixed template.
+- The renderer injects a slide shell wrapper automatically. Author the inner composition of the slide instead of building a full-page browser mockup with giant outer padding wrappers.
+- Prefer targeting the cover-shell, slide-shell, cover-grid, slide-head, grid-*, panel, bullet-list, and steps-flow classes in theme_css so the actual exported deck stays dense and well-framed.
 
 HTML/CSS AUTHORING RULES
 - Design for the exported PowerPoint file, not for a browser mockup.
@@ -98,11 +110,16 @@ HTML/CSS AUTHORING RULES
   - body copy should usually sit around 18-22px
   - section headings should usually sit around 32-42px
   - cover titles should usually sit around 46-64px
+- For short decks and projector-first decks, bias toward larger reading sizes:
+  - 20-24px body copy
+  - 40-56px section titles
+  - 2-column or 2x2 compositions instead of 4-up micro-cards
 - Use the canvas well:
 - slides should feel intentionally filled, not crowded and not hollow
 - most slides should visually occupy roughly 70-85% of the canvas
 - avoid giant empty hero zones, empty side rails, or large decorative boxes with no information
 - do not bottom-anchor the whole cover composition and leave the upper half empty
+- Avoid naked slide bodies that are only a heading plus one paragraph. Most client-facing slides should have a secondary structure: grid, cards, bullets, comparison, metric strip, timeline, or another explicit information layout.
 - If you place an icon or illustration area on a slide, it must support real content, not act as a blank filler panel.
 - Roadmaps, proposal pages, decision pages, capability pages, and operating-plan pages should read like designed documents with strong hierarchy and dense useful information.
 - Prefer crisp rectangular or lightly rounded geometry over oversized bubbly cards unless the topic explicitly calls for a playful treatment.
@@ -131,6 +148,7 @@ SLIDE QUALITY BAR
 - Avoid thin slides, filler one-liners, and empty decorative space.
 - Avoid giant icon boxes, empty right-side hero frames, and cover pages that sacrifice content for decoration.
 - Avoid repeating the same composition with only text changed.
+- On 3-5 slide decks, avoid brochure-like micro-layouts. Use fewer, larger panels that can be read from a room.
 - If you use authored HTML slides, each slide must still feel like one coherent deck system rather than unrelated experiments.
 - Use charts only with real data series.
 - Use timelines only with actual milestones.

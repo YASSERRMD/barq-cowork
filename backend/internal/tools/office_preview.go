@@ -144,6 +144,9 @@ func previewPPTX(path string) (string, error) {
 	if manifest, ok, err := loadPPTXPreviewManifest(data); err != nil {
 		return "", err
 	} else if ok {
+		if strings.TrimSpace(manifest.HTMLDocument) != "" {
+			return wrapHTMLDeckPreviewDocument(renderPPTXPreviewManifest(manifest)), nil
+		}
 		return renderPPTXPreviewManifest(manifest), nil
 	}
 
@@ -205,6 +208,104 @@ func previewPPTX(path string) (string, error) {
 
 func officePreviewShell(content, background, text string) string {
 	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Preview</title></head><body style="margin:0;background:` + background + `;color:` + text + `;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><main style="max-width:980px;margin:0 auto;padding:28px 20px 40px">` + content + `</main></body></html>`
+}
+
+func wrapHTMLDeckPreviewDocument(doc string) string {
+	doc = strings.TrimSpace(doc)
+	if doc == "" {
+		return doc
+	}
+	style := `<style id="barq-preview-fit-style">
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100% !important;
+  background: #07111f !important;
+}
+body {
+  overflow-y: auto !important;
+  font-family: "Aptos", "Helvetica Neue", Arial, sans-serif !important;
+}
+.barq-pptx-deck {
+  width: 100% !important;
+  padding: 18px !important;
+  gap: 18px !important;
+  align-items: center !important;
+}
+.barq-preview-fit-frame {
+  position: relative;
+  width: min(100%, 1440px);
+  margin: 0 auto 18px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #07111f;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.45);
+}
+.barq-preview-fit-frame:last-child {
+  margin-bottom: 0;
+}
+.barq-preview-fit-frame > .barq-pptx-slide {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  margin: 0 !important;
+  transform-origin: top left !important;
+  box-shadow: none !important;
+}
+</style>`
+	script := `<script id="barq-preview-fit-script">
+(function() {
+  const slideW = 1920;
+  const slideH = 1080;
+  const maxW = 1440;
+  function wrapSlides() {
+    const deck = document.querySelector('.barq-pptx-deck');
+    if (!deck) return;
+    Array.from(deck.children).forEach((child) => {
+      if (!(child instanceof HTMLElement) || !child.classList.contains('barq-pptx-slide')) return;
+      if (child.parentElement && child.parentElement.classList.contains('barq-preview-fit-frame')) return;
+      const frame = document.createElement('section');
+      frame.className = 'barq-preview-fit-frame';
+      deck.insertBefore(frame, child);
+      frame.appendChild(child);
+    });
+  }
+  function fitSlides() {
+    document.querySelectorAll('.barq-preview-fit-frame').forEach((frame) => {
+      const slide = frame.querySelector('.barq-pptx-slide');
+      if (!(frame instanceof HTMLElement) || !(slide instanceof HTMLElement)) return;
+      const width = Math.min(frame.clientWidth || maxW, maxW);
+      const scale = width / slideW;
+      frame.style.height = String(slideH * scale) + 'px';
+      slide.style.width = String(slideW) + 'px';
+      slide.style.height = String(slideH) + 'px';
+      slide.style.transform = 'scale(' + scale + ')';
+    });
+  }
+  function boot() {
+    wrapSlides();
+    fitSlides();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+  window.addEventListener('resize', fitSlides);
+})();
+</script>`
+	if strings.Contains(strings.ToLower(doc), "</head>") {
+		doc = strings.Replace(doc, "</head>", style+"\n</head>", 1)
+	} else {
+		doc = style + doc
+	}
+	if strings.Contains(strings.ToLower(doc), "</body>") {
+		doc = strings.Replace(doc, "</body>", script+"\n</body>", 1)
+	} else {
+		doc += script
+	}
+	return doc
 }
 
 func officeZipRead(data []byte, target string) ([]byte, error) {

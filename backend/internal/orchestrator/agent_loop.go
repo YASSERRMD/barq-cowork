@@ -61,6 +61,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 13. Keep one coherent deck system across the full presentation: cover language, header treatment, spacing, card style, and table/chart chrome should feel like one designed document, not a different template on every slide.
 14. If the request is a rollout, proposal, cost estimate, implementation plan, or delivery roadmap, treat it as a structured proposal/report system even if the subject is AI, healthcare, or technology.
 15. Keep density disciplined in authored HTML: most slides should use 56-78px page padding, 12-24px gaps, 18-22px body copy, and 32-42px section titles unless the slide has a deliberate reason to break that range.
+15a. On 3-5 slide decks and projector-first decks, prefer larger reading sizes and fewer larger panels: 20-24px body copy, 40-56px section titles, and 2-column or 2x2 compositions instead of 4-up micro-card layouts.
 16. Avoid empty hero frames, giant icon boxes, oversized rounded cards, and slides that leave large parts of the canvas unused.
 17. Do not bottom-anchor the full cover composition; the cover should occupy the canvas intentionally instead of leaving a large empty upper half.
 
@@ -129,14 +130,19 @@ HTML SLIDE MODE — required for bespoke decks and the default for new decks:
 - Use inline SVG for real icons and diagrams.
 - Preview and downloaded PPTX are expected to come from the same HTML slide DOM.
 - The write_pptx tool rejects incomplete HTML/CSS deck contracts.
+- The renderer injects a slide shell wrapper automatically. Author the inner composition of the slide instead of building a giant outer page wrapper with excessive padding.
 - Baseline class kit available in the HTML slide shell:
+  - cover-shell, cover-grid, cover-stack, cover-aside
+  - slide-shell, slide-head, slide-grid, slide-main, slide-side
   - eyebrow, display-title, section-title, lede, body-copy, muted-copy, rule
   - tag, panel, panel-light
   - grid-2, grid-3, grid-4
   - stat-card, stat-value, stat-label, stat-desc
   - bullet-list, bullet-item
+  - steps-flow, step-item, step-num, step-title, step-desc
   - timeline-list, timeline-row, timeline-date
   - compare-grid, compare-col
+- Prefer these shell/grid classes over ad-hoc browser layout wrappers so the exported PPTX keeps strong framing, denser content, and cleaner hierarchy.
 
 TYPE "chart"  → full-slide native PowerPoint chart
   "chart_type": "column" | "bar" | "line" | "pie" | "doughnut" | "area"

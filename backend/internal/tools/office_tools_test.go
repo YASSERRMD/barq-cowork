@@ -144,6 +144,9 @@ func TestWritePPTXTool_CreatesHTMLDeckAndPreview(t *testing.T) {
 	if !strings.Contains(html, "barq-pptx-deck") || !strings.Contains(htmlUpper, "CAPABILITY PILLARS") || !strings.Contains(htmlUpper, "DECISION MATRIX") {
 		t.Fatalf("pptx preview did not render embedded html deck: %s", html)
 	}
+	if !strings.Contains(html, "barq-preview-fit-frame") || !strings.Contains(html, "barq-preview-fit-script") {
+		t.Fatalf("pptx preview did not wrap deck for viewport fitting: %s", html)
+	}
 }
 
 func TestWritePPTXTool_CreatesHTMLAuthoredDeck(t *testing.T) {

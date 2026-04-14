@@ -57,6 +57,12 @@ func TestBuildPPTXPreviewManifest_EmbedsHTMLDocument(t *testing.T) {
 	if !strings.Contains(manifest.HTMLDocument, "barq-pptx-slide") || !strings.Contains(manifest.HTMLDocument, "FROM PILOT TO PRODUCTION") {
 		t.Fatalf("expected html document to contain slide markup, got %s", manifest.HTMLDocument)
 	}
+	if !strings.Contains(manifest.HTMLDocument, `class="cover-shell slide"`) {
+		t.Fatalf("expected cover html to be wrapped in a shell, got %s", manifest.HTMLDocument)
+	}
+	if !strings.Contains(manifest.HTMLDocument, `class="slide-shell slide content-shell"`) {
+		t.Fatalf("expected content html to be wrapped in a shell, got %s", manifest.HTMLDocument)
+	}
 }
 
 func TestRenderPPTXPreviewManifest_PrefersEmbeddedHTMLDocument(t *testing.T) {
@@ -142,5 +148,74 @@ func TestHTMLCoverContentReady_AcceptsConciseCover(t *testing.T) {
 	raw := `<div style="padding:80px;background-color:#F5F0E8"><h1 style="font-size:48px">Islamic Parenting</h1><p style="font-size:20px">Raising righteous children with faith, love, and wisdom.</p></div>`
 	if !htmlCoverContentReady(raw) {
 		t.Fatalf("expected concise but well-formed cover html to be accepted")
+	}
+}
+
+func TestWrapHTMLSlideShell_DoesNotDoubleWrapExistingShell(t *testing.T) {
+	raw := `<div class="slide-shell slide"><h2 class="section-title">Signal</h2></div>`
+	got := wrapHTMLSlideShell(raw, false)
+	if got != raw {
+		t.Fatalf("expected existing shell to remain unchanged, got %s", got)
+	}
+}
+
+func TestWrapHTMLSlideShell_AddsCoverComposeClassForGenericCovers(t *testing.T) {
+	raw := `<div style="display:flex"><div>left</div><div>right</div></div>`
+	got := wrapHTMLSlideShell(raw, true)
+	if !strings.Contains(got, `cover-shell--compose`) {
+		t.Fatalf("expected generic cover to receive compose shell, got %s", got)
+	}
+}
+
+func TestPreferredHTMLCover_FallsBackForUnderstructuredCover(t *testing.T) {
+	manifest := pptxPreviewManifest{
+		Title: "Islamic Parenting",
+		Theme: "education",
+		DeckPlan: pptxPreviewDeckPlan{
+			Subject:      "Islamic Parenting",
+			Audience:     "parents",
+			NarrativeArc: "trust -> guidance -> daily practice",
+			ColorStory:   "warm earth tones",
+			Kicker:       "Faith-centered guidance",
+			CoverHTML:    `<div style="display:flex"><div><h1 class="display-title">Islamic Parenting</h1><p class="lede">Raise children with faith.</p></div><div><svg viewBox="0 0 24 24"></svg></div></div>`,
+		},
+		Palette: pptxPreviewPalette{
+			Background: "F5F0E8",
+			Card:       "FFFFFF",
+			Accent:     "2D6A4F",
+			Accent2:    "C9A84C",
+			Text:       "1B1B1B",
+			Muted:      "7A7266",
+			Border:     "E0D8CC",
+		},
+	}
+
+	got := preferredHTMLCover(manifest)
+	if strings.Contains(got, `<div style="display:flex">`) {
+		t.Fatalf("expected weak authored cover to fall back to structured cover, got %s", got)
+	}
+	if !strings.Contains(got, `cover-grid`) || !strings.Contains(got, `Narrative`) {
+		t.Fatalf("expected fallback cover structure, got %s", got)
+	}
+}
+
+func TestPreferredHTMLSlideMarkup_FallsBackForUnderstructuredSlide(t *testing.T) {
+	slide := pptxPreviewSlide{
+		Heading: "Operating signal",
+		Layout:  "bullets",
+		HTML:    `<div style="display:flex;flex-direction:column;gap:18px"><h2 class="section-title">Operating signal</h2><p class="body-copy">One paragraph and one heading are not enough for a client-facing slide that needs real density.</p></div>`,
+		Points: []string{
+			"Connect governance to workflow ownership.",
+			"Treat scorecards as operating controls, not decoration.",
+			"Close with one funding and accountability decision.",
+		},
+	}
+
+	got := preferredHTMLSlideMarkup(slide)
+	if strings.Contains(got, `display:flex`) {
+		t.Fatalf("expected weak authored slide to fall back to structured markup, got %s", got)
+	}
+	if !strings.Contains(got, `bullet-list`) || !strings.Contains(got, `Operating signal`) {
+		t.Fatalf("expected fallback bullet layout, got %s", got)
 	}
 }
