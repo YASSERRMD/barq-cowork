@@ -748,6 +748,7 @@ function ContentPreviewPanel({
   onClose: () => void;
 }) {
   const downloadUrl = `http://localhost:7331/api/v1/artifacts/${artifact.id}/download`;
+  const previewUrl = `http://localhost:7331/api/v1/artifacts/${artifact.id}/preview`;
   const [markdownContent, setMarkdownContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -863,15 +864,15 @@ function ContentPreviewPanel({
                 onClick={(e) => { if (!downloadsEnabled) e.preventDefault(); }}>
                 <Download size={13} /> {downloadsEnabled ? `Download ${ext.toUpperCase()}` : "Finalizing export…"}
               </a>
-              <a href={downloadUrl} target="_blank" rel="noreferrer"
+              <a href={previewUrl} target="_blank" rel="noreferrer"
                 className="btn-ghost btn-sm"
                 style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none", fontSize: 12 }}>
-                <Maximize2 size={12} /> Open
+                <Maximize2 size={12} /> Open preview
               </a>
             </div>
             <iframe
-              src={`http://localhost:7331/api/v1/artifacts/${artifact.id}/preview`}
-              style={{ width: "100%", flex: 1, border: "none", display: "block", minHeight: 0 }}
+              src={previewUrl}
+              style={{ width: "100%", flex: 1, border: "none", display: "block", minHeight: 0, background: "#07111f" }}
               title={`Preview: ${fileName}`}
             />
           </div>
