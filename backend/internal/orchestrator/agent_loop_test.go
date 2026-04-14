@@ -41,12 +41,45 @@ func (f *fakeProvider) Chat(_ context.Context, _ provider.ProviderConfig, req pr
 	return ch, nil
 }
 
-type fakePlanStore struct{}
+type fakePlanStore struct {
+	plan  *domain.Plan
+	steps []*domain.PlanStep
+}
 
-func (fakePlanStore) CreatePlan(context.Context, *domain.Plan) error              { return nil }
-func (fakePlanStore) GetPlanByTask(context.Context, string) (*domain.Plan, error) { return nil, nil }
-func (fakePlanStore) CreateStep(context.Context, *domain.PlanStep) error          { return nil }
-func (fakePlanStore) UpdateStep(context.Context, *domain.PlanStep) error          { return nil }
+func (s *fakePlanStore) CreatePlan(_ context.Context, plan *domain.Plan) error {
+	clone := *plan
+	s.plan = &clone
+	return nil
+}
+
+func (s *fakePlanStore) GetPlanByTask(context.Context, string) (*domain.Plan, error) {
+	if s.plan == nil {
+		return nil, nil
+	}
+	clone := *s.plan
+	clone.Steps = append([]*domain.PlanStep(nil), s.steps...)
+	return &clone, nil
+}
+
+func (s *fakePlanStore) CreateStep(_ context.Context, step *domain.PlanStep) error {
+	clone := *step
+	s.steps = append(s.steps, &clone)
+	return nil
+}
+
+func (s *fakePlanStore) UpdateStep(_ context.Context, step *domain.PlanStep) error {
+	for i, existing := range s.steps {
+		if existing.ID != step.ID {
+			continue
+		}
+		clone := *step
+		s.steps[i] = &clone
+		return nil
+	}
+	clone := *step
+	s.steps = append(s.steps, &clone)
+	return nil
+}
 
 type fakeArtifactStore struct {
 	artifacts []*domain.Artifact
@@ -78,11 +111,12 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	registry := tools.NewRegistry()
 	registry.Register(fakeWritePPTXTool{})
 	artifacts := &fakeArtifactStore{}
+	plans := &fakePlanStore{}
 	loop := NewAgentLoop(
 		prov,
 		provider.ProviderConfig{Model: "fake"},
 		registry,
-		fakePlanStore{},
+		plans,
 		artifacts,
 		fakeEventEmitter{},
 		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
@@ -125,6 +159,18 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	if !strings.Contains(lastMessage, "MUST be exactly one tool call to write_pptx") {
 		t.Fatalf("expected forced tool reminder in second request, got %q", lastMessage)
 	}
+	if len(plans.steps) != 4 {
+		t.Fatalf("expected slide-by-slide plan steps for pptx generation, got %d", len(plans.steps))
+	}
+	if plans.steps[0].Title != "Plan deck system" || plans.steps[1].Title != "Draft cover slide" {
+		t.Fatalf("expected deck planning steps, got %+v", plans.steps[:2])
+	}
+	if plans.steps[2].Title != "Draft slide 1" {
+		t.Fatalf("expected authored slide step, got %q", plans.steps[2].Title)
+	}
+	if plans.steps[3].Title != "Render PowerPoint file" || plans.steps[3].Status != domain.StepStatusCompleted {
+		t.Fatalf("expected final render step to complete, got %+v", plans.steps[3])
+	}
 }
 
 type fakeNoToolProvider struct {
@@ -152,7 +198,7 @@ func TestAgentLoop_FailsPresentationTaskWithoutRequiredToolCall(t *testing.T) {
 		prov,
 		provider.ProviderConfig{Model: "fake"},
 		registry,
-		fakePlanStore{},
+		&fakePlanStore{},
 		&fakeArtifactStore{},
 		fakeEventEmitter{},
 		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
@@ -206,7 +252,7 @@ func TestAgentLoop_RecoversToolArgsFromAssistantJSON(t *testing.T) {
 		prov,
 		provider.ProviderConfig{ProviderName: "ollama", Model: "qwen2.5-coder:7b"},
 		registry,
-		fakePlanStore{},
+		&fakePlanStore{},
 		artifacts,
 		fakeEventEmitter{},
 		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
@@ -253,6 +299,28 @@ func TestResolveArtifactContentPath(t *testing.T) {
 	abs := filepath.Join(root, "documents", "brief.docx")
 	if got := resolveArtifactContentPath(root, abs); got != abs {
 		t.Fatalf("expected absolute path passthrough, got %q", got)
+	}
+}
+
+func TestRequestedPresentationDeckHint_HonorsExplicitTotalSlideCount(t *testing.T) {
+	task := &domain.Task{
+		Title:       "3 slide presentation on islamic parenting",
+		Description: "Keep it concise.",
+	}
+	hint := requestedPresentationDeckHint(task)
+	if !strings.Contains(hint, "3 total slides") || !strings.Contains(hint, "exactly 2 content slides") {
+		t.Fatalf("expected total-slide hint, got %q", hint)
+	}
+}
+
+func TestRequestedPresentationDeckHint_HonorsExplicitContentSlideCount(t *testing.T) {
+	task := &domain.Task{
+		Title:       "Islamic parenting deck",
+		Description: "Need 3 content slides plus cover.",
+	}
+	hint := requestedPresentationDeckHint(task)
+	if !strings.Contains(hint, "3 content slides") || !strings.Contains(hint, "exactly 3 entries") {
+		t.Fatalf("expected content-slide hint, got %q", hint)
 	}
 }
 

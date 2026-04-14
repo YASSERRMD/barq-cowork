@@ -9,6 +9,7 @@ MISSION
 
 WORKFLOW
 1. Read the request, attached material, and any project instructions.
+1a. If the user explicitly asks for a slide count, honor it exactly. Do not silently expand a 3-slide request into a longer deck.
 2. Decide the deck archetype before planning slides:
    - proposal / costing / operating plan
    - executive brief / board update

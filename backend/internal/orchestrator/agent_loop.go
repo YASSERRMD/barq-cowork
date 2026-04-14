@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,7 +40,8 @@ INTERACTION: Only use ask_user when you genuinely need clarification — do NOT 
 WRITE_PPTX — 10 SLIDE TYPES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Required fields: "filename", "title", "slides" (6-10 slides).
+Required fields: "filename", "title", "slides".
+Respect any explicit user slide count. If the user asks for 3 slides, do not silently expand to 6-10.
 Each slide MUST have: "heading" (≤60 chars) and "type".
 
 PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
@@ -243,6 +246,9 @@ func (a *AgentLoop) Run(
 	}
 
 	messages := []provider.ChatMessage{{Role: "system", Content: agentSystemPrompt}}
+	if hint := requestedPresentationDeckHint(task); hint != "" {
+		messages = append(messages, provider.ChatMessage{Role: "system", Content: hint})
+	}
 	for _, prompt := range extraSystemPrompts {
 		if strings.TrimSpace(prompt) == "" {
 			continue
@@ -368,22 +374,17 @@ func (a *AgentLoop) Run(
 
 		// Execute each tool call
 		for _, tc := range toolCalls {
-			stepOrder++
-
-			// Create step record
-			now := time.Now().UTC()
-			step := &domain.PlanStep{
-				ID:          uuid.NewString(),
-				PlanID:      planID,
-				Order:       stepOrder,
-				Title:       tc.Name,
-				Description: "Tool call: " + tc.Name,
-				ToolName:    tc.Name,
-				ToolInput:   tc.Arguments,
-				Status:      domain.StepStatusRunning,
-				StartedAt:   &now,
+			step := createToolPlanStep(planID, stepOrder, tc)
+			if seeded, ok := createPresentationPlanSteps(planID, stepOrder, tc); ok {
+				for _, seededStep := range seeded {
+					_ = a.plans.CreateStep(ctx, seededStep)
+				}
+				step = seeded[len(seeded)-1]
+				stepOrder = step.Order
+			} else {
+				stepOrder = step.Order
+				_ = a.plans.CreateStep(ctx, step)
 			}
-			_ = a.plans.CreateStep(ctx, step)
 
 			a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepStarted, map[string]any{
 				"step_id": step.ID, "tool": tc.Name, "iter": iter,
@@ -421,6 +422,102 @@ func (a *AgentLoop) Run(
 	}
 
 	return result
+}
+
+func createToolPlanStep(planID string, startOrder int, tc provider.ToolCall) *domain.PlanStep {
+	now := time.Now().UTC()
+	return &domain.PlanStep{
+		ID:          uuid.NewString(),
+		PlanID:      planID,
+		Order:       startOrder + 1,
+		Title:       tc.Name,
+		Description: "Tool call: " + tc.Name,
+		ToolName:    tc.Name,
+		ToolInput:   tc.Arguments,
+		Status:      domain.StepStatusRunning,
+		StartedAt:   &now,
+	}
+}
+
+func createPresentationPlanSteps(planID string, startOrder int, tc provider.ToolCall) ([]*domain.PlanStep, bool) {
+	if tc.Name != "write_pptx" {
+		return nil, false
+	}
+
+	var payload struct {
+		Title    string `json:"title"`
+		Filename string `json:"filename"`
+		Deck     struct {
+			Subject  string `json:"subject"`
+			Audience string `json:"audience"`
+		} `json:"deck"`
+		Slides []struct {
+			Heading string `json:"heading"`
+		} `json:"slides"`
+	}
+	if err := json.Unmarshal([]byte(tc.Arguments), &payload); err != nil {
+		return nil, false
+	}
+
+	deckTitle := firstNonEmptyString(strings.TrimSpace(payload.Title), strings.TrimSpace(payload.Deck.Subject), strings.TrimSpace(payload.Filename), "presentation")
+	audience := firstNonEmptyString(strings.TrimSpace(payload.Deck.Audience), "the intended audience")
+	timestamp := time.Now().UTC()
+	completedAt := timestamp
+
+	completedStep := func(order int, title, description string) *domain.PlanStep {
+		return &domain.PlanStep{
+			ID:          uuid.NewString(),
+			PlanID:      planID,
+			Order:       order,
+			Title:       title,
+			Description: description,
+			Status:      domain.StepStatusCompleted,
+			StartedAt:   &timestamp,
+			CompletedAt: &completedAt,
+		}
+	}
+
+	var steps []*domain.PlanStep
+	order := startOrder + 1
+	steps = append(steps,
+		completedStep(order, "Plan deck system", fmt.Sprintf(`Define the narrative, audience, and design language for "%s" for %s.`, deckTitle, audience)),
+	)
+	order++
+	steps = append(steps,
+		completedStep(order, "Draft cover slide", "Author the cover HTML, theme CSS, and deck-level visual system."),
+	)
+	for idx, slide := range payload.Slides {
+		order++
+		heading := firstNonEmptyString(strings.TrimSpace(slide.Heading), fmt.Sprintf("Slide %d", idx+1))
+		steps = append(steps,
+			completedStep(order, fmt.Sprintf("Draft slide %d", idx+1), fmt.Sprintf(`Compose "%s" with the slide-specific HTML, layout, and visuals.`, heading)),
+		)
+	}
+
+	order++
+	renderStarted := time.Now().UTC()
+	steps = append(steps, &domain.PlanStep{
+		ID:          uuid.NewString(),
+		PlanID:      planID,
+		Order:       order,
+		Title:       "Render PowerPoint file",
+		Description: fmt.Sprintf("Export %d total slides into the final .pptx and publish the finished artifact.", len(payload.Slides)+1),
+		ToolName:    tc.Name,
+		ToolInput:   tc.Arguments,
+		Status:      domain.StepStatusRunning,
+		StartedAt:   &renderStarted,
+	})
+
+	return steps, true
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func (a *AgentLoop) executeToolCall(
@@ -542,4 +639,38 @@ func containsTaskKeyword(text string, keywords ...string) bool {
 		}
 	}
 	return false
+}
+
+var requestedSlideCountPattern = regexp.MustCompile(`(?i)\b(\d+)\s*[- ]?\s*(content\s+)?slides?\b`)
+
+func requestedPresentationDeckHint(task *domain.Task) string {
+	if requiredOutputTool(task) != "write_pptx" {
+		return ""
+	}
+	text := strings.TrimSpace(task.Title + " " + task.Description)
+	matches := requestedSlideCountPattern.FindStringSubmatch(text)
+	if len(matches) < 2 {
+		return ""
+	}
+	count, err := strconv.Atoi(matches[1])
+	if err != nil || count < 1 || count > 30 {
+		return ""
+	}
+	isContentCount := strings.TrimSpace(matches[2]) != ""
+	if isContentCount {
+		return fmt.Sprintf(
+			"User explicitly requested %d content slides. Honor that exactly. Produce exactly %d entries in the slides array, plus the separate cover from deck.cover_html. Do not silently expand the deck.",
+			count,
+			count,
+		)
+	}
+	if count <= 1 {
+		return "User explicitly requested 1 slide. Keep the deck minimal and do not expand it."
+	}
+	return fmt.Sprintf(
+		"User explicitly requested %d total slides. Honor that exactly. Because write_pptx uses deck.cover_html for the cover separately, produce exactly %d content slides in the slides array so the final deck totals %d slides. Do not silently expand the deck.",
+		count,
+		count-1,
+		count,
+	)
 }
