@@ -2001,20 +2001,50 @@ func proposalStatsTakeaway(stats []pptxStat) string {
 }
 
 func proposalLeadText(s pptxSlide, points []string) string {
-	if notes := strings.TrimSpace(s.SpeakerNotes); notes != "" {
-		return notes
-	}
 	for _, point := range points {
-		if len([]rune(strings.TrimSpace(point))) >= 72 {
+		point = strings.TrimSpace(point)
+		if point == "" || isMetaInstructionPoint(point) {
+			continue
+		}
+		if len([]rune(point)) >= 72 {
 			return point
 		}
 	}
-	if len(points) >= 2 {
-		left, _ := splitCardText(points[0])
-		right, _ := splitCardText(points[1])
+	clean := make([]string, 0, len(points))
+	for _, point := range points {
+		point = strings.TrimSpace(point)
+		if point == "" || isMetaInstructionPoint(point) {
+			continue
+		}
+		clean = append(clean, point)
+	}
+	if len(clean) >= 2 {
+		left, _ := splitCardText(clean[0])
+		right, _ := splitCardText(clean[1])
 		return fmt.Sprintf("Focus areas include %s and %s.", left, right)
 	}
 	return ""
+}
+
+func isMetaInstructionPoint(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	switch {
+	case strings.HasPrefix(text, "close with "),
+		strings.HasPrefix(text, "open with "),
+		strings.HasPrefix(text, "show the "),
+		strings.HasPrefix(text, "show how "),
+		strings.HasPrefix(text, "frame the "),
+		strings.HasPrefix(text, "explain how "),
+		strings.HasPrefix(text, "explain why "),
+		strings.HasPrefix(text, "sequence the "),
+		strings.HasPrefix(text, "give a structured "),
+		strings.HasPrefix(text, "prove the "),
+		strings.HasPrefix(text, "use this slide "),
+		strings.HasPrefix(text, "lead with "):
+		return true
+	default:
+		return false
+	}
 }
 
 func proposalSectionLabel(s pptxSlide) string {

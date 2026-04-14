@@ -15,17 +15,18 @@ type plannedPPTXPresentation struct {
 }
 
 type plannedPPTXDeckPlan struct {
-	Subject         string   `json:"subject"`
-	Audience        string   `json:"audience"`
-	NarrativeArc    string   `json:"narrative_arc"`
-	VisualDirection string   `json:"visual_direction"`
-	DominantNeed    string   `json:"dominant_need"`
-	CoverStyle      string   `json:"cover_style,omitempty"`
-	ColorStory      string   `json:"color_story,omitempty"`
-	Motif           string   `json:"motif,omitempty"`
-	Kicker          string   `json:"kicker,omitempty"`
+	Archetype       string         `json:"archetype,omitempty"`
+	Subject         string         `json:"subject"`
+	Audience        string         `json:"audience"`
+	NarrativeArc    string         `json:"narrative_arc"`
+	VisualDirection string         `json:"visual_direction"`
+	DominantNeed    string         `json:"dominant_need"`
+	CoverStyle      string         `json:"cover_style,omitempty"`
+	ColorStory      string         `json:"color_story,omitempty"`
+	Motif           string         `json:"motif,omitempty"`
+	Kicker          string         `json:"kicker,omitempty"`
 	Design          pptxDeckDesign `json:"design,omitempty"`
-	LayoutMix       []string `json:"layout_mix,omitempty"`
+	LayoutMix       []string       `json:"layout_mix,omitempty"`
 }
 
 type plannedPPTXSlide struct {
@@ -204,6 +205,9 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 		}
 		planned.Points = points
 	}
+
+	planned = sanitizePlannedSlide(planned, deck, deckTitle, index)
+
 	if planned.Design == nil {
 		design := defaultSlideDesign(deck, layout)
 		planned.Design = &design
@@ -230,10 +234,104 @@ func planPPTXSlide(s pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, inde
 	}
 }
 
+func sanitizePlannedSlide(slide pptxSlide, deck plannedPPTXDeckPlan, deckTitle string, index int) pptxSlide {
+	slide.Points = sanitizeVisiblePoints(slide.Points)
+	slide.Steps = sanitizeVisiblePoints(slide.Steps)
+
+	if index == 0 && effectivePPTXLayout(slide) == "bullets" {
+		if sameDisplayTopic(slide.Heading, deckTitle) || sameDisplayTopic(slide.Heading, deck.Subject) {
+			slide.Heading = openingSlideHeading(deck)
+		}
+		if len(slide.Points) > 0 && len(slide.Points) < 3 {
+			slide.Points = append(slide.Points, openingSupportPoint(deck))
+		}
+	}
+	return slide
+}
+
+func sanitizeVisiblePoints(points []string) []string {
+	out := make([]string, 0, len(points))
+	for _, point := range points {
+		point = strings.TrimSpace(point)
+		if point == "" || isMetaInstructionText(point) {
+			continue
+		}
+		out = append(out, point)
+	}
+	return out
+}
+
+func isMetaInstructionText(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	switch {
+	case strings.HasPrefix(normalized, "close with "),
+		strings.HasPrefix(normalized, "open with "),
+		strings.HasPrefix(normalized, "show the "),
+		strings.HasPrefix(normalized, "show how "),
+		strings.HasPrefix(normalized, "frame the "),
+		strings.HasPrefix(normalized, "explain how "),
+		strings.HasPrefix(normalized, "explain why "),
+		strings.HasPrefix(normalized, "sequence the "),
+		strings.HasPrefix(normalized, "give a structured "),
+		strings.HasPrefix(normalized, "prove the "),
+		strings.HasPrefix(normalized, "use this slide "),
+		strings.HasPrefix(normalized, "lead with "):
+		return true
+	default:
+		return false
+	}
+}
+
+func displayTopicKey(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	text = strings.ReplaceAll(text, "&", "and")
+	var b strings.Builder
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func sameDisplayTopic(left, right string) bool {
+	lk := displayTopicKey(left)
+	rk := displayTopicKey(right)
+	return lk != "" && rk != "" && (lk == rk || strings.Contains(lk, rk) || strings.Contains(rk, lk))
+}
+
+func openingSlideHeading(deck plannedPPTXDeckPlan) string {
+	switch deck.DominantNeed {
+	case "governance":
+		return "Executive Summary"
+	case "impact":
+		return "Why This Rollout Matters"
+	case "operations":
+		return "What Operational Scale Requires"
+	default:
+		return "Executive Summary"
+	}
+}
+
+func openingSupportPoint(deck plannedPPTXDeckPlan) string {
+	switch deck.DominantNeed {
+	case "impact":
+		return "Success depends on operational governance, measurable outcomes, and integration with frontline workflows."
+	case "operations":
+		return "Enterprise deployment requires clear ownership, phased execution, and production-ready monitoring."
+	case "governance":
+		return "A durable rollout depends on control points, accountability, and decision-ready reporting."
+	default:
+		return "The rollout needs clear ownership, disciplined execution, and measurable business value."
+	}
+}
+
 func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string, deckInput pptxDeckDesignInput) plannedPPTXDeckPlan {
 	subject := strings.TrimSpace(firstNonEmpty(deckInput.Subject, title, subtitle, "Presentation"))
 	audience := strings.TrimSpace(firstNonEmpty(deckInput.Audience, deriveAudience(subtitle, title)))
+	archetype := resolveDeckArchetype(deckInput.Archetype, subject, audience, themeName, deckInput.VisualStyle, deckInput.Narrative)
 	return plannedPPTXDeckPlan{
+		Archetype:       archetype,
 		Subject:         subject,
 		Audience:        audience,
 		NarrativeArc:    strings.TrimSpace(firstNonEmpty(deckInput.Narrative, deriveNarrativeArcFromInputs(slides))),
@@ -245,6 +343,64 @@ func deriveDeckPlan(title, subtitle string, slides []pptxSlide, themeName string
 		Kicker:          strings.TrimSpace(firstNonEmpty(deckInput.Kicker, defaultDeckKicker(themeName, audience, subject))),
 		Design:          defaultDeckDesign(themeName, audience, deckInput),
 		LayoutMix:       plannedLayoutMixFromInputs(slides),
+	}
+}
+
+func resolveDeckArchetype(explicit, subject, audience, themeName, visualStyle, narrative string) string {
+	explicit = strings.TrimSpace(explicit)
+	inferred := inferDeckArchetype(subject, audience, themeName, visualStyle, narrative)
+	if explicit == "" {
+		return inferred
+	}
+
+	forced := inferDeckArchetype(strings.Join([]string{subject, explicit}, " "), audience, themeName, visualStyle, narrative)
+	if forced != "executive presentation" {
+		return forced
+	}
+
+	if canonical := canonicalDeckArchetype(explicit); canonical != "" {
+		return canonical
+	}
+	return explicit
+}
+
+func inferDeckArchetype(subject, audience, themeName, visualStyle, narrative string) string {
+	text := strings.ToLower(strings.Join([]string{
+		subject,
+		audience,
+		themeName,
+		visualStyle,
+		narrative,
+	}, " "))
+
+	switch {
+	case containsAny(text, "cost proposal", "proposal", "budget", "pricing", "business case", "operating plan", "implementation plan", "rollout", "scope", "delivery roadmap"):
+		return "proposal"
+	case containsAny(text, "policy", "government", "public sector", "national", "regulatory", "framework", "ministry", "authority", "uae", "civic", "institutional strategy"):
+		return "civic brief"
+	case containsAny(text, "product", "platform", "launch", "showcase", "innovation", "technology", "software", "developer", "future", "digital") &&
+		!containsAny(text, "proposal", "budget", "rollout", "policy", "government", "operating plan"):
+		return "technology narrative"
+	case containsAny(text, "education", "school", "classroom", "learning", "students", "teachers"):
+		return "educational explainer"
+	default:
+		return "executive presentation"
+	}
+}
+
+func canonicalDeckArchetype(raw string) string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case containsAny(text, "cost proposal", "proposal", "budget", "pricing", "business case", "operating plan", "implementation plan", "rollout", "scope", "delivery roadmap", "executive brief", "board brief"):
+		return "proposal"
+	case containsAny(text, "policy", "government", "public sector", "national", "regulatory", "framework", "ministry", "authority", "uae", "civic", "institutional strategy"):
+		return "civic brief"
+	case containsAny(text, "education", "school", "classroom", "learning", "students", "teachers"):
+		return "educational explainer"
+	case containsAny(text, "product", "platform", "launch", "showcase", "innovation", "technology", "software", "developer", "future", "digital"):
+		return "technology narrative"
+	default:
+		return ""
 	}
 }
 
@@ -275,10 +431,14 @@ func defaultDeckDesign(themeName, audience string, deckInput pptxDeckDesignInput
 	}
 	if strings.TrimSpace(design.Density) == "" {
 		switch {
+		case containsAny(strings.ToLower(strings.Join([]string{audience, deckInput.VisualStyle, deckInput.Archetype}, " ")), "proposal", "operating plan", "board", "executive", "civic", "policy", "rollout", "brief"):
+			design.Density = "dense"
 		case containsAny(strings.ToLower(strings.Join([]string{audience, deckInput.VisualStyle}, " ")), "kids", "children", "classroom", "playful"):
 			design.Density = "dense"
+		case containsAny(strings.ToLower(strings.Join([]string{deckInput.Archetype, deckInput.VisualStyle}, " ")), "technology", "product", "future", "innovation", "digital"):
+			design.Density = "balanced"
 		case containsAny(strings.ToLower(deckInput.VisualStyle), "minimal", "editorial", "premium", "calm", "contemporary", "modern", "refined", "future"):
-			design.Density = "airy"
+			design.Density = "balanced"
 		default:
 			design.Density = "balanced"
 		}
