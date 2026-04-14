@@ -110,6 +110,10 @@ HTML/CSS AUTHORING RULES
   - body copy should usually sit around 18-22px
   - section headings should usually sit around 32-42px
   - cover titles should usually sit around 46-64px
+- For short decks and projector-first decks, bias toward larger reading sizes:
+  - 20-24px body copy
+  - 40-56px section titles
+  - 2-column or 2x2 compositions instead of 4-up micro-cards
 - Use the canvas well:
 - slides should feel intentionally filled, not crowded and not hollow
 - most slides should visually occupy roughly 70-85% of the canvas
@@ -144,6 +148,7 @@ SLIDE QUALITY BAR
 - Avoid thin slides, filler one-liners, and empty decorative space.
 - Avoid giant icon boxes, empty right-side hero frames, and cover pages that sacrifice content for decoration.
 - Avoid repeating the same composition with only text changed.
+- On 3-5 slide decks, avoid brochure-like micro-layouts. Use fewer, larger panels that can be read from a room.
 - If you use authored HTML slides, each slide must still feel like one coherent deck system rather than unrelated experiments.
 - Use charts only with real data series.
 - Use timelines only with actual milestones.

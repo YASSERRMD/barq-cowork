@@ -61,6 +61,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 13. Keep one coherent deck system across the full presentation: cover language, header treatment, spacing, card style, and table/chart chrome should feel like one designed document, not a different template on every slide.
 14. If the request is a rollout, proposal, cost estimate, implementation plan, or delivery roadmap, treat it as a structured proposal/report system even if the subject is AI, healthcare, or technology.
 15. Keep density disciplined in authored HTML: most slides should use 56-78px page padding, 12-24px gaps, 18-22px body copy, and 32-42px section titles unless the slide has a deliberate reason to break that range.
+15a. On 3-5 slide decks and projector-first decks, prefer larger reading sizes and fewer larger panels: 20-24px body copy, 40-56px section titles, and 2-column or 2x2 compositions instead of 4-up micro-card layouts.
 16. Avoid empty hero frames, giant icon boxes, oversized rounded cards, and slides that leave large parts of the canvas unused.
 17. Do not bottom-anchor the full cover composition; the cover should occupy the canvas intentionally instead of leaving a large empty upper half.
 
