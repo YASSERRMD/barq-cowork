@@ -291,6 +291,29 @@ func previewProposalSlideTitle(title string) string {
 	return title
 }
 
+func previewProposalSlideChipLabel(slide pptxPreviewSlide) string {
+	switch slide.Layout {
+	case "stats":
+		return "DECISION SIGNALS"
+	case "chart":
+		return "TREND READOUT"
+	case "steps":
+		return "IMPLEMENTATION PATH"
+	case "timeline":
+		return "ROADMAP"
+	case "compare":
+		return "CURRENT VS TARGET"
+	case "table":
+		return "DECISION MATRIX"
+	case "cards":
+		return "CAPABILITIES"
+	case "title", "blank":
+		return "SECTION"
+	default:
+		return proposalSectionLabel(pptxSlide{Heading: slide.Heading})
+	}
+}
+
 func previewCoverWordmark(title string) string {
 	words := strings.Fields(strings.TrimSpace(title))
 	if len(words) == 0 {
@@ -372,7 +395,7 @@ func renderPPTXPreviewProposalCover(manifest pptxPreviewManifest, pal pptxPalett
 </section>`
 }
 
-func renderPPTXPreviewProposalSlide(slide pptxPreviewSlide, pal pptxPalette, totalSlides int) string {
+func renderPPTXPreviewProposalSlide(slide pptxPreviewSlide, pal pptxPalette, _ int) string {
 	iconPal := pal
 	iconPal.text = "FFFFFF"
 	iconPal.accent = mixHex(proposalHeaderFill(pal), pal.accent, 0.22)
@@ -382,7 +405,7 @@ func renderPPTXPreviewProposalSlide(slide pptxPreviewSlide, pal pptxPalette, tot
     <div class="barq-preview-proposal-head">
       <div class="barq-preview-proposal-icon">` + previewCardIconSVG(previewProposalSlideIconToken(slide), iconPal) + `</div>
       <h2>` + html.EscapeString(previewProposalSlideTitle(firstNonEmpty(slide.Heading, "Untitled Slide"))) + `</h2>
-      <span class="barq-preview-proposal-meta">Slide ` + fmt.Sprintf("%d of %d", slide.Number, totalSlides) + `</span>
+      <span class="barq-preview-proposal-meta">` + html.EscapeString(previewProposalSlideChipLabel(slide)) + `</span>
     </div>
     <div class="barq-preview-slide-body">` + body + `</div>
   </div>

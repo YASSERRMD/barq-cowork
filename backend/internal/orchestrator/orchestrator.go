@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/barq-cowork/barq-cowork/internal/config"
@@ -34,6 +35,11 @@ type ProviderProfileRepo interface {
 	GetDefault(ctx context.Context) (*domain.ProviderProfile, error)
 }
 
+// SkillPrompter returns the active prompt template for a skill kind.
+type SkillPrompter interface {
+	PromptForKind(ctx context.Context, kind domain.SkillKind) string
+}
+
 // ─────────────────────────────────────────────
 // Orchestrator
 // ─────────────────────────────────────────────
@@ -50,6 +56,7 @@ type Orchestrator struct {
 	toolRegistry     *tools.Registry
 	artifacts        ArtifactStore
 	events           EventEmitter
+	skills           SkillPrompter
 	cfg              *config.Config
 	logger           *slog.Logger
 }
@@ -64,6 +71,7 @@ func New(
 	toolRegistry *tools.Registry,
 	artifacts ArtifactStore,
 	events EventEmitter,
+	skills SkillPrompter,
 	cfg *config.Config,
 	logger *slog.Logger,
 ) *Orchestrator {
@@ -76,6 +84,7 @@ func New(
 		toolRegistry:     toolRegistry,
 		artifacts:        artifacts,
 		events:           events,
+		skills:           skills,
 		cfg:              cfg,
 		logger:           logger,
 	}
@@ -114,9 +123,6 @@ func (o *Orchestrator) RunTask(ctx context.Context, taskID string, opts RunOptio
 			return fmt.Errorf("load project: %w", err)
 		}
 	}
-	// project variable consumed only for workspace root resolution (future use).
-	_ = project
-
 	// Resolve provider config
 	provCfg, err := o.resolveProviderConfig(ctx, task)
 	if err != nil {
@@ -138,7 +144,7 @@ func (o *Orchestrator) RunTask(ctx context.Context, taskID string, opts RunOptio
 	// Run the full lifecycle in a detached goroutine.
 	// We use a background context so the run outlives the HTTP request.
 	runCtx := context.Background()
-	go o.run(runCtx, task, provCfg, opts)
+	go o.run(runCtx, task, project, provCfg, opts)
 
 	return nil
 }
@@ -147,6 +153,7 @@ func (o *Orchestrator) RunTask(ctx context.Context, taskID string, opts RunOptio
 func (o *Orchestrator) run(
 	ctx context.Context,
 	task *domain.Task,
+	project *domain.Project,
 	provCfg provider.ProviderConfig,
 	opts RunOptions,
 ) {
@@ -163,8 +170,16 @@ func (o *Orchestrator) run(
 	log.Info("agent loop starting")
 	_ = o.tasks.UpdateStatus(ctx, task.ID, domain.TaskStatusRunning, time.Now().UTC())
 
+	var extraSystemPrompts []string
+	if project != nil && strings.TrimSpace(project.Instructions) != "" {
+		extraSystemPrompts = append(extraSystemPrompts, "Project instructions:\n"+strings.TrimSpace(project.Instructions))
+	}
+	if prompt := o.skillPromptForTask(ctx, task); strings.TrimSpace(prompt) != "" {
+		extraSystemPrompts = append(extraSystemPrompts, "Active skill prompt:\n"+strings.TrimSpace(prompt))
+	}
+
 	loop := NewAgentLoop(prov, provCfg, o.toolRegistry, o.plans, o.artifacts, o.events, o.logger)
-	result := loop.Run(ctx, task, opts.WorkspaceRoot)
+	result := loop.Run(ctx, task, opts.WorkspaceRoot, extraSystemPrompts...)
 
 	// Final status
 	finalStatus := domain.TaskStatusCompleted
@@ -173,6 +188,24 @@ func (o *Orchestrator) run(
 	}
 	_ = o.tasks.UpdateStatus(ctx, task.ID, finalStatus, time.Now().UTC())
 	log.Info("agent finished", "completed", result.Completed, "failed", result.Failed)
+}
+
+func (o *Orchestrator) skillPromptForTask(ctx context.Context, task *domain.Task) string {
+	if o.skills == nil {
+		return ""
+	}
+	switch requiredOutputTool(task) {
+	case "write_pptx":
+		return o.skills.PromptForKind(ctx, domain.SkillKindDeck)
+	case "write_docx":
+		return o.skills.PromptForKind(ctx, domain.SkillKindDoc)
+	case "export_json":
+		return o.skills.PromptForKind(ctx, domain.SkillKindSheet)
+	case "write_markdown_report", "write_file":
+		return o.skills.PromptForKind(ctx, domain.SkillKindText)
+	default:
+		return ""
+	}
 }
 
 // ─────────────────────────────────────────────

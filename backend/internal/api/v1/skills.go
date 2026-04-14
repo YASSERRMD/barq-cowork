@@ -121,6 +121,7 @@ type skillDTO struct {
 	Description    string   `json:"description"`
 	OutputMimeType string   `json:"output_mime_type"`
 	OutputFileExt  string   `json:"output_file_ext"`
+	PromptTemplate string   `json:"prompt_template"`
 	BuiltIn        bool     `json:"built_in"`
 	Enabled        bool     `json:"enabled"`
 	Tags           []string `json:"tags"`
@@ -129,9 +130,13 @@ type skillDTO struct {
 
 func toSkillDTO(s *domain.SkillSpec) *skillDTO {
 	tags := s.Tags
-	if tags == nil { tags = []string{} }
+	if tags == nil {
+		tags = []string{}
+	}
 	mimes := s.InputMimeTypes
-	if mimes == nil { mimes = []string{} }
+	if mimes == nil {
+		mimes = []string{}
+	}
 	return &skillDTO{
 		ID:             s.ID,
 		Name:           s.Name,
@@ -139,6 +144,7 @@ func toSkillDTO(s *domain.SkillSpec) *skillDTO {
 		Description:    s.Description,
 		OutputMimeType: s.OutputMimeType,
 		OutputFileExt:  s.OutputFileExt,
+		PromptTemplate: s.PromptTemplate,
 		BuiltIn:        s.BuiltIn,
 		Enabled:        s.Enabled,
 		Tags:           tags,

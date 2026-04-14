@@ -193,6 +193,7 @@ func (a *AgentLoop) Run(
 	ctx context.Context,
 	task *domain.Task,
 	workspaceRoot string,
+	extraSystemPrompts ...string,
 ) ExecuteResult {
 	const maxIter = 15
 
@@ -213,10 +214,14 @@ func (a *AgentLoop) Run(
 		userMsg += "\n\nDetails: " + task.Description
 	}
 
-	messages := []provider.ChatMessage{
-		{Role: "system", Content: agentSystemPrompt},
-		{Role: "user", Content: userMsg},
+	messages := []provider.ChatMessage{{Role: "system", Content: agentSystemPrompt}}
+	for _, prompt := range extraSystemPrompts {
+		if strings.TrimSpace(prompt) == "" {
+			continue
+		}
+		messages = append(messages, provider.ChatMessage{Role: "system", Content: prompt})
 	}
+	messages = append(messages, provider.ChatMessage{Role: "user", Content: userMsg})
 
 	toolDefs := a.registry.Definitions()
 

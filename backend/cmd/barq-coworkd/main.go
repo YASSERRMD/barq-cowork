@@ -20,8 +20,8 @@ import (
 	"github.com/barq-cowork/barq-cowork/internal/provider"
 	anthropicprovider "github.com/barq-cowork/barq-cowork/internal/provider/anthropic"
 	geminiprovider "github.com/barq-cowork/barq-cowork/internal/provider/gemini"
-	zaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/openai"
 	ollamaprovider "github.com/barq-cowork/barq-cowork/internal/provider/ollama"
+	zaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/openai"
 	oaiprovider "github.com/barq-cowork/barq-cowork/internal/provider/zai"
 	"github.com/barq-cowork/barq-cowork/internal/server"
 	"github.com/barq-cowork/barq-cowork/internal/service"
@@ -90,23 +90,23 @@ func main() {
 
 	// ── Provider registry ──────────────────────────────────────────────
 	registry := provider.NewRegistry()
-	registry.Register(oaiprovider.New(120))        // zai
-	registry.Register(zaiprovider.New(120))        // openai
-	registry.Register(anthropicprovider.New(120))  // anthropic
-	registry.Register(geminiprovider.New(120))     // gemini
-	registry.Register(ollamaprovider.New(300))     // ollama (local, longer timeout)
+	registry.Register(oaiprovider.New(120))       // zai
+	registry.Register(zaiprovider.New(120))       // openai
+	registry.Register(anthropicprovider.New(120)) // anthropic
+	registry.Register(geminiprovider.New(120))    // gemini
+	registry.Register(ollamaprovider.New(300))    // ollama (local, longer timeout)
 	logger.Info("providers registered", "providers", registry.List())
 
 	// ── Repositories ──────────────────────────────────────────────────
-	workspaceRepo       := sqlite.NewWorkspaceStore(db)
-	projectRepo         := sqlite.NewProjectStore(db)
+	workspaceRepo := sqlite.NewWorkspaceStore(db)
+	projectRepo := sqlite.NewProjectStore(db)
 	// taskRepo already created above for startup recovery.
 	providerProfileRepo := sqlite.NewProviderProfileStore(db)
-	scheduleRepo        := sqlite.NewScheduleStore(db)
-	approvalRepo        := sqlite.NewApprovalStore(db)
-	eventRepo           := sqlite.NewEventStore(db)
-	planStore           := sqlite.NewPlanStore(db)
-	artifactStore       := sqlite.NewArtifactStore(db)
+	scheduleRepo := sqlite.NewScheduleStore(db)
+	approvalRepo := sqlite.NewApprovalStore(db)
+	eventRepo := sqlite.NewEventStore(db)
+	planStore := sqlite.NewPlanStore(db)
+	artifactStore := sqlite.NewArtifactStore(db)
 
 	// ── Tool registry ──────────────────────────────────────────────────
 	// userInputStore must outlive tool calls; ask_user blocks on it.
@@ -127,22 +127,23 @@ func main() {
 	}
 	toolRegistry := service.BuildRegistry(userInputStore, inputEmitter)
 	logger.Info("tools registered", "tools", toolRegistry.List())
-	contextFileStore    := sqlite.NewContextFileStore(db)
-	taskTemplateStore   := sqlite.NewTaskTemplateStore(db)
-	subAgentStore       := sqlite.NewSubAgentStore(db)
-	skillStore          := sqlite.NewSkillStore(db)
+	contextFileStore := sqlite.NewContextFileStore(db)
+	taskTemplateStore := sqlite.NewTaskTemplateStore(db)
+	subAgentStore := sqlite.NewSubAgentStore(db)
+	skillStore := sqlite.NewSkillStore(db)
+	skillSvc := service.NewSkillService(skillStore)
 
 	// ── Orchestrator ──────────────────────────────────────────────────
-	wsMemory    := memory.New(contextFileStore)
-	planner     := orchestrator.NewPlanner(registry, wsMemory, logger)
-	executor    := orchestrator.NewExecutor(planStore, artifactStore, eventRepo, toolRegistry, logger)
+	wsMemory := memory.New(contextFileStore)
+	planner := orchestrator.NewPlanner(registry, wsMemory, logger)
+	executor := orchestrator.NewExecutor(planStore, artifactStore, eventRepo, toolRegistry, logger)
 	subAgentOrch := orchestrator.NewSubAgentOrchestrator(
 		subAgentStore, planner, executor, planStore, eventRepo, logger,
 	)
 	orch := orchestrator.New(
 		taskRepo, projectRepo, providerProfileRepo,
 		planStore, registry, toolRegistry, artifactStore, eventRepo,
-		cfg, logger,
+		skillSvc, cfg, logger,
 	)
 
 	// ── Services ──────────────────────────────────────────────────────
@@ -153,7 +154,7 @@ func main() {
 		Providers:  service.NewProviderService(providerProfileRepo, registry, cfg),
 		Schedules:  service.NewScheduleService(scheduleRepo, projectRepo),
 		Tools:      service.NewToolService(toolRegistry, approvalRepo, eventRepo),
-		Skills:     service.NewSkillService(skillStore),
+		Skills:     skillSvc,
 		Execution: server.ExecutionDeps{
 			Runner:        orch,
 			Plans:         planStore,

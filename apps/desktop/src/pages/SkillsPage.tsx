@@ -199,6 +199,26 @@ function SkillDetail({ skill, onToggle }: { skill: Skill; onToggle: () => void }
         </div>
       )}
 
+      {skill.prompt_template && (
+        <div>
+          <div className="section-label" style={{ marginBottom: 8 }}>Execution Prompt</div>
+          <pre style={{
+            margin: 0,
+            padding: "12px 14px",
+            background: "var(--surface-3)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            color: "var(--text-secondary)",
+            fontSize: 11.5,
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          }}>
+            {skill.prompt_template}
+          </pre>
+        </div>
+      )}
+
       {/* Example prompts */}
       {examples.length > 0 && (
         <div>

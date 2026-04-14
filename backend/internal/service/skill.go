@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/barq-cowork/barq-cowork/internal/domain"
+	"github.com/barq-cowork/barq-cowork/internal/prompting"
 	"github.com/google/uuid"
 )
 
@@ -28,6 +29,30 @@ func (s *SkillService) List(ctx context.Context) ([]*domain.SkillSpec, error) {
 // GetByID returns a skill by its ID.
 func (s *SkillService) GetByID(ctx context.Context, id string) (*domain.SkillSpec, bool) {
 	return s.repo.GetByID(ctx, id)
+}
+
+// PromptForKind returns the active prompt template for a given skill kind.
+// Built-ins are preferred when present because they define the product's
+// canonical execution contract.
+func (s *SkillService) PromptForKind(ctx context.Context, kind domain.SkillKind) string {
+	skills, err := s.repo.List(ctx)
+	if err != nil {
+		return ""
+	}
+
+	var fallback string
+	for _, sk := range skills {
+		if sk == nil || !sk.Enabled || sk.Kind != kind || sk.PromptTemplate == "" {
+			continue
+		}
+		if sk.BuiltIn {
+			return sk.PromptTemplate
+		}
+		if fallback == "" {
+			fallback = sk.PromptTemplate
+		}
+	}
+	return fallback
 }
 
 // Create registers a new custom skill.
@@ -109,7 +134,7 @@ var builtInSkills = []domain.SkillSpec{
 		Enabled:        true,
 		Tags:           []string{"slides", "powerpoint", "deck"},
 		InputMimeTypes: []string{"text/plain", "text/markdown", "application/pdf"},
-		PromptTemplate: "You are a presentation designer. Plan the full deck first: subject, audience, narrative arc, theme, visual style, cover style, color story, motif, kicker, and layout mix. Then plan each slide individually with the best slide type for its content. Always choose a fresh deck-specific visual brief and full palette from the subject instead of reusing a prior pattern. Avoid repetitive structures, use charts/timelines/compare views/tables when the material calls for them, use semantic icon names for capability slides, and make the deck specific to the source content instead of using a fixed template. If the user gives style or structure instructions, follow them exactly. Format output as: # Slide Title\\n- bullet point\\n- bullet point\\n\\n# Next Slide...",
+		PromptTemplate: prompting.BuiltinPresentationPromptTemplate,
 	},
 	{
 		ID:             "builtin-pdf",
@@ -143,9 +168,13 @@ var builtInSkills = []domain.SkillSpec{
 // unchanged so user modifications (e.g. enabled flag) are preserved.
 func (s *SkillService) seedBuiltIns(ctx context.Context) {
 	for _, sk := range builtInSkills {
-		if _, exists := s.repo.GetByID(ctx, sk.ID); exists {
+		existing, exists := s.repo.GetByID(ctx, sk.ID)
+		if !exists {
+			_ = s.repo.Create(ctx, &sk)
 			continue
 		}
-		_ = s.repo.Create(ctx, &sk)
+
+		sk.Enabled = existing.Enabled
+		_ = s.repo.Update(ctx, &sk)
 	}
 }
