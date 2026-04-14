@@ -15180,11 +15180,40 @@ function inferIconToken(raw) {
   if (containsAny(text, "creative", "design", "idea", "brand", "innovation", "spark")) return "spark";
   return "";
 }
+function familyFromArchetype(archetype) {
+  const text = archetype.trim().toLowerCase();
+  if (!text) return "";
+  if (containsAny(text, "playful", "storybook", "classroom", "kids")) return "playful";
+  if (containsAny(text, "poster", "studio", "campaign", "showcase")) return "studio";
+  if (containsAny(text, "policy", "civic", "government", "public sector", "national", "regulatory", "institutional")) return "civic";
+  if (containsAny(text, "technology", "product narrative", "innovation narrative", "platform narrative", "technology showcase", "future narrative")) return "tech";
+  if (containsAny(text, "proposal", "operating plan", "cost proposal", "business case", "executive brief", "board brief", "implementation plan")) return "proposal";
+  return "";
+}
+function dominantFamilyHint(text) {
+  if (containsAny(text, "proposal", "cost", "pricing", "budget", "business case", "implementation plan", "delivery roadmap", "rollout", "scope", "rate card")) {
+    return "proposal";
+  }
+  if (containsAny(text, "policy", "government", "public sector", "national", "regulatory", "uae", "ministry", "authority", "civic")) {
+    return "civic";
+  }
+  if (containsAny(text, "technology", "platform", "software", "product", "innovation", "future", "digital", "ai")) {
+    return "tech";
+  }
+  if (containsAny(text, "poster", "campaign", "showcase", "gallery", "bold studio")) {
+    return "studio";
+  }
+  if (containsAny(text, "playful", "storybook", "collage", "cartoon", "fun", "kids", "children", "classroom")) {
+    return "playful";
+  }
+  return "";
+}
 function previewFamily(manifest) {
   const text = [
     manifest.title,
     manifest.subtitle ?? "",
     manifest.theme,
+    manifest.deck_plan.archetype ?? "",
     manifest.deck_plan.subject,
     manifest.deck_plan.audience,
     manifest.deck_plan.narrative_arc,
@@ -15193,12 +15222,13 @@ function previewFamily(manifest) {
     manifest.deck_plan.dominant_need,
     manifest.deck_plan.cover_style ?? ""
   ].join(" ");
-  if (containsAny(text, "playful", "storybook", "collage", "cartoon", "fun") && !containsAny(text, "refined", "structured", "proposal", "report", "executive", "premium")) {
-    return "playful";
-  }
-  if (containsAny(text, "poster", "campaign", "showcase", "gallery", "bold studio") && !containsAny(text, "proposal", "report", "summary", "brief", "guide")) {
-    return "studio";
-  }
+  const dominant = dominantFamilyHint(text);
+  const archetypeFamily = familyFromArchetype(manifest.deck_plan.archetype ?? "");
+  if (dominant === "proposal") return "proposal";
+  if (dominant === "civic" && archetypeFamily !== "proposal") return "civic";
+  if (dominant === "tech" && archetypeFamily !== "proposal" && archetypeFamily !== "civic") return "tech";
+  if (archetypeFamily) return archetypeFamily;
+  if (dominant) return dominant;
   return "proposal";
 }
 function buildPalette(manifest, family) {
@@ -15235,9 +15265,38 @@ function buildPalette(manifest, family) {
         darkMuted: mixHex(base.header, "FFFFFF", 0.7),
         lightMuted: mixHex(base.bg, base.text, 0.5)
       };
+    case "civic":
+      return {
+        ...base,
+        bg: mixHex(base.bg, "F6F1E8", 0.72),
+        card: "FFFDFC",
+        canvas: mixHex(base.bg, "FFFCF8", 0.84),
+        header: mixHex("12202E", base.text, 0.18),
+        footer: mixHex(base.text, "F5F0E7", 0.18),
+        darkMuted: mixHex("12202E", "FFFFFF", 0.66),
+        lightMuted: mixHex("FFFCF8", base.text, 0.56),
+        border: mixHex(base.border, "D8CFC2", 0.46)
+      };
+    case "tech":
+      return {
+        ...base,
+        bg: "0A1220",
+        card: "111B2B",
+        canvas: "0C1626",
+        header: "08111D",
+        footer: "111B2B",
+        text: "F8FAFC",
+        muted: "A8B6C7",
+        darkMuted: "B9C4D0",
+        lightMuted: "A8B6C7",
+        border: "223246"
+      };
     default:
       return base;
   }
+}
+function coverSectionLabels(manifest, count) {
+  return manifest.slides.map((slide) => shortTitle(slide.heading || "").toUpperCase()).filter((label) => label.length > 0).slice(0, count);
 }
 function addFullRect(slide, fill) {
   slide.addShape("rect", {
@@ -15712,8 +15771,6 @@ function addTopSummaryStrip(slide, plan, bounds, pal, token) {
   return bounds.y + stripH + 0.16;
 }
 function renderCover(slide, manifest, family, pal) {
-  addFullRect(slide, family === "playful" ? mixHex(pal.bg, pal.card, 0.72) : pal.header);
-  addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.18 }, pal.accent, pal.accent, 0);
   const title = manifest.title.trim() || "Presentation";
   const subtitle = manifest.subtitle?.trim() ?? "";
   const kicker = manifest.deck_plan.kicker?.trim() || "LLM-directed presentation";
@@ -15722,6 +15779,182 @@ function renderCover(slide, manifest, family, pal) {
   const motif = coverToken(manifest);
   const wordmark = coverWordmark(title);
   const titleRemainder = wordmark ? title.replace(new RegExp(`^${wordmark}\\s*`, "i"), "").trim() : title;
+  if (family === "civic") {
+    const modules = coverSectionLabels(manifest, 3);
+    addFullRect(slide, pal.canvas);
+    addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.16 }, pal.accent, pal.accent, 0);
+    addLine(slide, 8.86, 1.02, 0, 5.22, mixHex(pal.border, pal.accent, 0.28), 1.1);
+    addPanel(slide, { x: 9.14, y: 1.1, w: 2.84, h: 0.4 }, mixHex(pal.canvas, pal.card, 0.42), mixHex(pal.border, pal.accent, 0.18), 0.05);
+    addText(slide, "POLICY FRAME", { x: 9.34, y: 1.2, w: 1.24, h: 0.14 }, {
+      fontFace: FONT_BODY,
+      fontSize: 8.1,
+      color: pal.muted,
+      bold: true,
+      charSpace: 0.7
+    });
+    addPanel(slide, { x: 10.68, y: 1.19, w: 1.1, h: 0.08 }, mixHex(pal.accent2, pal.card, 0.14), mixHex(pal.accent2, pal.card, 0.14), 0);
+    addText(slide, kicker.toUpperCase(), { x: 1.02, y: 0.98, w: 4.8, h: 0.22 }, {
+      fontFace: FONT_BODY,
+      fontSize: 9.4,
+      color: pal.muted,
+      charSpace: 1.2,
+      bold: true
+    });
+    addText(slide, title, { x: 0.98, y: 1.62, w: 7.2, h: 1.08 }, {
+      fontFace: FONT_HEAD,
+      fontSize: 27.5,
+      bold: true,
+      color: pal.text,
+      breakLine: true,
+      fit: "shrink",
+      valign: "top"
+    });
+    addLine(slide, 1.04, 2.96, 2.42, 0, "C79A35", 2.4);
+    if (subtitle) {
+      addText(slide, subtitle, { x: 1, y: 3.6, w: 7.6, h: 0.58 }, {
+        fontFace: FONT_BODY,
+        fontSize: 16.2,
+        color: pal.text,
+        breakLine: true
+      });
+    }
+    if (support) {
+      addText(slide, support, { x: 1.02, y: 4.35, w: 7.2, h: 0.24 }, {
+        fontFace: FONT_BODY,
+        fontSize: 10.8,
+        color: pal.muted
+      });
+    }
+    if (meta) {
+      addText(slide, meta, { x: 1.02, y: 6.82, w: 8.2, h: 0.22 }, {
+        fontFace: FONT_BODY,
+        fontSize: 10.1,
+        color: pal.muted
+      });
+    }
+    modules.forEach((label, index) => {
+      const boxY = 2.02 + index * 1.08;
+      const accent = accentColor(pal, index);
+      addPanel(slide, { x: 9.14, y: boxY, w: 2.84, h: 0.78 }, mixHex(pal.canvas, pal.card, 0.46), mixHex(pal.border, accent, 0.16), 0.05);
+      addPanel(slide, { x: 9.34, y: boxY + 0.2, w: 0.08, h: 0.38 }, accent, accent, 0.02);
+      addText(slide, label, { x: 9.56, y: boxY + 0.2, w: 1.82, h: 0.16 }, {
+        fontFace: FONT_BODY,
+        fontSize: 9.4,
+        color: pal.text,
+        bold: true,
+        fit: "shrink"
+      });
+      addText(slide, index === 0 ? "context" : index === 1 ? "controls" : "execution", { x: 9.56, y: boxY + 0.46, w: 1.14, h: 0.12 }, {
+        fontFace: FONT_BODY,
+        fontSize: 8,
+        color: pal.muted,
+        charSpace: 0.5
+      });
+    });
+    addIcon(slide, motif, 10.84, 5.56, 0.74, {
+      ...pal,
+      accent: mixHex(pal.accent, pal.card, 0.14),
+      accent2: mixHex(pal.accent2, pal.card, 0.16),
+      text: "FFFFFF"
+    });
+    addText(slide, "Confidential", { x: 11.02, y: 6.82, w: 1.2, h: 0.22 }, {
+      fontFace: FONT_BODY,
+      fontSize: 10,
+      color: pal.muted,
+      align: "right"
+    });
+    return;
+  }
+  if (family === "tech") {
+    const modules = coverSectionLabels(manifest, 3);
+    addFullRect(slide, pal.header);
+    addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.16 }, pal.accent, pal.accent, 0);
+    addLine(slide, 8.66, 1.04, 0, 5.18, mixHex(pal.header, pal.accent, 0.22), 1.2);
+    addPanel(slide, { x: 9.1, y: 1.14, w: 2.62, h: 0.38 }, mixHex(pal.header, pal.card, 0.08), mixHex(pal.header, pal.accent2, 0.18), 0.06);
+    addText(slide, (manifest.deck_plan.subject || manifest.title).toUpperCase(), { x: 9.28, y: 1.23, w: 2.26, h: 0.14 }, {
+      fontFace: FONT_BODY,
+      fontSize: 7.9,
+      color: pal.darkMuted,
+      bold: true,
+      charSpace: 0.5,
+      fit: "shrink",
+      align: "center"
+    });
+    addText(slide, kicker.toUpperCase(), { x: 1, y: 1.02, w: 4.8, h: 0.22 }, {
+      fontFace: FONT_BODY,
+      fontSize: 9.6,
+      color: pal.darkMuted,
+      charSpace: 1.3,
+      bold: true
+    });
+    addText(slide, title, { x: 0.96, y: 1.68, w: 7.24, h: 1.08 }, {
+      fontFace: FONT_HEAD,
+      fontSize: 27.5,
+      bold: true,
+      color: pal.text,
+      breakLine: true,
+      fit: "shrink",
+      valign: "top"
+    });
+    addLine(slide, 1.02, 2.98, 2.7, 0, mixHex(pal.accent2, "FFFFFF", 0.18), 2.4);
+    if (subtitle) {
+      addText(slide, subtitle, { x: 1, y: 3.62, w: 7.4, h: 0.58 }, {
+        fontFace: FONT_BODY,
+        fontSize: 16,
+        color: pal.text,
+        breakLine: true
+      });
+    }
+    if (support) {
+      addText(slide, support, { x: 1, y: 4.38, w: 7.1, h: 0.24 }, {
+        fontFace: FONT_BODY,
+        fontSize: 10.8,
+        color: pal.darkMuted
+      });
+    }
+    if (meta) {
+      addText(slide, meta, { x: 1, y: 6.82, w: 8.2, h: 0.22 }, {
+        fontFace: FONT_BODY,
+        fontSize: 10,
+        color: pal.darkMuted
+      });
+    }
+    modules.forEach((label, index) => {
+      const boxY = 2.08 + index * 1.1;
+      const accent = accentColor(pal, index);
+      addPanel(slide, { x: 8.98, y: boxY, w: 3.1, h: 0.84 }, mixHex(pal.header, pal.card, 0.1), mixHex(pal.header, accent, 0.16), 0.08);
+      addPanel(slide, { x: 9.16, y: boxY + 0.18, w: 0.08, h: 0.48 }, accent, accent, 0.02);
+      addText(slide, `${String(index + 1).padStart(2, "0")}  ${label}`, { x: 9.42, y: boxY + 0.22, w: 2.22, h: 0.18 }, {
+        fontFace: FONT_BODY,
+        fontSize: 9.4,
+        color: pal.text,
+        bold: true,
+        charSpace: 0.3,
+        fit: "shrink"
+      });
+      addText(slide, index === 0 ? "Signal" : index === 1 ? "System" : "Execution", { x: 9.42, y: boxY + 0.48, w: 1.62, h: 0.14 }, {
+        fontFace: FONT_BODY,
+        fontSize: 8.2,
+        color: pal.darkMuted,
+        charSpace: 0.5
+      });
+    });
+    addIcon(slide, motif, 11.18, 5.88, 0.72, {
+      ...pal,
+      accent: mixHex(pal.accent, pal.card, 0.12),
+      accent2: mixHex(pal.accent2, pal.card, 0.16),
+      text: "FFFFFF"
+    });
+    addText(slide, "Confidential", { x: 11, y: 6.82, w: 1.2, h: 0.22 }, {
+      fontFace: FONT_BODY,
+      fontSize: 10,
+      color: pal.darkMuted,
+      align: "right"
+    });
+    return;
+  }
+  addFullRect(slide, family === "playful" ? mixHex(pal.bg, pal.card, 0.72) : pal.header);
+  addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.18 }, pal.accent, pal.accent, 0);
   if (family === "studio") {
     slide.addShape("rect", {
       x: 8.75,
@@ -15839,6 +16072,63 @@ function renderCover(slide, manifest, family, pal) {
   }
 }
 function renderSlideChrome(slide, content, _totalSlides, family, pal) {
+  if (family === "civic") {
+    addFullRect(slide, pal.canvas);
+    addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.12 }, pal.accent, pal.accent, 0);
+    addIcon(slide, slideIconToken(content), 0.42, 0.26, 0.24, {
+      ...pal,
+      accent: pal.accent,
+      accent2: mixHex(pal.accent2, pal.card, 0.2),
+      text: "FFFFFF"
+    });
+    addText(slide, shortTitle(content.heading || "Untitled Slide"), { x: 0.78, y: 0.24, w: 8.6, h: 0.24 }, {
+      fontFace: FONT_BODY,
+      fontSize: 12,
+      color: pal.text,
+      bold: true,
+      charSpace: 0.2
+    });
+    addPanel(slide, { x: 10.78, y: 0.2, w: 1.9, h: 0.28 }, mixHex(pal.canvas, pal.card, 0.18), mixHex(pal.border, pal.accent, 0.18), 0.05);
+    addText(slide, slideChipLabel(content), { x: 10.9, y: 0.245, w: 1.64, h: 0.14 }, {
+      fontFace: FONT_BODY,
+      fontSize: 8.4,
+      color: pal.text,
+      bold: true,
+      align: "center",
+      fit: "shrink",
+      charSpace: 0.4
+    });
+    return { x: 0.52, y: 0.92, w: 12.25, h: 6.08 };
+  }
+  if (family === "tech") {
+    addFullRect(slide, pal.canvas);
+    addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.48 }, pal.header, pal.header, 0);
+    addPanel(slide, { x: 0, y: 0.48, w: SLIDE_W, h: 0.04 }, mixHex(pal.header, pal.accent, 0.28), mixHex(pal.header, pal.accent, 0.28), 0);
+    addIcon(slide, slideIconToken(content), 0.38, 0.1, 0.28, {
+      ...pal,
+      accent: mixHex(pal.header, pal.accent, 0.18),
+      accent2: mixHex(pal.header, pal.accent2, 0.18),
+      text: "FFFFFF"
+    });
+    addText(slide, shortTitle(content.heading || "Untitled Slide"), { x: 0.78, y: 0.12, w: 8.5, h: 0.22 }, {
+      fontFace: FONT_BODY,
+      fontSize: 11.4,
+      color: pal.text,
+      bold: true,
+      charSpace: 0.3
+    });
+    addPanel(slide, { x: 10.78, y: 0.08, w: 1.9, h: 0.28 }, mixHex(pal.header, pal.card, 0.1), mixHex(pal.header, pal.accent2, 0.14), 0.08);
+    addText(slide, slideChipLabel(content), { x: 10.9, y: 0.125, w: 1.64, h: 0.14 }, {
+      fontFace: FONT_BODY,
+      fontSize: 8.4,
+      color: pal.darkMuted,
+      bold: true,
+      align: "center",
+      fit: "shrink",
+      charSpace: 0.4
+    });
+    return { x: 0.5, y: 0.74, w: 12.3, h: 6.28 };
+  }
   addFullRect(slide, family === "proposal" ? pal.canvas : pal.bg);
   const headFill = family === "playful" ? mixHex(pal.header, "FFFFFF", 0.08) : pal.header;
   addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.54 }, headFill, headFill, 0);
@@ -15897,44 +16187,47 @@ function renderMetricTile(slide, stat, bounds, fill, border, accent, valueColor,
     });
   }
 }
-function renderStats(slide, plan, bounds, pal) {
+function renderStats(slide, plan, bounds, family, pal) {
   const stats = (plan.stats ?? []).slice(0, 4);
   if (stats.length === 0) {
-    return renderBullets(slide, plan, bounds, pal);
+    return renderBullets(slide, plan, bounds, family, pal);
   }
-  const gap = 0.16;
-  const heroH = stats.length > 2 ? 2.78 : bounds.h;
-  const bandH = stats.length > 2 ? 0.44 : 0;
-  const lowerY = bounds.y + heroH + gap;
-  const lowerH = stats.length > 2 ? bounds.h - heroH - gap - bandH - gap : 0;
-  const cardW = (bounds.w - gap) / 2;
-  stats.slice(0, 2).forEach((stat, index) => {
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, "chart");
+  const rows = stats.length > 2 ? 2 : 1;
+  const cols = stats.length === 1 ? 1 : 2;
+  const gapX = 0.18;
+  const gapY = 0.18;
+  const bandH = stats.length > 1 ? 0.52 : 0;
+  const tileAreaH = bounds.h - (startY - bounds.y) - bandH - (bandH > 0 ? 0.16 : 0);
+  const tileW = (bounds.w - gapX * Math.max(cols - 1, 0)) / cols;
+  const tileH = (tileAreaH - gapY * Math.max(rows - 1, 0)) / rows;
+  stats.forEach((stat, index) => {
+    const row = rows === 1 ? 0 : Math.floor(index / 2);
+    const col = cols === 1 ? 0 : index % 2;
+    const accent = accentColor(pal, index);
+    const fill = family === "tech" ? mixHex(pal.header, pal.card, index % 2 === 0 ? 0.08 : 0.14) : index === 0 && family === "proposal" ? pal.header : index % 2 === 0 ? pal.card : mixHex(pal.canvas, pal.card, 0.74);
+    const border = family === "tech" ? mixHex(pal.header, accent, 0.14) : mixHex(pal.canvas, pal.border, 0.84);
+    const valueColor = fill === pal.header ? accent : family === "tech" ? pal.text : accent;
+    const bodyColor = fill === pal.header ? pal.darkMuted : family === "tech" ? pal.darkMuted : pal.lightMuted;
     renderMetricTile(
       slide,
       stat,
-      { x: bounds.x + index * (cardW + gap), y: bounds.y, w: cardW, h: heroH },
-      index === 0 ? pal.header : mixHex(pal.header, pal.card, 0.18),
-      mixHex(pal.header, pal.card, 0.18),
-      accentColor(pal, index),
-      accentColor(pal, index),
-      pal.darkMuted
+      {
+        x: bounds.x + col * (tileW + gapX),
+        y: startY + row * (tileH + gapY),
+        w: tileW,
+        h: tileH
+      },
+      fill,
+      border,
+      accent,
+      valueColor,
+      bodyColor
     );
   });
-  stats.slice(2).forEach((stat, index) => {
-    renderMetricTile(
-      slide,
-      stat,
-      { x: bounds.x + index * (cardW + gap), y: lowerY, w: cardW, h: lowerH },
-      pal.card,
-      mixHex(pal.canvas, pal.border, 0.84),
-      accentColor(pal, index + 2),
-      pal.text,
-      pal.lightMuted
-    );
-  });
-  if (stats.length > 2) {
+  if (bandH > 0) {
     addPanel(slide, { x: bounds.x, y: bounds.y + bounds.h - bandH, w: bounds.w, h: bandH }, mixHex(pal.canvas, pal.header, 0.08), mixHex(pal.canvas, pal.border, 0.76), 0.04);
-    addText(slide, proposalStatsTakeaway(stats), { x: bounds.x + 0.18, y: bounds.y + bounds.h - bandH + 0.12, w: bounds.w - 0.36, h: bandH - 0.2 }, {
+    addText(slide, proposalStatsTakeaway(stats), { x: bounds.x + 0.18, y: bounds.y + bounds.h - bandH + 0.13, w: bounds.w - 0.36, h: bandH - 0.2 }, {
       fontFace: FONT_BODY,
       fontSize: 10.2,
       color: pal.text,
@@ -15985,34 +16278,83 @@ function renderPointList(slide, items, bounds, pal, offset = 0) {
     }
   });
 }
-function renderBullets(slide, plan, bounds, pal) {
+function renderBullets(slide, plan, bounds, family, pal) {
   const points = (plan.points ?? []).slice(0, 8);
   const stats = (plan.stats ?? []).slice(0, 4);
-  let cursorY = bounds.y;
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, slideIconToken(plan));
+  let cursorY = startY;
   if (stats.length > 0) {
     const gap2 = 0.14;
-    const cardW = (bounds.w - gap2 * 3) / 4;
-    const cardH = 1.18;
-    stats.forEach((stat, index) => {
+    const cardCount = Math.min(stats.length, 3);
+    const cardW = (bounds.w - gap2 * Math.max(cardCount - 1, 0)) / cardCount;
+    const cardH = 0.94;
+    stats.slice(0, cardCount).forEach((stat, index) => {
       renderMetricTile(
         slide,
         stat,
         { x: bounds.x + index * (cardW + gap2), y: bounds.y, w: cardW, h: cardH },
-        pal.card,
-        mixHex(pal.canvas, pal.border, 0.84),
+        family === "tech" ? mixHex(pal.header, pal.card, 0.12) : pal.card,
+        family === "tech" ? mixHex(pal.header, pal.accent, 0.14) : mixHex(pal.canvas, pal.border, 0.84),
         accentColor(pal, index),
-        pal.text,
-        pal.lightMuted
+        family === "tech" ? pal.text : pal.text,
+        family === "tech" ? pal.darkMuted : pal.lightMuted
       );
     });
     cursorY += cardH + 0.18;
   }
   const lead = proposalLeadText(plan, points);
+  if (lead && points.length >= 3) {
+    const leadW = family === "tech" ? 3.46 : 3.18;
+    const panelFill = family === "tech" ? mixHex(pal.header, pal.card, 0.12) : mixHex(pal.canvas, pal.card, 0.78);
+    const panelBorder = family === "tech" ? mixHex(pal.header, pal.accent, 0.14) : mixHex(pal.canvas, pal.border, 0.84);
+    addPanel(slide, { x: bounds.x, y: cursorY, w: leadW, h: bounds.h - (cursorY - bounds.y) }, panelFill, panelBorder, 0.08);
+    addText(slide, "WHY IT MATTERS", { x: bounds.x + 0.18, y: cursorY + 0.18, w: leadW - 0.36, h: 0.18 }, {
+      fontFace: FONT_BODY,
+      fontSize: 8.6,
+      color: family === "tech" ? pal.darkMuted : pal.lightMuted,
+      bold: true,
+      charSpace: 0.7
+    });
+    addText(slide, lead, { x: bounds.x + 0.18, y: cursorY + 0.48, w: leadW - 0.36, h: 1.18 }, {
+      fontFace: FONT_HEAD,
+      fontSize: family === "tech" ? 16.8 : 16.2,
+      color: pal.text,
+      bold: true,
+      breakLine: true,
+      valign: "top",
+      fit: "shrink"
+    });
+    addText(slide, sectionKicker(plan), { x: bounds.x + 0.18, y: cursorY + bounds.h - (cursorY - bounds.y) - 0.38, w: leadW - 0.36, h: 0.18 }, {
+      fontFace: FONT_BODY,
+      fontSize: 8.8,
+      color: family === "tech" ? pal.darkMuted : pal.lightMuted,
+      bold: true,
+      charSpace: 0.6
+    });
+    const listX = bounds.x + leadW + 0.26;
+    const listW = bounds.w - leadW - 0.26;
+    addText(slide, proposalSectionLabel(plan), { x: listX, y: cursorY + 0.02, w: 3.2, h: 0.18 }, {
+      fontFace: FONT_BODY,
+      fontSize: 8.8,
+      bold: true,
+      color: family === "tech" ? pal.darkMuted : pal.lightMuted,
+      charSpace: 0.8
+    });
+    const [left2, right2] = pointColumns(points);
+    const gap2 = right2.length > 0 ? 0.24 : 0;
+    const colW2 = right2.length > 0 ? (listW - gap2) / 2 : listW;
+    const listY = cursorY + 0.28;
+    renderPointList(slide, left2, { x: listX, y: listY, w: colW2, h: bounds.h - (listY - bounds.y) }, pal, 0);
+    if (right2.length > 0) {
+      renderPointList(slide, right2, { x: listX + colW2 + gap2, y: listY, w: colW2, h: bounds.h - (listY - bounds.y) }, pal, left2.length);
+    }
+    return;
+  }
   if (lead) {
     addText(slide, lead, { x: bounds.x, y: cursorY, w: bounds.w, h: 0.48 }, {
       fontFace: FONT_BODY,
       fontSize: 11.8,
-      color: pal.lightMuted,
+      color: family === "tech" ? pal.darkMuted : pal.lightMuted,
       breakLine: true,
       fit: "shrink"
     });
@@ -16076,22 +16418,23 @@ function renderRoadmapRow(slide, index, title, meta, desc, token, bounds, pal) {
 }
 function renderSteps(slide, plan, bounds, pal) {
   const steps = (plan.steps ?? plan.points ?? []).slice(0, 6);
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, slideIconToken(plan));
   const rowGap = 0.14;
-  const rowH = (bounds.h - rowGap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1);
+  const rowH = (bounds.h - (startY - bounds.y) - rowGap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1);
   steps.forEach((step, index) => {
     const { title, desc } = splitCardText(step);
     renderRoadmapRow(slide, index, title || step, `Step ${index + 1}`, desc, inferIconToken(title || step) || "strategy", {
       x: bounds.x,
-      y: bounds.y + index * (rowH + rowGap),
+      y: startY + index * (rowH + rowGap),
       w: bounds.w,
       h: rowH
     }, pal);
   });
 }
-function renderCards(slide, plan, bounds, pal) {
+function renderCards(slide, plan, bounds, family, pal) {
   const cards = (plan.cards ?? []).slice(0, 6);
   if (cards.length === 0) {
-    return renderBullets(slide, plan, bounds, pal);
+    return renderBullets(slide, plan, bounds, family, pal);
   }
   const startY = addTopSummaryStrip(slide, plan, bounds, pal, slideIconToken(plan));
   const cols = cards.length <= 2 ? 2 : 3;
@@ -16152,11 +16495,11 @@ function chartInsight(plan) {
   }
   return buildLead(plan);
 }
-function renderChart(slide, plan, bounds, pal) {
+function renderChart(slide, plan, bounds, family, pal) {
   const categories = plan.chart_categories ?? [];
   const series = (plan.chart_series ?? []).filter((entry) => Array.isArray(entry.values) && entry.values.length > 0);
   if (categories.length === 0 || series.length === 0) {
-    return renderBullets(slide, plan, bounds, pal);
+    return renderBullets(slide, plan, bounds, family, pal);
   }
   const startY = addTopSummaryStrip(slide, plan, bounds, pal, "chart");
   const usableH = bounds.h - (startY - bounds.y);
@@ -16248,7 +16591,7 @@ function renderChart(slide, plan, bounds, pal) {
 }
 function renderTimeline(slide, plan, bounds, pal) {
   const items = (plan.timeline ?? []).slice(0, 6);
-  const startY = bounds.y;
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, slideIconToken(plan));
   const rowGap = 0.14;
   const rowH = (bounds.h - (startY - bounds.y) - rowGap * Math.max(items.length - 1, 0)) / Math.max(items.length, 1);
   items.forEach((item, index) => {
@@ -16281,10 +16624,10 @@ function renderCompare(slide, plan, bounds, pal) {
     renderPointList(slide, column.data.points.slice(0, 6), { x: column.x + 0.18, y: startY + 0.62, w: colW - 0.36, h: bounds.h - (startY - bounds.y) - 0.8 }, pal, column.offset);
   });
 }
-function renderTable(slide, plan, bounds, pal) {
+function renderTable(slide, plan, bounds, family, pal) {
   const table = plan.table;
   if (!table || table.headers.length === 0) {
-    return renderBullets(slide, plan, bounds, pal);
+    return renderBullets(slide, plan, bounds, family, pal);
   }
   const startY = addTopSummaryStrip(slide, plan, bounds, pal, "shield");
   addPanel(slide, { x: bounds.x, y: startY, w: bounds.w, h: bounds.h - (startY - bounds.y) }, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.04);
@@ -16359,16 +16702,16 @@ function renderSection(slide, plan, bounds, family, pal) {
 function renderSlideBody(slide, plan, bounds, family, pal) {
   switch (plan.layout) {
     case "stats":
-      renderStats(slide, plan, bounds, pal);
+      renderStats(slide, plan, bounds, family, pal);
       return;
     case "steps":
       renderSteps(slide, plan, bounds, pal);
       return;
     case "cards":
-      renderCards(slide, plan, bounds, pal);
+      renderCards(slide, plan, bounds, family, pal);
       return;
     case "chart":
-      renderChart(slide, plan, bounds, pal);
+      renderChart(slide, plan, bounds, family, pal);
       return;
     case "timeline":
       renderTimeline(slide, plan, bounds, pal);
@@ -16377,14 +16720,14 @@ function renderSlideBody(slide, plan, bounds, family, pal) {
       renderCompare(slide, plan, bounds, pal);
       return;
     case "table":
-      renderTable(slide, plan, bounds, pal);
+      renderTable(slide, plan, bounds, family, pal);
       return;
     case "title":
     case "blank":
       renderSection(slide, plan, bounds, family, pal);
       return;
     default:
-      renderBullets(slide, plan, bounds, pal);
+      renderBullets(slide, plan, bounds, family, pal);
   }
 }
 function validateManifest(input) {
