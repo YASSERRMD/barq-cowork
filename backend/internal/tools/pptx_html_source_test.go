@@ -198,3 +198,24 @@ func TestPreferredHTMLCover_FallsBackForUnderstructuredCover(t *testing.T) {
 		t.Fatalf("expected fallback cover structure, got %s", got)
 	}
 }
+
+func TestPreferredHTMLSlideMarkup_FallsBackForUnderstructuredSlide(t *testing.T) {
+	slide := pptxPreviewSlide{
+		Heading: "Operating signal",
+		Layout:  "bullets",
+		HTML:    `<div style="display:flex;flex-direction:column;gap:18px"><h2 class="section-title">Operating signal</h2><p class="body-copy">One paragraph and one heading are not enough for a client-facing slide that needs real density.</p></div>`,
+		Points: []string{
+			"Connect governance to workflow ownership.",
+			"Treat scorecards as operating controls, not decoration.",
+			"Close with one funding and accountability decision.",
+		},
+	}
+
+	got := preferredHTMLSlideMarkup(slide)
+	if strings.Contains(got, `display:flex`) {
+		t.Fatalf("expected weak authored slide to fall back to structured markup, got %s", got)
+	}
+	if !strings.Contains(got, `bullet-list`) || !strings.Contains(got, `Operating signal`) {
+		t.Fatalf("expected fallback bullet layout, got %s", got)
+	}
+}

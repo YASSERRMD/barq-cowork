@@ -158,10 +158,7 @@ func buildPPTXHTMLDocument(manifest pptxPreviewManifest) string {
 	cover := preferredHTMLCover(manifest)
 	slides.WriteString(`<section class="barq-pptx-slide barq-pptx-cover" data-slide-kind="cover"><div class="barq-pptx-canvas">` + wrapHTMLSlideShell(cover, true) + `</div></section>`)
 	for _, slide := range manifest.Slides {
-		body := strings.TrimSpace(slide.HTML)
-		if body == "" {
-			body = fallbackHTMLSlideMarkup(slide)
-		}
+		body := preferredHTMLSlideMarkup(slide)
 		slides.WriteString(`<section class="barq-pptx-slide" data-slide-kind="content" data-layout="` + html.EscapeString(slide.Layout) + `"><div class="barq-pptx-canvas">` + wrapHTMLSlideShell(body, false) + `</div></section>`)
 	}
 
@@ -179,7 +176,7 @@ func buildPPTXHTMLDocument(manifest pptxPreviewManifest) string {
 <style>` + css + `</style>
 </head>
 <body>
-<main class="barq-pptx-deck">` + slides.String() + `</main>
+<main class="barq-pptx-deck" data-theme="` + html.EscapeString(strings.ToLower(strings.TrimSpace(manifest.Theme))) + `" data-cover-style="` + html.EscapeString(strings.ToLower(strings.TrimSpace(manifest.DeckPlan.CoverStyle))) + `" data-composition="` + html.EscapeString(strings.ToLower(strings.TrimSpace(manifest.DeckPlan.Design.Composition))) + `" data-density="` + html.EscapeString(strings.ToLower(strings.TrimSpace(manifest.DeckPlan.Design.Density))) + `" data-accent-mode="` + html.EscapeString(strings.ToLower(strings.TrimSpace(manifest.DeckPlan.Design.AccentMode))) + `">` + slides.String() + `</main>
 </body>
 </html>`
 }
@@ -220,6 +217,60 @@ func htmlCoverNeedsFallback(raw string) bool {
 	return signals < 2 || htmlInformationBlockCount(raw) < 5
 }
 
+func preferredHTMLSlideMarkup(slide pptxPreviewSlide) string {
+	body := strings.TrimSpace(slide.HTML)
+	if body == "" || htmlSlideNeedsFallback(body) {
+		return fallbackHTMLSlideMarkup(slide)
+	}
+	return body
+}
+
+func htmlSlideNeedsFallback(raw string) bool {
+	raw = sanitizeHTMLMarkup(raw)
+	if raw == "" {
+		return true
+	}
+	lower := strings.ToLower(raw)
+	blocks := htmlInformationBlockCount(raw)
+	textLen := len(htmlVisibleText(raw))
+	hasDenseGrid := (strings.Contains(lower, "grid-2") ||
+		strings.Contains(lower, "grid-3") ||
+		strings.Contains(lower, "grid-4") ||
+		strings.Contains(lower, "slide-grid") ||
+		strings.Contains(lower, "compare-grid") ||
+		strings.Contains(lower, "summary-strip")) && blocks >= 2
+	hasLayoutSignal := strings.Contains(lower, "slide-grid") ||
+		strings.Contains(lower, "grid-2") ||
+		strings.Contains(lower, "grid-3") ||
+		strings.Contains(lower, "grid-4") ||
+		strings.Contains(lower, "summary-strip") ||
+		strings.Contains(lower, "panel") ||
+		strings.Contains(lower, "stat-card") ||
+		strings.Contains(lower, "bullet-item") ||
+		strings.Contains(lower, "timeline-row") ||
+		strings.Contains(lower, "compare-col") ||
+		strings.Contains(lower, "<table")
+	if !hasLayoutSignal {
+		return true
+	}
+	if hasDenseGrid {
+		return false
+	}
+	if strings.Contains(lower, "display:flex") && blocks < 5 {
+		return true
+	}
+	if textLen >= 220 && blocks < 4 {
+		return true
+	}
+	if textLen >= 420 && blocks < 6 {
+		return true
+	}
+	if strings.Contains(lower, "<h2") && blocks < 3 && textLen < 220 {
+		return true
+	}
+	return false
+}
+
 func pptxHTMLGuardrailCSS() string {
 	return `
 .barq-pptx-cover .cover-shell,
@@ -230,9 +281,18 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-cover .cover-shell {
   padding-top: 72px !important;
   padding-bottom: 64px !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  align-content: stretch !important;
 }
 .barq-pptx-cover .cover-grid {
   align-items: center !important;
+}
+.barq-pptx-cover .summary-strip {
+  align-self: end !important;
+}
+.barq-pptx-cover .cover-shell--compose {
+  display: grid !important;
+  align-content: stretch !important;
 }
 .barq-pptx-cover .cover-shell--compose > div:first-child {
   display: grid !important;
@@ -263,18 +323,149 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-cover .cover-shell--compose .lede {
   max-width: 620px !important;
 }
+.barq-pptx-slide .slide-root,
+.barq-pptx-slide .slide-shell,
+.barq-pptx-slide .content-shell {
+  display: grid !important;
+  gap: 18px !important;
+  padding: 60px 68px 58px !important;
+  min-height: 100% !important;
+  align-content: start !important;
+}
+.barq-pptx-slide .slide-root > .lede,
+.barq-pptx-slide .slide-shell > .lede,
+.barq-pptx-slide .content-shell > .lede {
+  max-width: 1120px !important;
+  margin-bottom: 0 !important;
+}
+.barq-pptx-slide .slide-root > .rule,
+.barq-pptx-slide .slide-shell > .rule,
+.barq-pptx-slide .content-shell > .rule {
+  width: 120px !important;
+  margin: 2px 0 6px !important;
+}
 .barq-pptx-slide .summary-strip,
 .barq-pptx-slide .grid-2,
 .barq-pptx-slide .grid-3,
 .barq-pptx-slide .grid-4,
 .barq-pptx-slide .steps-flow {
-  align-items: stretch;
+  align-items: stretch !important;
+  gap: 16px !important;
 }
-.barq-pptx-slide .panel,
-.barq-pptx-slide .panel-light,
 .barq-pptx-slide .step-item,
 .barq-pptx-slide .stat-card {
-  min-height: 100%;
+  min-height: 100% !important;
+}
+.barq-pptx-slide .grid-2 > .panel,
+.barq-pptx-slide .grid-3 > .panel,
+.barq-pptx-slide .grid-4 > .panel,
+.barq-pptx-slide .grid-2 > .panel-light,
+.barq-pptx-slide .grid-3 > .panel-light,
+.barq-pptx-slide .grid-4 > .panel-light {
+  min-height: 100% !important;
+}
+.barq-pptx-slide .panel,
+.barq-pptx-slide .panel-light {
+  padding: 20px 22px !important;
+  border-radius: 14px !important;
+}
+.barq-pptx-slide .panel {
+  background: color-mix(in srgb, var(--card) 94%, white) !important;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, white) !important;
+}
+.barq-pptx-slide .panel-light {
+  background: color-mix(in srgb, var(--accent) 6%, white) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, white) !important;
+}
+.barq-pptx-slide .stat-card {
+  display: grid !important;
+  gap: 6px !important;
+  align-content: start !important;
+  min-height: 168px !important;
+  padding: 22px 20px !important;
+  border-radius: 16px !important;
+  background: color-mix(in srgb, var(--card) 96%, white) !important;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
+  border-top: 6px solid var(--accent) !important;
+  text-align: left !important;
+}
+.barq-pptx-slide .stat-value {
+  font-size: 36px !important;
+  line-height: 1 !important;
+}
+.barq-pptx-slide .stat-label {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+}
+.barq-pptx-slide .stat-desc {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+.barq-pptx-slide .bullet-list {
+  display: grid !important;
+  gap: 12px !important;
+}
+.barq-pptx-slide .bullet-item {
+  display: grid !important;
+  grid-template-columns: 14px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: start !important;
+  padding: 14px 16px 14px 18px !important;
+  background: color-mix(in srgb, var(--card) 97%, white) !important;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
+  border-left: 5px solid var(--accent) !important;
+  border-radius: 12px !important;
+}
+.barq-pptx-slide .bullet-item:last-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
+}
+.barq-pptx-slide .bullet-item strong {
+  display: block !important;
+  margin-bottom: 5px !important;
+}
+.barq-pptx-slide .bullet-marker {
+  width: 10px !important;
+  height: 10px !important;
+  margin-top: 7px !important;
+}
+.barq-pptx-slide .timeline-row,
+.barq-pptx-slide .compare-col {
+  background: color-mix(in srgb, var(--card) 97%, white) !important;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
+  border-radius: 14px !important;
+}
+.barq-pptx-slide .icon-circle {
+  width: 42px !important;
+  height: 42px !important;
+  margin-bottom: 12px !important;
+}
+.barq-pptx-slide .card-title {
+  font-size: 18px !important;
+  line-height: 1.2 !important;
+}
+.barq-pptx-slide .card-desc {
+  font-size: 14px !important;
+  line-height: 1.48 !important;
+}
+.barq-pptx-slide .summary-strip {
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr)) !important;
+}
+.barq-pptx-deck[data-density="balanced"] .barq-pptx-slide .slide-root,
+.barq-pptx-deck[data-density="compact"] .barq-pptx-slide .slide-root,
+.barq-pptx-deck[data-density="balanced"] .barq-pptx-slide .slide-shell,
+.barq-pptx-deck[data-density="compact"] .barq-pptx-slide .slide-shell {
+  padding: 54px 62px 52px !important;
+}
+.barq-pptx-deck[data-cover-style="editorial"] .barq-pptx-cover .cover-shell,
+.barq-pptx-deck[data-cover-style="poster"] .barq-pptx-cover .cover-shell {
+  padding-top: 64px !important;
+  padding-bottom: 58px !important;
+}
+.barq-pptx-deck[data-theme="education"] .barq-pptx-slide .panel,
+.barq-pptx-deck[data-theme="education"] .barq-pptx-slide .stat-card,
+.barq-pptx-deck[data-theme="education"] .barq-pptx-slide .bullet-item {
+  border-radius: 12px !important;
 }
 `
 }
@@ -620,15 +811,71 @@ func fallbackHTMLCover(manifest pptxPreviewManifest) string {
 		subtitleHTML = `<p class="lede" style="max-width:760px;">` + html.EscapeString(subtitle) + `</p>`
 	}
 	meta := []string{}
-	if subject := strings.TrimSpace(manifest.DeckPlan.Subject); subject != "" {
-		meta = append(meta, `<span class="tag">`+html.EscapeString(subject)+`</span>`)
+	if theme := strings.TrimSpace(manifest.Theme); theme != "" {
+		meta = append(meta, `<span class="tag">`+html.EscapeString(theme)+`</span>`)
 	}
-	if audience := strings.TrimSpace(manifest.DeckPlan.Audience); audience != "" {
-		meta = append(meta, `<span class="tag">`+html.EscapeString(audience)+`</span>`)
+	if need := strings.TrimSpace(manifest.DeckPlan.DominantNeed); need != "" {
+		meta = append(meta, `<span class="tag">`+html.EscapeString(need)+`</span>`)
+	}
+	if slideCount := len(manifest.Slides) + 1; slideCount > 0 {
+		meta = append(meta, `<span class="tag">`+html.EscapeString(fmt.Sprintf("%d slides", slideCount))+`</span>`)
 	}
 	kicker := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Kicker), "Presentation"))
 	narrative := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Narrative), strings.TrimSpace(manifest.DeckPlan.NarrativeArc), "Structured decision-ready narrative"))
 	colorStory := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.ColorStory), "Deliberate contemporary system"))
+	chapterCards := fallbackCoverChapterCards(manifest)
+	composition := strings.ToLower(strings.TrimSpace(manifest.DeckPlan.Design.Composition))
+	heroLayout := strings.ToLower(strings.TrimSpace(manifest.DeckPlan.Design.HeroLayout))
+	switch {
+	case composition == "stack" || heroLayout == "statement":
+		return `<div style="position:absolute;left:0;top:0;right:0;height:12px;background:linear-gradient(90deg, var(--accent), var(--accent-2));"></div>
+<div class="cover-shell" style="position:absolute;left:76px;top:74px;right:76px;bottom:70px;">
+  <div class="cover-stack" style="gap:22px;align-content:start;max-width:1240px;">
+    <div class="eyebrow">` + kicker + `</div>
+    <h1 class="display-title" style="max-width:1080px;">` + title + `</h1>
+    ` + subtitleHTML + `
+    <div class="summary-strip" style="grid-template-columns:1.1fr 0.9fr 0.9fr;gap:12px;margin-top:8px;">
+      <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
+        <span class="eyebrow">Narrative</span>
+        <span class="body-copy">` + narrative + `</span>
+      </div>
+      <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
+        <span class="eyebrow">Audience</span>
+        <span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</span>
+      </div>
+      <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
+        <span class="eyebrow">Mood</span>
+        <span class="body-copy">` + colorStory + `</span>
+      </div>
+    </div>
+  </div>
+</div>`
+	case composition == "mosaic" || heroLayout == "module":
+		return `<div style="position:absolute;inset:0;background:
+radial-gradient(circle at top left, rgba(45,106,79,0.09), transparent 32%),
+linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0)),
+var(--bg);"></div>
+<div class="cover-shell" style="position:absolute;left:74px;top:70px;right:74px;bottom:68px;">
+  <div class="cover-grid" style="grid-template-columns:minmax(0,1.04fr) 1fr;gap:22px;align-items:stretch;">
+    <div class="cover-stack" style="gap:18px;align-content:start;">
+      <div class="eyebrow">` + kicker + `</div>
+      <h1 class="display-title" style="max-width:760px;">` + title + `</h1>
+      ` + subtitleHTML + `
+      <div class="rule"></div>
+      <div class="panel-light" style="padding:20px 22px;">
+        <div class="eyebrow" style="margin-bottom:10px;">Narrative</div>
+        <p class="body-copy" style="font-size:19px;line-height:1.48;">` + narrative + `</p>
+      </div>
+    </div>
+    <div class="grid-2" style="grid-template-columns:1fr 1fr;grid-auto-rows:minmax(0,1fr);gap:14px;">
+      <div class="panel-light"><span class="eyebrow">Audience</span><p class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</p></div>
+      <div class="panel-light"><span class="eyebrow">Theme</span><p class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Theme), "Presentation")) + `</p></div>
+      <div class="panel-light"><span class="eyebrow">Mood</span><p class="body-copy">` + colorStory + `</p></div>
+      <div class="panel-light"><span class="eyebrow">Subject</span><p class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Subject), "Presentation")) + `</p></div>
+    </div>
+  </div>
+</div>`
+	}
 	return `<div style="position:absolute;inset:0;background:
 radial-gradient(circle at top left, rgba(45,106,79,0.08), transparent 34%),
 linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0)),
@@ -642,6 +889,7 @@ var(--bg);"></div>
       ` + subtitleHTML + `
       <div class="rule"></div>
       <div class="meta-row">` + strings.Join(meta, "") + `</div>
+      ` + chapterCards + `
     </div>
     <div class="cover-aside" style="align-content:start;gap:16px;padding-top:6px;">
       <div class="panel-light" style="padding:22px 24px;">
@@ -665,6 +913,23 @@ var(--bg);"></div>
     </div>
   </div>
 </div>`
+}
+
+func fallbackCoverChapterCards(manifest pptxPreviewManifest) string {
+	if len(manifest.Slides) == 0 {
+		return ""
+	}
+	limit := 3
+	if len(manifest.Slides) < limit {
+		limit = len(manifest.Slides)
+	}
+	cards := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		cards = append(cards, `<div class="panel-light" style="padding:16px 18px;"><div class="eyebrow">`+
+			html.EscapeString(fmt.Sprintf("%02d", i+1))+`</div><p class="body-copy" style="font-size:18px;line-height:1.34;">`+
+			html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Slides[i].Heading), "Section"))+`</p></div>`)
+	}
+	return `<div class="grid-3" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:6px;">` + strings.Join(cards, "") + `</div>`
 }
 
 func fallbackHTMLSlideMarkup(slide pptxPreviewSlide) string {
