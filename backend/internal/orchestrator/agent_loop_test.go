@@ -175,6 +175,73 @@ func TestAgentLoop_FailsPresentationTaskWithoutRequiredToolCall(t *testing.T) {
 	}
 }
 
+type fakeJSONArgsProvider struct {
+	requests []provider.ChatCompletionRequest
+}
+
+func (f *fakeJSONArgsProvider) Name() string { return "fake-json-args" }
+
+func (f *fakeJSONArgsProvider) ValidateConfig(provider.ProviderConfig) error { return nil }
+
+func (f *fakeJSONArgsProvider) Chat(_ context.Context, _ provider.ProviderConfig, req provider.ChatCompletionRequest) (<-chan provider.ChatCompletionChunk, error) {
+	f.requests = append(f.requests, req)
+	ch := make(chan provider.ChatCompletionChunk, 2)
+	switch len(f.requests) {
+	case 1:
+		ch <- provider.ChatCompletionChunk{ContentDelta: `{"filename":"local-deck","title":"Local Deck","deck":{"subject":"Local Deck","audience":"operators","narrative":"issue -> action","theme":"data","visual_style":"concise dashboard","cover_style":"editorial","color_story":"clean slate","motif":"chart","kicker":"Local mode","theme_css":".deck{display:grid;gap:18px}.panel{padding:24px;border:1px solid var(--border)}.hero{display:grid;gap:20px}.tag{display:inline-flex;padding:8px 12px}","cover_html":"<div class='deck' style='padding:96px'><div class='eyebrow'>LOCAL MODE</div><h1 class='display-title'>Local Deck</h1><div class='panel'>Operators need a clean handoff path.</div></div>","palette":{"background":"F8FAFC","card":"FFFFFF","accent":"0EA5E9","accent2":"38BDF8","text":"0F172A","muted":"64748B","border":"CBD5E1"}},"slides":[{"heading":"Operating signal","type":"html","html":"<div class='hero' style='padding:96px'><div class='eyebrow'>SIGNAL</div><h2 class='section-title'>Operating signal</h2><div class='panel'>One JSON handoff is enough for weak local models.</div></div>"}]}`}
+	default:
+		ch <- provider.ChatCompletionChunk{ContentDelta: "done"}
+	}
+	ch <- provider.ChatCompletionChunk{Done: true}
+	close(ch)
+	return ch, nil
+}
+
+func TestAgentLoop_RecoversToolArgsFromAssistantJSON(t *testing.T) {
+	prov := &fakeJSONArgsProvider{}
+	registry := tools.NewRegistry()
+	registry.Register(fakeWritePPTXTool{})
+	artifacts := &fakeArtifactStore{}
+	loop := NewAgentLoop(
+		prov,
+		provider.ProviderConfig{ProviderName: "ollama", Model: "qwen2.5-coder:7b"},
+		registry,
+		fakePlanStore{},
+		artifacts,
+		fakeEventEmitter{},
+		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	)
+
+	task := &domain.Task{
+		ID:          "task-3",
+		Title:       "Create a presentation about local operations",
+		Description: "Need a PowerPoint deck",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	result := loop.Run(context.Background(), task, t.TempDir())
+	if result.Completed != 1 || result.Failed != 0 {
+		t.Fatalf("expected recovered JSON args to complete one tool call, got %+v", result)
+	}
+	if len(artifacts.artifacts) != 1 {
+		t.Fatalf("expected one recorded artifact, got %d", len(artifacts.artifacts))
+	}
+	if len(prov.requests) == 0 {
+		t.Fatalf("expected provider request")
+	}
+	foundCompatibilityPrompt := false
+	for _, msg := range prov.requests[0].Messages {
+		if strings.Contains(msg.Content, "Model compatibility mode") {
+			foundCompatibilityPrompt = true
+			break
+		}
+	}
+	if !foundCompatibilityPrompt {
+		t.Fatalf("expected weak-model compatibility prompt in first request, got %+v", prov.requests[0].Messages)
+	}
+}
+
 func TestResolveArtifactContentPath(t *testing.T) {
 	root := filepath.Join(string(filepath.Separator), "tmp", "barq-workspace")
 	got := resolveArtifactContentPath(root, "slides/deck.pptx")

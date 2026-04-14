@@ -114,8 +114,15 @@ func (s *SubAgentOrchestrator) Spawn(
 	}
 
 	maxConc := opts.MaxConcurrency
+	safeMaxConc := provider.SuggestedMaxConcurrentRequests(opts.ProviderConfig)
+	if safeMaxConc <= 0 {
+		safeMaxConc = 3
+	}
 	if maxConc <= 0 {
-		maxConc = 3
+		maxConc = safeMaxConc
+	}
+	if maxConc > safeMaxConc {
+		maxConc = safeMaxConc
 	}
 	timeout := opts.TimeoutPerAgent
 	if timeout <= 0 {

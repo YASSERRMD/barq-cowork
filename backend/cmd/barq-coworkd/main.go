@@ -90,11 +90,11 @@ func main() {
 
 	// ── Provider registry ──────────────────────────────────────────────
 	registry := provider.NewRegistry()
-	registry.Register(oaiprovider.New(120))       // zai
-	registry.Register(zaiprovider.New(120))       // openai
-	registry.Register(anthropicprovider.New(120)) // anthropic
-	registry.Register(geminiprovider.New(120))    // gemini
-	registry.Register(ollamaprovider.New(300))    // ollama (local, longer timeout)
+	registry.Register(provider.WithDefaultConcurrencyLimit(oaiprovider.New(120)))       // zai
+	registry.Register(provider.WithDefaultConcurrencyLimit(zaiprovider.New(120)))       // openai
+	registry.Register(provider.WithDefaultConcurrencyLimit(anthropicprovider.New(120))) // anthropic
+	registry.Register(provider.WithDefaultConcurrencyLimit(geminiprovider.New(120)))    // gemini
+	registry.Register(provider.WithDefaultConcurrencyLimit(ollamaprovider.New(300)))    // ollama (local, longer timeout)
 	logger.Info("providers registered", "providers", registry.List())
 
 	// ── Repositories ──────────────────────────────────────────────────
