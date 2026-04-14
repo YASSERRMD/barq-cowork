@@ -766,6 +766,30 @@ function proposalSectionLabel(plan: SlidePlan): string {
   return "KEY POINTS";
 }
 
+function slideChipLabel(plan: SlidePlan): string {
+  switch (plan.layout) {
+    case "stats":
+      return "DECISION SIGNALS";
+    case "chart":
+      return "TREND READOUT";
+    case "steps":
+      return "IMPLEMENTATION PATH";
+    case "timeline":
+      return "ROADMAP";
+    case "compare":
+      return "CURRENT VS TARGET";
+    case "table":
+      return "DECISION MATRIX";
+    case "cards":
+      return "CAPABILITIES";
+    case "title":
+    case "blank":
+      return "SECTION";
+    default:
+      return proposalSectionLabel(plan);
+  }
+}
+
 function coverWordmark(title: string): string {
   const words = title.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "";
@@ -1031,7 +1055,7 @@ function renderCover(slide: PptxSlide, manifest: Manifest, family: RenderFamily,
   }
 }
 
-function renderSlideChrome(slide: PptxSlide, content: SlidePlan, totalSlides: number, family: RenderFamily, pal: RenderPalette): Bounds {
+function renderSlideChrome(slide: PptxSlide, content: SlidePlan, _totalSlides: number, family: RenderFamily, pal: RenderPalette): Bounds {
   addFullRect(slide, family === "proposal" ? pal.canvas : pal.bg);
   const headFill = family === "playful" ? mixHex(pal.header, "FFFFFF", 0.08) : pal.header;
   addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.58 }, headFill, headFill, 0);
@@ -1053,12 +1077,14 @@ function renderSlideChrome(slide: PptxSlide, content: SlidePlan, totalSlides: nu
     charSpace: 0.3,
   });
   addPanel(slide, { x: 10.72, y: 0.1, w: 1.98, h: 0.3 }, mixHex(headFill, pal.accent, 0.48), mixHex(headFill, pal.card, 0.1), 0.08);
-  addText(slide, `Slide ${content.number} of ${totalSlides}`, { x: 10.89, y: 0.15, w: 1.64, h: 0.16 }, {
+  addText(slide, slideChipLabel(content), { x: 10.84, y: 0.15, w: 1.72, h: 0.16 }, {
     fontFace: FONT_BODY,
-    fontSize: 9.5,
+    fontSize: 8.6,
     color: "FFFFFF",
     bold: true,
     align: "center",
+    fit: "shrink",
+    charSpace: 0.5,
   });
   return { x: 0.48, y: 0.8, w: 12.37, h: 6.2 };
 }
