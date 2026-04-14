@@ -291,6 +291,32 @@ func previewProposalSlideTitle(title string) string {
 	return title
 }
 
+func previewCoverWordmark(title string) string {
+	words := strings.Fields(strings.TrimSpace(title))
+	if len(words) == 0 {
+		return ""
+	}
+	first := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			return r
+		case r >= 'a' && r <= 'z':
+			return r - 32
+		case r >= '0' && r <= '9':
+			return r
+		default:
+			return -1
+		}
+	}, words[0])
+	if first == "" {
+		return ""
+	}
+	if len(first) <= 4 || (len(first) <= 8 && first == strings.ToUpper(first)) {
+		return first
+	}
+	return ""
+}
+
 func previewProposalSlideIconToken(slide pptxPreviewSlide) string {
 	switch slide.Layout {
 	case "stats", "chart":
@@ -321,13 +347,23 @@ func renderPPTXPreviewProposalCover(manifest pptxPreviewManifest, pal pptxPalett
 	if audience := strings.TrimSpace(manifest.DeckPlan.Audience); audience != "" {
 		support = `<p class="barq-preview-support">For ` + html.EscapeString(audience) + `</p>`
 	}
+	wordmark := previewCoverWordmark(manifest.Title)
+	displayTitle := strings.TrimSpace(manifest.Title)
+	if wordmark != "" && strings.HasPrefix(strings.ToUpper(displayTitle), wordmark) {
+		displayTitle = strings.TrimSpace(displayTitle[len(strings.Fields(displayTitle)[0]):])
+	}
+	wordmarkHTML := ""
+	if wordmark != "" {
+		wordmarkHTML = `<div class="barq-preview-proposal-wordmark">` + html.EscapeString(wordmark) + `</div>`
+	}
 	footer := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Subject), manifest.Title, "Presentation"))
 	return `<section class="barq-preview-cover" data-family="proposal">
   <div class="barq-preview-cover-stage">
     <div class="barq-preview-proposal-cover-panel">
       <p class="barq-preview-eyebrow">` + kicker + `</p>
+      ` + wordmarkHTML + `
       <div class="barq-preview-cover-rule"></div>
-      <h1>` + html.EscapeString(firstNonEmpty(manifest.Title, "Presentation")) + `</h1>
+      <h1>` + html.EscapeString(firstNonEmpty(displayTitle, manifest.Title, "Presentation")) + `</h1>
       ` + subtitle + `
       ` + support + `
     </div>
@@ -953,6 +989,15 @@ func pptxPreviewHTMLShell(content string, manifest pptxPreviewManifest, pal pptx
   .barq-preview-proposal-cover-panel {
     padding: 60px 56px 40px;
     max-width: 720px;
+  }
+  .barq-preview-proposal-wordmark {
+    margin: 28px 0 8px;
+    color: var(--accent);
+    font-family: "Iowan Old Style", "Georgia", serif;
+    font-size: 62px;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
   }
   .barq-preview-cover[data-family="proposal"] .barq-preview-eyebrow {
     color: var(--accent);
