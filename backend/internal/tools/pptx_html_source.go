@@ -279,70 +279,128 @@ func pptxHTMLGuardrailCSS() string {
   align-content: start !important;
 }
 .barq-pptx-cover .cover-shell {
-  padding-top: 56px !important;
-  padding-bottom: 50px !important;
-  grid-template-rows: minmax(0, 1fr) auto !important;
-  align-content: stretch !important;
+  padding-top: 40px !important;
+  padding-bottom: 36px !important;
+  grid-template-rows: auto !important;
+  align-content: start !important;
 }
 .barq-pptx-cover .cover-grid {
-  align-items: center !important;
-}
-.barq-pptx-cover .summary-strip {
-  align-self: end !important;
+  align-items: start !important;
+  min-height: 100% !important;
 }
 .barq-pptx-cover .cover-shell--compose {
   display: grid !important;
-  align-content: stretch !important;
+  align-content: start !important;
 }
 .barq-pptx-cover .cover-shell--compose > div:first-child {
   display: grid !important;
-  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr) !important;
-  gap: 30px !important;
+  grid-template-columns: minmax(0, 1.14fr) minmax(380px, 0.86fr) !important;
+  gap: 24px !important;
   min-height: 100% !important;
-  align-items: center !important;
+  align-items: start !important;
   padding: 0 !important;
 }
 .barq-pptx-cover .cover-shell--compose > div:first-child > div:first-child {
   display: grid !important;
-  gap: 18px !important;
-  align-content: center !important;
+  gap: 14px !important;
+  align-content: start !important;
   padding: 0 !important;
   min-width: 0 !important;
 }
 .barq-pptx-cover .cover-shell--compose > div:first-child > div:last-child {
   display: grid !important;
-  gap: 16px !important;
-  align-content: center !important;
-  justify-items: center !important;
-  padding: 0 0 0 24px !important;
+  gap: 12px !important;
+  align-content: start !important;
+  justify-items: stretch !important;
+  padding: 0 0 0 10px !important;
   min-width: 0 !important;
 }
 .barq-pptx-cover .cover-shell--compose .display-title {
-  max-width: 720px !important;
+  max-width: 780px !important;
+  font-size: 74px !important;
 }
 .barq-pptx-cover .cover-shell--compose .lede {
-  max-width: 620px !important;
+  max-width: 700px !important;
+  font-size: 24px !important;
 }
-.barq-pptx-slide .slide-root,
+.barq-pptx-cover .cover-shell--compose .panel-light {
+  padding: 18px 20px !important;
+  border-radius: 14px !important;
+}
+.barq-pptx-cover .cover-stack > .panel-light {
+  min-height: 186px !important;
+}
+.barq-pptx-cover .cover-aside > .panel-light {
+  min-height: 126px !important;
+}
+.barq-pptx-cover .cover-shell--compose .grid-3 {
+  align-items: stretch !important;
+  grid-auto-rows: 1fr !important;
+}
+.barq-pptx-cover .cover-shell--compose .grid-3 > .panel-light {
+  min-height: 142px !important;
+}
+.barq-pptx-cover .meta-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+}
+.barq-pptx-cover .tag {
+  min-height: 36px !important;
+  padding: 0 12px !important;
+  font-size: 14px !important;
+  letter-spacing: 0.08em !important;
+  border-radius: 999px !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, white) !important;
+  background: color-mix(in srgb, var(--accent) 6%, white) !important;
+}
 .barq-pptx-slide .slide-shell,
 .barq-pptx-slide .content-shell {
   display: grid !important;
-  gap: 14px !important;
-  padding: 44px 52px 40px !important;
+  gap: 12px !important;
+  padding: 36px 42px 30px !important;
   min-height: 100% !important;
   align-content: start !important;
+  grid-template-rows: auto auto auto minmax(0, 1fr) !important;
+}
+.barq-pptx-slide .slide-root {
+  display: grid !important;
+  gap: 12px !important;
+  padding: 0 !important;
+  min-height: 100% !important;
+  align-content: start !important;
+  grid-template-rows: auto auto auto minmax(0, 1fr) !important;
 }
 .barq-pptx-slide .slide-root > .lede,
 .barq-pptx-slide .slide-shell > .lede,
 .barq-pptx-slide .content-shell > .lede {
   max-width: 1120px !important;
   margin-bottom: 0 !important;
+  font-size: 28px !important;
+  line-height: 1.34 !important;
+}
+.barq-pptx-slide .slide-root > :last-child,
+.barq-pptx-slide .slide-shell > :last-child,
+.barq-pptx-slide .content-shell > :last-child {
+  align-self: stretch !important;
 }
 .barq-pptx-slide .slide-root > .rule,
 .barq-pptx-slide .slide-shell > .rule,
 .barq-pptx-slide .content-shell > .rule {
   width: 136px !important;
   margin: 0 !important;
+}
+.barq-pptx-slide .slide-root > .grid-2,
+.barq-pptx-slide .slide-root > .grid-3,
+.barq-pptx-slide .slide-root > .grid-4,
+.barq-pptx-slide .slide-shell > .grid-2,
+.barq-pptx-slide .slide-shell > .grid-3,
+.barq-pptx-slide .slide-shell > .grid-4,
+.barq-pptx-slide .content-shell > .grid-2,
+.barq-pptx-slide .content-shell > .grid-3,
+.barq-pptx-slide .content-shell > .grid-4 {
+  align-self: stretch !important;
+  grid-auto-rows: 1fr !important;
 }
 .barq-pptx-slide .summary-strip,
 .barq-pptx-slide .grid-2,
@@ -351,6 +409,72 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-slide .steps-flow {
   align-items: stretch !important;
   gap: 12px !important;
+}
+.barq-pptx-slide .slide-root > .grid-4,
+.barq-pptx-slide .slide-shell > .grid-4,
+.barq-pptx-slide .content-shell > .grid-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  min-height: 468px !important;
+}
+.barq-pptx-slide .slide-root > .grid-3,
+.barq-pptx-slide .slide-shell > .grid-3,
+.barq-pptx-slide .content-shell > .grid-3 {
+  min-height: 244px !important;
+}
+.barq-pptx-slide .slide-root > .grid-2,
+.barq-pptx-slide .slide-shell > .grid-2,
+.barq-pptx-slide .content-shell > .grid-2 {
+  min-height: 612px !important;
+}
+.barq-pptx-slide .slide-root > .grid-2 > div,
+.barq-pptx-slide .slide-shell > .grid-2 > div,
+.barq-pptx-slide .content-shell > .grid-2 > div {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  min-height: 100% !important;
+}
+.barq-pptx-slide .slide-root > .grid-2 > div > .bullet-list,
+.barq-pptx-slide .slide-shell > .grid-2 > div > .bullet-list,
+.barq-pptx-slide .content-shell > .grid-2 > div > .bullet-list {
+  display: grid !important;
+  gap: 10px !important;
+  grid-auto-rows: 1fr !important;
+  flex: 1 1 auto !important;
+}
+.barq-pptx-slide .slide-root > .grid-2 > div > .bullet-list > .bullet-item,
+.barq-pptx-slide .slide-shell > .grid-2 > div > .bullet-list > .bullet-item,
+.barq-pptx-slide .content-shell > .grid-2 > div > .bullet-list > .bullet-item {
+  min-height: 0 !important;
+}
+.barq-pptx-slide .slide-root > .grid-2 > div > .panel,
+.barq-pptx-slide .slide-shell > .grid-2 > div > .panel,
+.barq-pptx-slide .content-shell > .grid-2 > div > .panel,
+.barq-pptx-slide .slide-root > .grid-2 > div > .panel-light,
+.barq-pptx-slide .slide-shell > .grid-2 > div > .panel-light,
+.barq-pptx-slide .content-shell > .grid-2 > div > .panel-light {
+  flex: 1 1 0 !important;
+  margin-bottom: 0 !important;
+}
+.barq-pptx-slide .slide-root > div[style*="grid-template-columns: 1fr 1fr 1fr"],
+.barq-pptx-slide .slide-root > div[style*="grid-template-columns:1fr 1fr 1fr"],
+.barq-pptx-slide .slide-shell > div[style*="grid-template-columns: 1fr 1fr 1fr"],
+.barq-pptx-slide .slide-shell > div[style*="grid-template-columns:1fr 1fr 1fr"],
+.barq-pptx-slide .content-shell > div[style*="grid-template-columns: 1fr 1fr 1fr"],
+.barq-pptx-slide .content-shell > div[style*="grid-template-columns:1fr 1fr 1fr"] {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  min-height: 252px !important;
+  align-self: stretch !important;
+}
+.barq-pptx-slide .slide-root > div[style*="grid-template-columns: 1fr 1fr 1fr"] > .stat-card,
+.barq-pptx-slide .slide-root > div[style*="grid-template-columns:1fr 1fr 1fr"] > .stat-card,
+.barq-pptx-slide .slide-shell > div[style*="grid-template-columns: 1fr 1fr 1fr"] > .stat-card,
+.barq-pptx-slide .slide-shell > div[style*="grid-template-columns:1fr 1fr 1fr"] > .stat-card,
+.barq-pptx-slide .content-shell > div[style*="grid-template-columns: 1fr 1fr 1fr"] > .stat-card,
+.barq-pptx-slide .content-shell > div[style*="grid-template-columns:1fr 1fr 1fr"] > .stat-card {
+  min-height: 100% !important;
 }
 .barq-pptx-slide .step-item,
 .barq-pptx-slide .stat-card {
@@ -364,10 +488,27 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-slide .grid-4 > .panel-light {
   min-height: 100% !important;
 }
+.barq-pptx-slide .grid-4 > .panel {
+  min-height: 220px !important;
+}
+.barq-pptx-slide .grid-3 > .stat-card {
+  min-height: 212px !important;
+}
+.barq-pptx-slide .grid-2 > .panel-light {
+  min-height: 148px !important;
+}
 .barq-pptx-slide .panel,
 .barq-pptx-slide .panel-light {
-  padding: 16px 18px !important;
-  border-radius: 14px !important;
+  padding: 18px 20px !important;
+  border-radius: 12px !important;
+}
+.barq-pptx-slide .section-title {
+  font-size: 54px !important;
+  line-height: 1.04 !important;
+}
+.barq-pptx-slide .eyebrow {
+  font-size: 17px !important;
+  letter-spacing: 0.14em !important;
 }
 .barq-pptx-slide .panel {
   background: color-mix(in srgb, var(--card) 94%, white) !important;
@@ -381,26 +522,26 @@ func pptxHTMLGuardrailCSS() string {
   display: grid !important;
   gap: 5px !important;
   align-content: start !important;
-  min-height: 154px !important;
+  min-height: 178px !important;
   padding: 18px 18px !important;
-  border-radius: 16px !important;
+  border-radius: 12px !important;
   background: color-mix(in srgb, var(--card) 96%, white) !important;
   border: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
   border-top: 6px solid var(--accent) !important;
   text-align: left !important;
 }
 .barq-pptx-slide .stat-value {
-  font-size: 42px !important;
+  font-size: 48px !important;
   line-height: 1 !important;
 }
 .barq-pptx-slide .stat-label {
-  font-size: 16px !important;
+  font-size: 18px !important;
   font-weight: 800 !important;
   line-height: 1.2 !important;
 }
 .barq-pptx-slide .stat-desc {
-  font-size: 15px !important;
-  line-height: 1.4 !important;
+  font-size: 17px !important;
+  line-height: 1.42 !important;
 }
 .barq-pptx-slide .bullet-list {
   display: grid !important;
@@ -415,7 +556,7 @@ func pptxHTMLGuardrailCSS() string {
   background: color-mix(in srgb, var(--card) 97%, white) !important;
   border: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
   border-left: 5px solid var(--accent) !important;
-  border-radius: 12px !important;
+  border-radius: 10px !important;
 }
 .barq-pptx-slide .bullet-item:last-child {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, white) !important;
@@ -423,6 +564,15 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-slide .bullet-item strong {
   display: block !important;
   margin-bottom: 4px !important;
+  font-size: 20px !important;
+}
+.barq-pptx-slide .bullet-item,
+.barq-pptx-slide .bullet-item > div,
+.barq-pptx-slide .body-copy,
+.barq-pptx-slide li,
+.barq-pptx-slide td {
+  font-size: 20px !important;
+  line-height: 1.42 !important;
 }
 .barq-pptx-slide .bullet-marker {
   width: 10px !important;
@@ -441,12 +591,12 @@ func pptxHTMLGuardrailCSS() string {
   margin-bottom: 12px !important;
 }
 .barq-pptx-slide .card-title {
-  font-size: 20px !important;
+  font-size: 22px !important;
   line-height: 1.2 !important;
 }
 .barq-pptx-slide .card-desc {
-  font-size: 16px !important;
-  line-height: 1.44 !important;
+  font-size: 18px !important;
+  line-height: 1.48 !important;
 }
 .barq-pptx-slide .summary-strip {
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr)) !important;
@@ -455,17 +605,17 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-deck[data-density="compact"] .barq-pptx-slide .slide-root,
 .barq-pptx-deck[data-density="balanced"] .barq-pptx-slide .slide-shell,
 .barq-pptx-deck[data-density="compact"] .barq-pptx-slide .slide-shell {
-  padding: 38px 46px 34px !important;
+  padding: 32px 38px 28px !important;
 }
 .barq-pptx-deck[data-cover-style="editorial"] .barq-pptx-cover .cover-shell,
 .barq-pptx-deck[data-cover-style="poster"] .barq-pptx-cover .cover-shell {
-  padding-top: 48px !important;
-  padding-bottom: 42px !important;
+  padding-top: 34px !important;
+  padding-bottom: 30px !important;
 }
 .barq-pptx-deck[data-theme="education"] .barq-pptx-slide .panel,
 .barq-pptx-deck[data-theme="education"] .barq-pptx-slide .stat-card,
 .barq-pptx-deck[data-theme="education"] .barq-pptx-slide .bullet-item {
-  border-radius: 12px !important;
+  border-radius: 10px !important;
 }
 `
 }
@@ -881,35 +1031,33 @@ radial-gradient(circle at top left, rgba(45,106,79,0.08), transparent 34%),
 linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0)),
 var(--bg);"></div>
 <div style="position:absolute;left:0;top:0;right:0;height:10px;background:linear-gradient(90deg, var(--accent), var(--accent-2));"></div>
-<div class="cover-shell" style="position:absolute;left:76px;top:72px;right:76px;bottom:66px;">
-  <div class="cover-grid" style="grid-template-columns:minmax(0,1.16fr) 420px;align-items:start;">
-    <div class="cover-stack" style="align-content:start;gap:18px;padding-top:8px;">
+<div class="cover-shell" style="position:absolute;left:60px;top:42px;right:60px;bottom:40px;">
+  <div class="cover-grid" style="grid-template-columns:minmax(0,1.12fr) 390px;gap:20px;align-items:start;">
+    <div class="cover-stack" style="align-content:start;gap:14px;padding-top:0;">
       <div class="eyebrow">` + kicker + `</div>
-      <h1 class="display-title" style="max-width:780px;">` + title + `</h1>
+      <h1 class="display-title" style="max-width:860px;">` + title + `</h1>
       ` + subtitleHTML + `
       <div class="rule"></div>
       <div class="meta-row">` + strings.Join(meta, "") + `</div>
+      <div class="panel-light" style="padding:20px 22px;">
+        <div class="eyebrow" style="margin-bottom:10px;">Narrative</div>
+        <p class="body-copy" style="font-size:20px;line-height:1.46;">` + narrative + `</p>
+      </div>
       ` + chapterCards + `
     </div>
-    <div class="cover-aside" style="align-content:start;gap:16px;padding-top:6px;">
-      <div class="panel-light" style="padding:22px 24px;">
-        <div class="eyebrow" style="margin-bottom:10px;">Narrative</div>
-        <p class="body-copy" style="font-size:19px;line-height:1.48;">` + narrative + `</p>
+    <div class="cover-aside" style="align-content:start;gap:12px;padding-top:2px;">
+      <div class="panel-light" style="padding:16px 18px;">
+        <div class="eyebrow" style="margin-bottom:8px;">Audience</div>
+        <p class="body-copy" style="font-size:17px;line-height:1.42;">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</p>
       </div>
-    </div>
-  </div>
-  <div class="summary-strip" style="grid-template-columns:1.15fr 0.65fr 1.2fr;gap:12px;margin-top:auto;">
-    <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
-      <span class="eyebrow">Audience</span>
-      <span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</span>
-    </div>
-    <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
-      <span class="eyebrow">Theme</span>
-      <span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Theme), "Presentation")) + `</span>
-    </div>
-    <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
-      <span class="eyebrow">Mood</span>
-      <span class="body-copy">` + colorStory + `</span>
+      <div class="panel-light" style="padding:16px 18px;">
+        <div class="eyebrow" style="margin-bottom:8px;">Mood</div>
+        <p class="body-copy" style="font-size:17px;line-height:1.42;">` + colorStory + `</p>
+      </div>
+      <div class="panel-light" style="padding:16px 18px;">
+        <div class="eyebrow" style="margin-bottom:8px;">Focus</div>
+        <p class="body-copy" style="font-size:17px;line-height:1.42;">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.DominantNeed), strings.TrimSpace(manifest.Theme), "Subject framing")) + `</p>
+      </div>
     </div>
   </div>
 </div>`
@@ -919,15 +1067,40 @@ func fallbackCoverChapterCards(manifest pptxPreviewManifest) string {
 	if len(manifest.Slides) == 0 {
 		return ""
 	}
-	limit := 3
-	if len(manifest.Slides) < limit {
-		limit = len(manifest.Slides)
+	cards := make([]string, 0, 3)
+	limit := len(manifest.Slides)
+	if limit > 3 {
+		limit = 3
 	}
-	cards := make([]string, 0, limit)
 	for i := 0; i < limit; i++ {
 		cards = append(cards, `<div class="panel-light" style="padding:16px 18px;"><div class="eyebrow">`+
 			html.EscapeString(fmt.Sprintf("%02d", i+1))+`</div><p class="body-copy" style="font-size:18px;line-height:1.34;">`+
 			html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Slides[i].Heading), "Section"))+`</p></div>`)
+	}
+	extraCards := []struct {
+		Label string
+		Body  string
+	}{
+		{
+			Label: "Need",
+			Body:  firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.DominantNeed), strings.TrimSpace(manifest.Theme), "Clear framing"),
+		},
+		{
+			Label: "Outcome",
+			Body:  firstNonEmpty(strings.TrimSpace(manifest.Subtitle), strings.TrimSpace(manifest.DeckPlan.NarrativeArc), "Actionable takeaway"),
+		},
+		{
+			Label: "Audience",
+			Body:  firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers"),
+		},
+	}
+	for _, extra := range extraCards {
+		if len(cards) >= 3 {
+			break
+		}
+		cards = append(cards, `<div class="panel-light" style="padding:16px 18px;"><div class="eyebrow">`+
+			html.EscapeString(extra.Label)+`</div><p class="body-copy" style="font-size:18px;line-height:1.34;">`+
+			html.EscapeString(extra.Body)+`</p></div>`)
 	}
 	return `<div class="grid-3" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:6px;">` + strings.Join(cards, "") + `</div>`
 }
