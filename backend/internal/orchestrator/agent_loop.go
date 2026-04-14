@@ -222,8 +222,6 @@ func (a *AgentLoop) Run(
 	workspaceRoot string,
 	extraSystemPrompts ...string,
 ) ExecuteResult {
-	const maxIter = 15
-
 	// Create plan record upfront
 	planID := uuid.NewString()
 	plan := &domain.Plan{
@@ -248,6 +246,10 @@ func (a *AgentLoop) Run(
 		}
 		messages = append(messages, provider.ChatMessage{Role: "system", Content: prompt})
 	}
+	runtimeProfile := buildAgentRuntimeProfile(a.cfg, task)
+	if strings.TrimSpace(runtimeProfile.CompatibilityPrompt) != "" {
+		messages = append(messages, provider.ChatMessage{Role: "system", Content: runtimeProfile.CompatibilityPrompt})
+	}
 	messages = append(messages, provider.ChatMessage{Role: "user", Content: userMsg})
 
 	toolDefs := a.registry.Definitions()
@@ -255,34 +257,28 @@ func (a *AgentLoop) Run(
 	var result ExecuteResult
 	stepOrder := 0
 	forcedToolNudges := 0
-	const maxForcedToolNudges = 4
 
 	a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepStarted, map[string]any{
 		"message": "agent loop started",
 	})
 
-	for iter := 0; iter < maxIter; iter++ {
+	for iter := 0; iter < runtimeProfile.MaxIterations; iter++ {
 		if ctx.Err() != nil {
 			break
 		}
 
 		a.logger.Info("agent loop iteration", "task_id", task.ID, "iter", iter, "messages", len(messages))
 
-		maxTokens := 2048
-		if requiredOutputTool(task) == "write_pptx" {
-			maxTokens = 8192
-		}
-
 		req := provider.ChatCompletionRequest{
 			Model:       a.cfg.Model,
 			Stream:      true,
-			MaxTokens:   maxTokens,
-			Temperature: taskTemperature(task),
+			MaxTokens:   runtimeProfile.MaxTokens,
+			Temperature: runtimeProfile.Temperature,
 			Messages:    messages,
 			Tools:       toolDefs,
 		}
 
-		ch, err := provider.ChatWithRetry(ctx, a.prov, a.cfg, req, provider.DefaultRetryConfig(), a.logger)
+		ch, err := provider.ChatWithRetry(ctx, a.prov, a.cfg, req, runtimeProfile.Retry, a.logger)
 		if err != nil {
 			a.logger.Error("agent loop: LLM call failed", "error", err, "iter", iter)
 			result.Failed++
@@ -316,10 +312,17 @@ func (a *AgentLoop) Run(
 			})
 		}
 
+		requiredTool := requiredOutputTool(task)
+		if len(toolCalls) == 0 && runtimeProfile.AllowRawJSONToolArgs && result.Completed == 0 {
+			if recovered, ok := recoverToolCallFromContent(content, requiredTool); ok {
+				toolCalls = []provider.ToolCall{recovered}
+				a.logger.Info("agent loop: recovered direct tool args from assistant content", "task_id", task.ID, "iter", iter, "tool", requiredTool)
+			}
+		}
+
 		// No tool calls → agent decided it is done
 		if len(toolCalls) == 0 {
-			requiredTool := requiredOutputTool(task)
-			if requiredTool != "" && result.Completed == 0 && forcedToolNudges < maxForcedToolNudges {
+			if requiredTool != "" && result.Completed == 0 && forcedToolNudges < runtimeProfile.MaxForcedToolNudges {
 				forcedToolNudges++
 				nudge := fmt.Sprintf(
 					"You have not called any tool yet. Your next response MUST be exactly one tool call to %s. "+
@@ -329,6 +332,9 @@ func (a *AgentLoop) Run(
 				)
 				if requiredTool == "write_pptx" {
 					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup for every content slide. Do not fall back to structured-only slides."
+				}
+				if strings.TrimSpace(runtimeProfile.CompatibilityPrompt) != "" {
+					nudge += " If this model cannot emit native tool calls, respond with ONLY the JSON arguments object for the required tool."
 				}
 				messages = append(messages, provider.ChatMessage{
 					Role:    "assistant",
@@ -524,13 +530,6 @@ func requiredOutputTool(task *domain.Task) string {
 	default:
 		return ""
 	}
-}
-
-func taskTemperature(task *domain.Task) float64 {
-	if requiredOutputTool(task) == "write_pptx" {
-		return 0.7
-	}
-	return 0.3
 }
 
 func containsTaskKeyword(text string, keywords ...string) bool {
