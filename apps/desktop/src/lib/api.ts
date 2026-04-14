@@ -481,6 +481,7 @@ export interface Skill {
   description: string;
   output_mime_type: string;
   output_file_ext: string;
+  prompt_template: string;
   built_in: boolean;
   enabled: boolean;
   tags: string[];
