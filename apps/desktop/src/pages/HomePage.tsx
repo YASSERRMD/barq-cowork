@@ -39,7 +39,7 @@ const SUGGESTIONS = [
     icon: Presentation,
     label: "Create a presentation",
     prompt:
-      "Create a subject-specific PowerPoint presentation. Plan the deck first, then author a deck-specific HTML/CSS slide system so the preview and downloaded PPTX come from the same slide design. Use deck.cover_html for the cover and authored HTML for every content slide. Do not use a fixed template, do not reuse an old cover pattern, keep the deck refined and contemporary instead of dated corporate slideware, use one coherent deck system across all slides, avoid classroom amber or old-business blue unless explicitly requested, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide.",
+      "Create a subject-specific PowerPoint presentation. Plan the deck first, then author a deck-specific HTML/CSS slide system so the preview and downloaded PPTX come from the same slide design. Use deck.cover_html for the cover and authored HTML for every content slide. Do not use a fixed template, do not reuse an old cover pattern, keep the deck refined and contemporary instead of dated corporate slideware, use one coherent deck system across all slides, avoid classroom amber or old-business blue unless explicitly requested, and use real icons, charts, timelines, comparisons, or tables only where they improve the slide. Build dense, well-framed slide compositions with shell/grid classes instead of airy browser mockups or giant outer padding wrappers.",
   },
   {
     icon: FileSpreadsheet,

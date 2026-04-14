@@ -129,14 +129,19 @@ HTML SLIDE MODE — required for bespoke decks and the default for new decks:
 - Use inline SVG for real icons and diagrams.
 - Preview and downloaded PPTX are expected to come from the same HTML slide DOM.
 - The write_pptx tool rejects incomplete HTML/CSS deck contracts.
+- The renderer injects a slide shell wrapper automatically. Author the inner composition of the slide instead of building a giant outer page wrapper with excessive padding.
 - Baseline class kit available in the HTML slide shell:
+  - cover-shell, cover-grid, cover-stack, cover-aside
+  - slide-shell, slide-head, slide-grid, slide-main, slide-side
   - eyebrow, display-title, section-title, lede, body-copy, muted-copy, rule
   - tag, panel, panel-light
   - grid-2, grid-3, grid-4
   - stat-card, stat-value, stat-label, stat-desc
   - bullet-list, bullet-item
+  - steps-flow, step-item, step-num, step-title, step-desc
   - timeline-list, timeline-row, timeline-date
   - compare-grid, compare-col
+- Prefer these shell/grid classes over ad-hoc browser layout wrappers so the exported PPTX keeps strong framing, denser content, and cleaner hierarchy.
 
 TYPE "chart"  → full-slide native PowerPoint chart
   "chart_type": "column" | "bar" | "line" | "pie" | "doughnut" | "area"

@@ -155,17 +155,14 @@ func htmlSlideContentReady(raw string) bool {
 func buildPPTXHTMLDocument(manifest pptxPreviewManifest) string {
 	pal := previewManifestPalette(manifest)
 	var slides strings.Builder
-	cover := strings.TrimSpace(manifest.DeckPlan.CoverHTML)
-	if cover == "" {
-		cover = fallbackHTMLCover(manifest)
-	}
-	slides.WriteString(`<section class="barq-pptx-slide barq-pptx-cover" data-slide-kind="cover"><div class="barq-pptx-canvas">` + cover + `</div></section>`)
+	cover := preferredHTMLCover(manifest)
+	slides.WriteString(`<section class="barq-pptx-slide barq-pptx-cover" data-slide-kind="cover"><div class="barq-pptx-canvas">` + wrapHTMLSlideShell(cover, true) + `</div></section>`)
 	for _, slide := range manifest.Slides {
 		body := strings.TrimSpace(slide.HTML)
 		if body == "" {
 			body = fallbackHTMLSlideMarkup(slide)
 		}
-		slides.WriteString(`<section class="barq-pptx-slide" data-slide-kind="content" data-layout="` + html.EscapeString(slide.Layout) + `"><div class="barq-pptx-canvas">` + body + `</div></section>`)
+		slides.WriteString(`<section class="barq-pptx-slide" data-slide-kind="content" data-layout="` + html.EscapeString(slide.Layout) + `"><div class="barq-pptx-canvas">` + wrapHTMLSlideShell(body, false) + `</div></section>`)
 	}
 
 	css := pptxHTMLBaseCSS(pal)
@@ -187,15 +184,45 @@ func buildPPTXHTMLDocument(manifest pptxPreviewManifest) string {
 </html>`
 }
 
+func preferredHTMLCover(manifest pptxPreviewManifest) string {
+	cover := strings.TrimSpace(manifest.DeckPlan.CoverHTML)
+	if cover == "" {
+		return fallbackHTMLCover(manifest)
+	}
+	if htmlCoverNeedsFallback(cover) {
+		return fallbackHTMLCover(manifest)
+	}
+	return cover
+}
+
+func htmlCoverNeedsFallback(raw string) bool {
+	lower := strings.ToLower(sanitizeHTMLMarkup(raw))
+	if strings.Contains(lower, "cover-grid") ||
+		strings.Contains(lower, "cover-stack") ||
+		strings.Contains(lower, "cover-aside") {
+		return false
+	}
+	signals := 0
+	for _, token := range []string{
+		"summary-strip",
+		"summary-chip",
+		"panel",
+		"meta-row",
+		"tag-row",
+		"grid-2",
+		"grid-3",
+		"grid-4",
+	} {
+		if strings.Contains(lower, token) {
+			signals++
+		}
+	}
+	return signals < 2 || htmlInformationBlockCount(raw) < 5
+}
+
 func pptxHTMLGuardrailCSS() string {
 	return `
 .barq-pptx-cover .cover-shell,
-.barq-pptx-cover .cover-grid {
-  align-content: start !important;
-  align-items: center !important;
-}
-.barq-pptx-cover .cover-stack,
-.barq-pptx-cover .cover-aside,
 .barq-pptx-slide .slide-shell,
 .barq-pptx-slide .content-shell {
   align-content: start !important;
@@ -204,10 +231,74 @@ func pptxHTMLGuardrailCSS() string {
   padding-top: 72px !important;
   padding-bottom: 64px !important;
 }
-.barq-pptx-slide .summary-strip {
+.barq-pptx-cover .cover-grid {
+  align-items: center !important;
+}
+.barq-pptx-cover .cover-shell--compose > div:first-child {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr) !important;
+  gap: 30px !important;
+  min-height: 100% !important;
+  align-items: center !important;
+  padding: 0 !important;
+}
+.barq-pptx-cover .cover-shell--compose > div:first-child > div:first-child {
+  display: grid !important;
+  gap: 18px !important;
+  align-content: center !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+.barq-pptx-cover .cover-shell--compose > div:first-child > div:last-child {
+  display: grid !important;
+  gap: 16px !important;
+  align-content: center !important;
+  justify-items: center !important;
+  padding: 0 0 0 24px !important;
+  min-width: 0 !important;
+}
+.barq-pptx-cover .cover-shell--compose .display-title {
+  max-width: 720px !important;
+}
+.barq-pptx-cover .cover-shell--compose .lede {
+  max-width: 620px !important;
+}
+.barq-pptx-slide .summary-strip,
+.barq-pptx-slide .grid-2,
+.barq-pptx-slide .grid-3,
+.barq-pptx-slide .grid-4,
+.barq-pptx-slide .steps-flow {
   align-items: stretch;
 }
+.barq-pptx-slide .panel,
+.barq-pptx-slide .panel-light,
+.barq-pptx-slide .step-item,
+.barq-pptx-slide .stat-card {
+  min-height: 100%;
+}
 `
+}
+
+func wrapHTMLSlideShell(raw string, cover bool) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	lower := strings.ToLower(raw)
+	if cover && strings.Contains(lower, "cover-shell") {
+		return raw
+	}
+	if !cover && (strings.Contains(lower, "slide-shell") || strings.Contains(lower, "content-shell")) {
+		return raw
+	}
+	classes := "slide-shell slide content-shell"
+	if cover {
+		classes = "cover-shell slide"
+		if !strings.Contains(lower, "cover-grid") && !strings.Contains(lower, "cover-stack") {
+			classes += " cover-shell--compose"
+		}
+	}
+	return `<div class="` + classes + `">` + raw + `</div>`
 }
 
 func normalizeHTMLLayoutStyles(raw string) string {
@@ -368,6 +459,57 @@ body { padding: 24px; }
   height: 100%;
   overflow: hidden;
 }
+.cover-shell,
+.slide-shell {
+  min-height: 100%;
+  width: 100%;
+}
+.cover-shell {
+  display: grid;
+  padding: 72px 76px 64px;
+  gap: 24px;
+  align-content: start;
+}
+.cover-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(340px, 0.86fr);
+  gap: 34px;
+  min-height: 100%;
+}
+.cover-stack,
+.cover-aside {
+  display: grid;
+  align-content: center;
+}
+.cover-stack {
+  gap: 18px;
+}
+.cover-aside {
+  gap: 16px;
+}
+.slide-shell {
+  display: grid;
+  padding: 62px 70px;
+  gap: 20px;
+  align-content: start;
+}
+.slide-head {
+  display: grid;
+  gap: 12px;
+  max-width: 1120px;
+}
+.slide-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.74fr);
+  gap: 22px;
+  align-items: start;
+}
+.slide-main,
+.slide-side {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
 .barq-pptx-slide h1, .barq-pptx-slide h2, .barq-pptx-slide h3, .barq-pptx-slide p { margin: 0; }
 .barq-pptx-slide ul, .barq-pptx-slide ol { margin: 0; padding: 0; list-style: none; }
 .barq-pptx-canvas > .cover-shell, .barq-pptx-canvas > .slide-shell, .barq-pptx-canvas > .content-shell { min-height: 100%; }
@@ -406,17 +548,19 @@ body { padding: 24px; }
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.10);
   padding: 20px 22px;
+  border-radius: 18px;
 }
 .panel-light {
   background: rgba(255,255,255,0.96);
   color: #0f172a;
   border: 1px solid rgba(15,23,42,0.08);
+  border-radius: 18px;
 }
 .grid-2, .grid-3, .grid-4 { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.stat-card { padding: 20px 22px; background: rgba(255,255,255,0.96); color: #0f172a; border-top: 6px solid var(--accent); }
+.stat-card { padding: 20px 22px; background: rgba(255,255,255,0.96); color: #0f172a; border-top: 6px solid var(--accent); border-radius: 18px; }
 .stat-value { font-size: 38px; line-height: 1; font-weight: 800; color: var(--accent); margin-bottom: 8px; }
 .stat-label { font-size: 16px; line-height: 1.2; font-weight: 800; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
 .stat-desc { font-size: 16px; line-height: 1.42; color: #475569; }
@@ -426,8 +570,24 @@ body { padding: 24px; }
   background: rgba(255,255,255,0.96);
   color: #0f172a;
   border-left: 5px solid var(--accent);
+  border-radius: 16px;
 }
 .bullet-item strong { display: block; margin-bottom: 6px; font-size: 20px; }
+.steps-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: stretch; }
+.step-item {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 18px 16px;
+  background: rgba(255,255,255,0.96);
+  color: #0f172a;
+  border-top: 5px solid var(--accent);
+  border-radius: 18px;
+}
+.step-num { font-size: 30px; line-height: 1; font-weight: 800; color: var(--accent); }
+.step-title { font-size: 17px; line-height: 1.25; font-weight: 700; color: #0f172a; }
+.step-desc { font-size: 14px; line-height: 1.5; color: #475569; }
+.step-arrow { display: none; }
 .timeline-list { display: grid; gap: 14px; }
 .timeline-row {
   display: grid;
@@ -438,10 +598,11 @@ body { padding: 24px; }
   background: rgba(255,255,255,0.96);
   color: #0f172a;
   border-left: 5px solid var(--accent);
+  border-radius: 16px;
 }
 .timeline-date { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
 .compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.compare-col { padding: 18px 20px; background: rgba(255,255,255,0.96); color: #0f172a; border-top: 6px solid var(--accent); }
+.compare-col { padding: 18px 20px; background: rgba(255,255,255,0.96); color: #0f172a; border-top: 6px solid var(--accent); border-radius: 18px; }
 .compare-col h3 { font-size: 22px; margin-bottom: 10px; }
 .compare-col li { font-size: 18px; line-height: 1.4; margin-top: 8px; }
 table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.98); color: #0f172a; }
@@ -456,7 +617,7 @@ func fallbackHTMLCover(manifest pptxPreviewManifest) string {
 	subtitle := strings.TrimSpace(manifest.Subtitle)
 	subtitleHTML := ""
 	if subtitle != "" {
-		subtitleHTML = `<p class="lede" style="max-width:820px;">` + html.EscapeString(subtitle) + `</p>`
+		subtitleHTML = `<p class="lede" style="max-width:760px;">` + html.EscapeString(subtitle) + `</p>`
 	}
 	meta := []string{}
 	if subject := strings.TrimSpace(manifest.DeckPlan.Subject); subject != "" {
@@ -469,26 +630,38 @@ func fallbackHTMLCover(manifest pptxPreviewManifest) string {
 	narrative := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Narrative), strings.TrimSpace(manifest.DeckPlan.NarrativeArc), "Structured decision-ready narrative"))
 	colorStory := html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.ColorStory), "Deliberate contemporary system"))
 	return `<div style="position:absolute;inset:0;background:
-linear-gradient(135deg, rgba(15,23,42,0.28), transparent 42%),
-radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 28%),
+radial-gradient(circle at top left, rgba(45,106,79,0.08), transparent 34%),
+linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0)),
 var(--bg);"></div>
-<div class="cover-shell" style="position:absolute;left:78px;top:76px;right:78px;bottom:72px;display:grid;grid-template-columns:minmax(0,1.12fr) 360px;gap:30px;align-items:stretch;">
-  <div class="stack-regular" style="align-content:end;">
-    <div class="eyebrow">` + kicker + `</div>
-    <div class="rule"></div>
-    <h1 class="display-title" style="max-width:860px;">` + title + `</h1>
-    ` + subtitleHTML + `
-    <div class="meta-row">` + strings.Join(meta, "") + `</div>
-  </div>
-  <div class="stack-tight" style="align-content:end;">
-    <div class="panel">
-      <div class="eyebrow" style="margin-bottom:10px;">Narrative</div>
-      <p class="body-copy">` + narrative + `</p>
+<div style="position:absolute;left:0;top:0;right:0;height:10px;background:linear-gradient(90deg, var(--accent), var(--accent-2));"></div>
+<div class="cover-shell" style="position:absolute;left:76px;top:72px;right:76px;bottom:66px;">
+  <div class="cover-grid" style="grid-template-columns:minmax(0,1.16fr) 420px;align-items:start;">
+    <div class="cover-stack" style="align-content:start;gap:18px;padding-top:8px;">
+      <div class="eyebrow">` + kicker + `</div>
+      <h1 class="display-title" style="max-width:780px;">` + title + `</h1>
+      ` + subtitleHTML + `
+      <div class="rule"></div>
+      <div class="meta-row">` + strings.Join(meta, "") + `</div>
     </div>
-    <div class="summary-strip">
-      <div class="summary-chip"><span class="eyebrow">Audience</span><span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</span></div>
-      <div class="summary-chip"><span class="eyebrow">Theme</span><span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Theme), "Presentation")) + `</span></div>
-      <div class="summary-chip"><span class="eyebrow">Mood</span><span class="body-copy">` + colorStory + `</span></div>
+    <div class="cover-aside" style="align-content:start;gap:16px;padding-top:6px;">
+      <div class="panel-light" style="padding:22px 24px;">
+        <div class="eyebrow" style="margin-bottom:10px;">Narrative</div>
+        <p class="body-copy" style="font-size:19px;line-height:1.48;">` + narrative + `</p>
+      </div>
+    </div>
+  </div>
+  <div class="summary-strip" style="grid-template-columns:1.15fr 0.65fr 1.2fr;gap:12px;margin-top:auto;">
+    <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
+      <span class="eyebrow">Audience</span>
+      <span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</span>
+    </div>
+    <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
+      <span class="eyebrow">Theme</span>
+      <span class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Theme), "Presentation")) + `</span>
+    </div>
+    <div class="summary-chip" style="background:rgba(255,255,255,0.76);border-color:rgba(15,23,42,0.08);">
+      <span class="eyebrow">Mood</span>
+      <span class="body-copy">` + colorStory + `</span>
     </div>
   </div>
 </div>`
