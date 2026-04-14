@@ -97,7 +97,7 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	}
 
 	taskWorkspace := t.TempDir()
-	result := loop.Run(context.Background(), task, taskWorkspace)
+	result := loop.Run(context.Background(), task, taskWorkspace, "Active skill prompt:\nUse a professional proposal deck.", "Project instructions:\nDo not use visible slide counters.")
 	if result.Completed != 1 {
 		t.Fatalf("expected one completed tool call, got %+v", result)
 	}
@@ -109,6 +109,13 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	}
 	if len(prov.requests) < 2 {
 		t.Fatalf("expected at least two provider calls, got %d", len(prov.requests))
+	}
+	firstMessages := prov.requests[0].Messages
+	if len(firstMessages) < 3 {
+		t.Fatalf("expected extra system prompts in first request, got %d messages", len(firstMessages))
+	}
+	if !strings.Contains(firstMessages[1].Content, "Active skill prompt") || !strings.Contains(firstMessages[2].Content, "Project instructions") {
+		t.Fatalf("expected injected skill and project prompts, got %+v", firstMessages)
 	}
 
 	lastMessage := prov.requests[1].Messages[len(prov.requests[1].Messages)-1].Content
