@@ -15117,9 +15117,6 @@ function normalizeHex(value, fallback = "000000") {
   }
   return fallback;
 }
-function cssHex(value) {
-  return `#${normalizeHex(value)}`;
-}
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -15182,52 +15179,6 @@ function inferIconToken(raw) {
   if (containsAny(text, "logistics", "delivery", "fleet", "shipping", "warehouse", "transport", "supply")) return "logistics";
   if (containsAny(text, "creative", "design", "idea", "brand", "innovation", "spark")) return "spark";
   return "";
-}
-function iconSvg(token, palette) {
-  const fg = cssHex(palette.text);
-  const accent = cssHex(palette.accent);
-  const soft = cssHex(palette.accent2);
-  const normalized = inferIconToken(token) || "spark";
-  let glyph = "";
-  switch (normalized) {
-    case "shield":
-      glyph = `<polygon points="32,10 48,18 48,34 32,50 16,34 16,18" fill="none" stroke="${fg}" stroke-width="4"/><path d="M24 30h16M32 22v16" stroke="${fg}" stroke-width="4" stroke-linecap="round"/>`;
-      break;
-    case "chart":
-      glyph = `<rect x="16" y="34" width="8" height="14" rx="2" fill="${fg}"/><rect x="28" y="24" width="8" height="24" rx="2" fill="${fg}"/><rect x="40" y="18" width="8" height="30" rx="2" fill="${fg}"/><path d="M14 48h36" stroke="${fg}" stroke-width="3" stroke-linecap="round"/>`;
-      break;
-    case "growth":
-      glyph = `<rect x="16" y="38" width="8" height="10" rx="2" fill="${fg}"/><rect x="28" y="30" width="8" height="18" rx="2" fill="${fg}"/><rect x="40" y="22" width="8" height="26" rx="2" fill="${fg}"/><path d="M23 26l9-7 8 5 9-7" stroke="${fg}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
-      break;
-    case "automation":
-      glyph = `<path d="M14 30h18l-6-6m6 6-6 6" stroke="${fg}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M30 30h18l-6-6m6 6-6 6" stroke="${fg}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="49" cy="30" r="5" fill="${soft}" stroke="${fg}" stroke-width="2"/>`;
-      break;
-    case "integration":
-      glyph = `<circle cx="24" cy="32" r="10" fill="none" stroke="${fg}" stroke-width="4"/><circle cx="40" cy="32" r="10" fill="none" stroke="${fg}" stroke-width="4"/><path d="M28 32h8" stroke="${fg}" stroke-width="4" stroke-linecap="round"/>`;
-      break;
-    case "people":
-      glyph = `<circle cx="25" cy="22" r="6" fill="${fg}"/><circle cx="39" cy="22" r="6" fill="${fg}"/><rect x="18" y="31" width="14" height="15" rx="5" fill="${fg}"/><rect x="32" y="31" width="14" height="15" rx="5" fill="${fg}"/>`;
-      break;
-    case "learning":
-      glyph = `<rect x="15" y="17" width="15" height="28" rx="3" fill="none" stroke="${fg}" stroke-width="3.5"/><rect x="34" y="17" width="15" height="28" rx="3" fill="none" stroke="${fg}" stroke-width="3.5"/><path d="M32 18v28" stroke="${fg}" stroke-width="3"/>`;
-      break;
-    case "health":
-      glyph = `<path d="M32 16v32M16 32h32" stroke="${fg}" stroke-width="6" stroke-linecap="round"/>`;
-      break;
-    case "leaf":
-      glyph = `<path d="M22 38c0-11 8-18 18-20 1 10-3 20-14 23-3 1-4-1-4-3Z" fill="${fg}"/><path d="M25 40c6-8 12-13 20-17" stroke="${accent}" stroke-width="3" stroke-linecap="round"/>`;
-      break;
-    case "logistics":
-      glyph = `<rect x="16" y="26" width="24" height="18" rx="3" fill="none" stroke="${fg}" stroke-width="3.5"/><path d="M28 26v18" stroke="${fg}" stroke-width="3"/><path d="M40 22h10l-4-4m4 4-4 4" stroke="${fg}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
-      break;
-    default:
-      glyph = `<path d="M32 14l5 9 9 5-9 5-5 9-5-9-9-5 9-5 5-9Z" fill="${fg}"/><path d="M15 46l3 5 5 3-5 3-3 5-3-5-5-3 5-3 3-5Z" fill="${soft}"/>`;
-      break;
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="${accent}"/>${glyph}</svg>`;
-}
-function svgDataUri(svg) {
-  return `image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 function previewFamily(manifest) {
   const text = [
@@ -15299,7 +15250,7 @@ function addFullRect(slide, fill) {
   });
 }
 function addPanel(slide, bounds, fill, border, radius = 0) {
-  slide.addShape(radius > 0 ? "roundRect" : "rect", {
+  slide.addShape(radius >= 0.18 ? "roundRect" : "rect", {
     ...bounds,
     rectRadius: radius,
     line: { color: border, pt: 1 },
@@ -15328,14 +15279,256 @@ function addText(slide, text, bounds, options = {}) {
     ...options
   });
 }
+function addMiniRect(slide, x, y, w, h, fill) {
+  slide.addShape("rect", {
+    x,
+    y,
+    w,
+    h,
+    line: { color: fill, transparency: 100 },
+    fill: { color: fill }
+  });
+}
+function addMiniLine(slide, x, y, w, h, color, pt = 1) {
+  slide.addShape("line", {
+    x,
+    y,
+    w,
+    h,
+    line: { color, pt }
+  });
+}
 function addIcon(slide, token, x, y, size, pal) {
-  slide.addImage({
-    data: svgDataUri(iconSvg(token, { accent: pal.accent, accent2: pal.accent2, text: "FFFFFF" })),
+  const accent = pal.accent;
+  const soft = pal.accent2;
+  const fg = "FFFFFF";
+  const normalized = inferIconToken(token) || "spark";
+  slide.addShape("ellipse", {
     x,
     y,
     w: size,
-    h: size
+    h: size,
+    line: { color: accent, transparency: 100 },
+    fill: { color: accent }
   });
+  const left = x + size * 0.2;
+  const top = y + size * 0.2;
+  const inner = size * 0.6;
+  switch (normalized) {
+    case "shield":
+      slide.addShape("hexagon", {
+        x: x + size * 0.24,
+        y: y + size * 0.17,
+        w: size * 0.52,
+        h: size * 0.6,
+        line: { color: fg, pt: 1.2 },
+        fill: { color: accent, transparency: 100 }
+      });
+      addMiniRect(slide, x + size * 0.47, y + size * 0.29, size * 0.06, size * 0.26, fg);
+      addMiniRect(slide, x + size * 0.37, y + size * 0.39, size * 0.26, size * 0.06, fg);
+      break;
+    case "chart":
+      addMiniRect(slide, x + size * 0.28, y + size * 0.52, size * 0.08, size * 0.18, fg);
+      addMiniRect(slide, x + size * 0.44, y + size * 0.4, size * 0.08, size * 0.3, fg);
+      addMiniRect(slide, x + size * 0.6, y + size * 0.28, size * 0.08, size * 0.42, fg);
+      addMiniRect(slide, x + size * 0.26, y + size * 0.72, size * 0.48, size * 0.03, fg);
+      break;
+    case "growth":
+      addMiniRect(slide, x + size * 0.28, y + size * 0.56, size * 0.08, size * 0.14, fg);
+      addMiniRect(slide, x + size * 0.44, y + size * 0.45, size * 0.08, size * 0.25, fg);
+      addMiniRect(slide, x + size * 0.6, y + size * 0.34, size * 0.08, size * 0.36, fg);
+      addMiniLine(slide, x + size * 0.29, y + size * 0.44, size * 0.18, -size * 0.1, fg, 1.2);
+      addMiniLine(slide, x + size * 0.47, y + size * 0.34, size * 0.18, -size * 0.1, fg, 1.2);
+      addMiniLine(slide, x + size * 0.61, y + size * 0.24, size * 0.08, size * 0.06, fg, 1.2);
+      addMiniLine(slide, x + size * 0.61, y + size * 0.24, -size * 0.02, size * 0.1, fg, 1.2);
+      break;
+    case "automation":
+      slide.addShape("rightArrow", {
+        x: x + size * 0.18,
+        y: y + size * 0.34,
+        w: size * 0.3,
+        h: size * 0.16,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("rightArrow", {
+        x: x + size * 0.42,
+        y: y + size * 0.34,
+        w: size * 0.26,
+        h: size * 0.16,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("ellipse", {
+        x: x + size * 0.66,
+        y: y + size * 0.3,
+        w: size * 0.16,
+        h: size * 0.16,
+        line: { color: fg, pt: 1 },
+        fill: { color: soft }
+      });
+      break;
+    case "integration":
+      slide.addShape("ellipse", {
+        x: x + size * 0.22,
+        y: y + size * 0.3,
+        w: size * 0.22,
+        h: size * 0.22,
+        line: { color: fg, pt: 1.2 },
+        fill: { color: accent, transparency: 100 }
+      });
+      slide.addShape("ellipse", {
+        x: x + size * 0.46,
+        y: y + size * 0.3,
+        w: size * 0.22,
+        h: size * 0.22,
+        line: { color: fg, pt: 1.2 },
+        fill: { color: accent, transparency: 100 }
+      });
+      addMiniRect(slide, x + size * 0.39, y + size * 0.4, size * 0.12, size * 0.03, fg);
+      break;
+    case "people":
+      slide.addShape("ellipse", {
+        x: x + size * 0.25,
+        y: y + size * 0.23,
+        w: size * 0.15,
+        h: size * 0.15,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("ellipse", {
+        x: x + size * 0.48,
+        y: y + size * 0.23,
+        w: size * 0.15,
+        h: size * 0.15,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("roundRect", {
+        x: x + size * 0.21,
+        y: y + size * 0.44,
+        w: size * 0.22,
+        h: size * 0.18,
+        rectRadius: 0.2,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("roundRect", {
+        x: x + size * 0.44,
+        y: y + size * 0.44,
+        w: size * 0.22,
+        h: size * 0.18,
+        rectRadius: 0.2,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      break;
+    case "learning":
+      slide.addShape("roundRect", {
+        x: x + size * 0.22,
+        y: y + size * 0.25,
+        w: size * 0.18,
+        h: size * 0.38,
+        rectRadius: 0.08,
+        line: { color: fg, pt: 1.1 },
+        fill: { color: accent, transparency: 100 }
+      });
+      slide.addShape("roundRect", {
+        x: x + size * 0.43,
+        y: y + size * 0.25,
+        w: size * 0.18,
+        h: size * 0.38,
+        rectRadius: 0.08,
+        line: { color: fg, pt: 1.1 },
+        fill: { color: accent, transparency: 100 }
+      });
+      addMiniRect(slide, x + size * 0.4, y + size * 0.24, size * 0.02, size * 0.41, fg);
+      break;
+    case "health":
+      addMiniRect(slide, x + size * 0.46, y + size * 0.22, size * 0.08, size * 0.46, fg);
+      addMiniRect(slide, x + size * 0.27, y + size * 0.41, size * 0.46, size * 0.08, fg);
+      break;
+    case "leaf":
+      slide.addShape("ellipse", {
+        x: x + size * 0.27,
+        y: y + size * 0.22,
+        w: size * 0.2,
+        h: size * 0.3,
+        rotate: -32,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("ellipse", {
+        x: x + size * 0.42,
+        y: y + size * 0.26,
+        w: size * 0.2,
+        h: size * 0.28,
+        rotate: 28,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      addMiniLine(slide, x + size * 0.5, y + size * 0.44, 0, size * 0.18, soft, 1.2);
+      break;
+    case "logistics":
+      slide.addShape("roundRect", {
+        x: x + size * 0.24,
+        y: y + size * 0.34,
+        w: size * 0.32,
+        h: size * 0.22,
+        rectRadius: 0.08,
+        line: { color: fg, pt: 1.1 },
+        fill: { color: accent, transparency: 100 }
+      });
+      addMiniRect(slide, x + size * 0.39, y + size * 0.34, size * 0.02, size * 0.22, fg);
+      slide.addShape("rightArrow", {
+        x: x + size * 0.58,
+        y: y + size * 0.28,
+        w: size * 0.16,
+        h: size * 0.14,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      break;
+    case "strategy":
+      slide.addShape("diamond", {
+        x: x + size * 0.39,
+        y: y + size * 0.2,
+        w: size * 0.18,
+        h: size * 0.18,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      addMiniLine(slide, x + size * 0.48, y + size * 0.38, 0, size * 0.2, fg, 1.2);
+      addMiniLine(slide, x + size * 0.48, y + size * 0.58, -size * 0.12, size * 0.1, fg, 1.2);
+      addMiniLine(slide, x + size * 0.48, y + size * 0.58, size * 0.12, size * 0.1, fg, 1.2);
+      break;
+    default:
+      slide.addShape("diamond", {
+        x: x + size * 0.37,
+        y: y + size * 0.21,
+        w: size * 0.2,
+        h: size * 0.2,
+        line: { color: fg, transparency: 100 },
+        fill: { color: fg }
+      });
+      slide.addShape("diamond", {
+        x: x + size * 0.22,
+        y: y + size * 0.46,
+        w: size * 0.12,
+        h: size * 0.12,
+        line: { color: soft, transparency: 100 },
+        fill: { color: soft }
+      });
+      slide.addShape("diamond", {
+        x: x + size * 0.56,
+        y: y + size * 0.5,
+        w: size * 0.12,
+        h: size * 0.12,
+        line: { color: soft, transparency: 100 },
+        fill: { color: soft }
+      });
+      break;
+  }
 }
 function shortTitle(title) {
   return title.trim().length <= 30 ? title.trim().toUpperCase() : title.trim();
@@ -15392,6 +15585,84 @@ function buildLead(slide) {
   }
   return slide.purpose?.trim() || "";
 }
+function proposalStatsTakeaway(stats) {
+  if (stats.length === 0) return "Key indicators that frame the decision.";
+  const labels = stats.map((stat) => stat.label.trim()).filter(Boolean).slice(0, 3);
+  if (labels.length === 0) return "Key indicators that frame the decision.";
+  if (labels.length === 1) return `Primary signal: ${labels[0]}.`;
+  if (labels.length === 2) return `Decision signals: ${labels[0]} and ${labels[1]}.`;
+  return `Decision signals: ${labels[0]}, ${labels[1]}, and ${labels[2]}.`;
+}
+function proposalLeadText(plan, points) {
+  const notes = plan.speaker_notes?.trim();
+  if (notes) return trimSentence(notes, 160);
+  for (const point of points) {
+    if (point.trim().length >= 72) {
+      return trimSentence(point, 160);
+    }
+  }
+  if (points.length >= 2) {
+    const left = splitCardText(points[0]).title;
+    const right = splitCardText(points[1]).title;
+    return `Focus areas include ${left} and ${right}.`;
+  }
+  return trimSentence(plan.purpose?.trim() || buildLead(plan), 160);
+}
+function proposalSectionLabel(plan) {
+  const text = normalizeText(plan.heading || "");
+  if (containsAny(text, "deliverable", "scope", "phase", "build", "implementation")) return "KEY DELIVERABLES";
+  if (containsAny(text, "assumption", "constraint", "dependency")) return "KEY ASSUMPTIONS";
+  if (containsAny(text, "risk", "issue")) return "KEY RISKS";
+  if (containsAny(text, "team", "role")) return "TEAM FOCUS";
+  return "KEY POINTS";
+}
+function coverWordmark(title) {
+  const words = title.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  const first = words[0].replace(/[^A-Za-z0-9]/g, "");
+  if (!first) return "";
+  if (first === first.toUpperCase() && first.length <= 8) return first;
+  if (first.length <= 4) return first.toUpperCase();
+  return "";
+}
+function sectionKicker(plan) {
+  return (plan.purpose?.trim() || plan.layout || "summary").toUpperCase();
+}
+function trimSentence(value, limit = 120) {
+  const clean = value.trim();
+  if (clean.length <= limit) return clean;
+  const clipped = clean.slice(0, limit).trim();
+  const parts = clipped.split(/[.!?]/);
+  if (parts[0]?.trim()) return `${parts[0].trim()}.`;
+  return `${clipped}\u2026`;
+}
+function addTopSummaryStrip(slide, plan, bounds, pal, token) {
+  const stripH = 0.92;
+  addPanel(slide, { x: bounds.x, y: bounds.y, w: bounds.w, h: stripH }, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.06);
+  if (token) {
+    addIcon(slide, token, bounds.x + 0.18, bounds.y + 0.18, 0.38, {
+      ...pal,
+      accent: accentColor(pal, 0),
+      accent2: mixHex(accentColor(pal, 0), pal.card, 0.42),
+      text: "FFFFFF"
+    });
+  }
+  addText(slide, sectionKicker(plan), { x: bounds.x + (token ? 0.7 : 0.18), y: bounds.y + 0.18, w: 2.8, h: 0.16 }, {
+    fontFace: FONT_BODY,
+    fontSize: 8.4,
+    bold: true,
+    color: pal.lightMuted,
+    charSpace: 0.8
+  });
+  addText(slide, buildLead(plan), { x: bounds.x + (token ? 0.7 : 0.18), y: bounds.y + 0.44, w: bounds.w - (token ? 0.88 : 0.36), h: 0.28 }, {
+    fontFace: FONT_HEAD,
+    fontSize: 15.5,
+    bold: true,
+    color: pal.text,
+    fit: "shrink"
+  });
+  return bounds.y + stripH + 0.2;
+}
 function renderCover(slide, manifest, family, pal) {
   addFullRect(slide, family === "playful" ? mixHex(pal.bg, pal.card, 0.72) : pal.header);
   addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.18 }, pal.accent, pal.accent, 0);
@@ -15401,12 +15672,14 @@ function renderCover(slide, manifest, family, pal) {
   const support = manifest.deck_plan.audience?.trim() ? `For ${manifest.deck_plan.audience.trim()}` : "";
   const meta = [manifest.deck_plan.subject.trim(), manifest.deck_plan.color_story?.trim() ?? ""].filter(Boolean).join("  |  ");
   const motif = coverToken(manifest);
+  const wordmark = coverWordmark(title);
+  const titleRemainder = wordmark ? title.replace(new RegExp(`^${wordmark}\\s*`, "i"), "").trim() : title;
   if (family === "studio") {
     slide.addShape("rect", {
-      x: 8.95,
-      y: 0.8,
-      w: 3.6,
-      h: 5.7,
+      x: 8.75,
+      y: 0.72,
+      w: 3.9,
+      h: 5.96,
       line: { color: mixHex(pal.header, pal.accent, 0.38), pt: 1 },
       fill: { color: mixHex(pal.header, pal.card, 0.04), transparency: 4 }
     });
@@ -15418,7 +15691,7 @@ function renderCover(slide, manifest, family, pal) {
       line: { color: pal.accent2, transparency: 100 },
       fill: { color: pal.accent2 }
     });
-    addIcon(slide, motif, 10.15, 2.2, 1.5, pal);
+    addIcon(slide, motif, 10.05, 1.84, 1.62, pal);
   } else if (family === "playful") {
     slide.addShape("ellipse", {
       x: 9.4,
@@ -15446,7 +15719,6 @@ function renderCover(slide, manifest, family, pal) {
       line: { color: pal.footer, transparency: 100 },
       fill: { color: pal.footer }
     });
-    addLine(slide, 1.06, 3.75, 2.7, 0, "D6A33E", 2.5);
   }
   addText(slide, kicker.toUpperCase(), { x: 1.08, y: 1.12, w: 3.8, h: 0.25 }, {
     fontFace: FONT_BODY,
@@ -15456,90 +15728,110 @@ function renderCover(slide, manifest, family, pal) {
     bold: true,
     valign: "mid"
   });
-  const words = title.split(/\s+/);
-  const titleLines = words.length > 3 && words[0].length <= 10 ? `${words[0]}
-${words.slice(1).join(" ")}` : title;
-  addText(slide, titleLines, { x: 1.05, y: 1.72, w: 7.1, h: 1.55 }, {
-    fontFace: FONT_HEAD,
-    fontSize: family === "playful" ? 24 : 28,
+  if (family === "proposal" && wordmark) {
+    addText(slide, wordmark, { x: 1.02, y: 1.72, w: 3.8, h: 0.76 }, {
+      fontFace: FONT_HEAD,
+      fontSize: 40,
+      bold: true,
+      color: pal.accent,
+      fit: "shrink",
+      valign: "top"
+    });
+  }
+  const titleY = family === "proposal" ? wordmark ? 2.62 : 1.82 : 1.54;
+  const titleH = family === "proposal" ? 1.14 : 1.78;
+  const titleColor = family === "proposal" ? "FFFFFF" : family === "studio" ? "FFFFFF" : pal.header;
+  addText(slide, family === "proposal" ? titleRemainder || title : title, { x: 1, y: titleY, w: 7.6, h: titleH }, {
+    fontFace: family === "proposal" ? "Georgia" : FONT_HEAD,
+    fontSize: family === "proposal" ? 29 : family === "playful" ? 25 : 30,
     bold: true,
-    color: family === "proposal" ? pal.accent : family === "studio" ? "FFFFFF" : pal.header,
+    color: titleColor,
     breakLine: true,
     fit: "shrink",
-    valign: "mid"
+    valign: "top"
   });
+  if (family === "proposal") {
+    addLine(slide, 1.06, titleY + titleH + 0.06, 2.72, 0, "D6A33E", 2.5);
+  }
   if (subtitle) {
-    addText(slide, subtitle, { x: 1.05, y: 3.05, w: 6.8, h: 0.72 }, {
+    addText(slide, subtitle, { x: 1.02, y: family === "proposal" ? 4.2 : 3.18, w: 7.2, h: 0.66 }, {
       fontFace: "Georgia",
-      fontSize: family === "proposal" ? 20 : 18,
+      fontSize: family === "proposal" ? 17 : 17,
       color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.22) : "FFFFFF",
-      italic: family !== "proposal",
+      italic: family === "proposal",
       breakLine: true
     });
   }
   if (support) {
-    addText(slide, support, { x: 1.07, y: 4.2, w: 5.5, h: 0.35 }, {
-      fontFace: FONT_BODY,
-      fontSize: 11.5,
-      color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.42) : pal.darkMuted
+    addText(slide, support, { x: 1.04, y: family === "proposal" ? 5.12 : 4.02, w: 6.2, h: 0.28 }, {
+      fontFace: family === "proposal" ? "Georgia" : FONT_BODY,
+      fontSize: family === "proposal" ? 10.8 : 11,
+      color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.42) : pal.darkMuted,
+      italic: family === "proposal"
     });
   }
-  if (meta) {
-    addText(slide, meta, { x: 1.07, y: 5.15, w: 7, h: 0.35 }, {
+  if (family === "proposal") {
+    const footer = manifest.deck_plan.subject.trim() || manifest.title;
+    addText(slide, footer, { x: 1.08, y: 7.02, w: 7.6, h: 0.22 }, {
+      fontFace: "Georgia",
+      fontSize: 10.5,
+      color: pal.darkMuted
+    });
+    addText(slide, "Confidential", { x: 11.05, y: 7.03, w: 1.2, h: 0.22 }, {
+      fontFace: "Georgia",
+      fontSize: 10,
+      color: pal.darkMuted,
+      align: "right"
+    });
+  } else if (meta) {
+    addText(slide, meta, { x: 1.04, y: 5.02, w: 7.1, h: 0.32 }, {
       fontFace: "Georgia",
       fontSize: 10.5,
       italic: true,
       color: family === "playful" ? mixHex(pal.header, "FFFFFF", 0.48) : pal.darkMuted
     });
   }
-  if (family === "proposal") {
-    addText(slide, "Confidential", { x: 1.08, y: 7.03, w: 2.5, h: 0.22 }, {
-      fontFace: "Georgia",
-      fontSize: 10,
-      color: pal.darkMuted
-    });
-  }
 }
 function renderSlideChrome(slide, content, totalSlides, family, pal) {
   addFullRect(slide, family === "proposal" ? pal.canvas : pal.bg);
   const headFill = family === "playful" ? mixHex(pal.header, "FFFFFF", 0.08) : pal.header;
-  addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.68 }, headFill, headFill, 0);
+  addPanel(slide, { x: 0, y: 0, w: SLIDE_W, h: 0.58 }, headFill, headFill, 0);
   if (family !== "playful") {
-    addPanel(slide, { x: 0, y: 0.68, w: SLIDE_W, h: 0.08 }, mixHex(pal.canvas, pal.card, 0.2), mixHex(pal.canvas, pal.card, 0.2), 0);
+    addPanel(slide, { x: 0, y: 0.58, w: SLIDE_W, h: 0.06 }, mixHex(pal.canvas, pal.card, 0.2), mixHex(pal.canvas, pal.card, 0.2), 0);
   }
-  addIcon(slide, slideIconToken(content), 0.42, 0.17, 0.26, {
+  addIcon(slide, slideIconToken(content), 0.38, 0.12, 0.28, {
     ...pal,
     accent: mixHex(headFill, pal.accent, 0.44),
     accent2: mixHex(headFill, pal.accent2, 0.44),
     text: "FFFFFF"
   });
-  addText(slide, shortTitle(content.heading || "Untitled Slide"), { x: 0.83, y: 0.17, w: 7.8, h: 0.23 }, {
+  addText(slide, shortTitle(content.heading || "Untitled Slide"), { x: 0.78, y: 0.14, w: 8.2, h: 0.22 }, {
     fontFace: FONT_BODY,
-    fontSize: 11,
+    fontSize: 11.5,
     color: "FFFFFF",
     bold: true,
     charSpace: 0.3
   });
-  addPanel(slide, { x: 10.8, y: 0.13, w: 1.9, h: 0.32 }, mixHex(headFill, pal.accent, 0.48), mixHex(headFill, pal.card, 0.1), 0.08);
-  addText(slide, `Slide ${content.number} of ${totalSlides}`, { x: 10.95, y: 0.18, w: 1.6, h: 0.17 }, {
+  addPanel(slide, { x: 10.72, y: 0.1, w: 1.98, h: 0.3 }, mixHex(headFill, pal.accent, 0.48), mixHex(headFill, pal.card, 0.1), 0.08);
+  addText(slide, `Slide ${content.number} of ${totalSlides}`, { x: 10.89, y: 0.15, w: 1.64, h: 0.16 }, {
     fontFace: FONT_BODY,
     fontSize: 9.5,
     color: "FFFFFF",
     bold: true,
     align: "center"
   });
-  return { x: 0.58, y: 1.02, w: 12.17, h: 5.92 };
+  return { x: 0.48, y: 0.8, w: 12.37, h: 6.2 };
 }
 function renderMetricTile(slide, stat, bounds, fill, border, accent, valueColor, textColor) {
   addPanel(slide, bounds, fill, border, 0.12);
   addPanel(slide, { x: bounds.x, y: bounds.y, w: bounds.w, h: 0.04 }, accent, accent, 0);
-  addText(slide, stat.value, { x: bounds.x + 0.18, y: bounds.y + 0.26, w: bounds.w - 0.36, h: 0.45 }, {
+  addText(slide, stat.value, { x: bounds.x + 0.18, y: bounds.y + 0.2, w: bounds.w - 0.36, h: 0.5 }, {
     fontFace: FONT_HEAD,
-    fontSize: 20,
+    fontSize: 22,
     bold: true,
     color: valueColor
   });
-  addText(slide, stat.label.toUpperCase(), { x: bounds.x + 0.18, y: bounds.y + 0.72, w: bounds.w - 0.36, h: 0.2 }, {
+  addText(slide, stat.label.toUpperCase(), { x: bounds.x + 0.18, y: bounds.y + 0.74, w: bounds.w - 0.36, h: 0.18 }, {
     fontFace: FONT_BODY,
     fontSize: 8.5,
     bold: true,
@@ -15547,7 +15839,7 @@ function renderMetricTile(slide, stat, bounds, fill, border, accent, valueColor,
     charSpace: 0.6
   });
   if (stat.desc?.trim()) {
-    addText(slide, stat.desc.trim(), { x: bounds.x + 0.18, y: bounds.y + 1.02, w: bounds.w - 0.36, h: bounds.h - 1.15 }, {
+    addText(slide, trimSentence(stat.desc.trim(), 74), { x: bounds.x + 0.18, y: bounds.y + 0.98, w: bounds.w - 0.36, h: bounds.h - 1.12 }, {
       fontFace: FONT_BODY,
       fontSize: 10.5,
       color: textColor,
@@ -15562,48 +15854,44 @@ function renderStats(slide, plan, bounds, pal) {
   if (stats.length === 0) {
     return renderBullets(slide, plan, bounds, pal);
   }
-  const hero = stats.slice(0, Math.min(2, stats.length));
-  const lower = stats.slice(hero.length);
-  const heroGap = 0.22;
-  const heroY = bounds.y;
-  const heroH = lower.length > 0 ? 2.55 : 4.8;
-  const heroW = hero.length === 1 ? bounds.w : (bounds.w - heroGap) / 2;
-  hero.forEach((stat, index) => {
+  const gap = 0.16;
+  const heroH = stats.length > 2 ? 2.78 : bounds.h;
+  const bandH = stats.length > 2 ? 0.44 : 0;
+  const lowerY = bounds.y + heroH + gap;
+  const lowerH = stats.length > 2 ? bounds.h - heroH - gap - bandH - gap : 0;
+  const cardW = (bounds.w - gap) / 2;
+  stats.slice(0, 2).forEach((stat, index) => {
     renderMetricTile(
       slide,
       stat,
-      { x: bounds.x + index * (heroW + heroGap), y: heroY, w: heroW, h: heroH },
+      { x: bounds.x + index * (cardW + gap), y: bounds.y, w: cardW, h: heroH },
       index === 0 ? pal.header : mixHex(pal.header, pal.card, 0.18),
-      mixHex(index === 0 ? pal.header : mixHex(pal.header, pal.card, 0.18), pal.card, 0.16),
+      mixHex(pal.header, pal.card, 0.18),
       accentColor(pal, index),
       accentColor(pal, index),
       pal.darkMuted
     );
   });
-  if (lower.length > 0) {
-    const lowerY = heroY + heroH + 0.22;
-    const lowerH = 2.15;
-    const lowerGap = 0.22;
-    const lowerW = lower.length === 1 ? bounds.w : (bounds.w - lowerGap) / 2;
-    lower.forEach((stat, index) => {
-      renderMetricTile(
-        slide,
-        stat,
-        { x: bounds.x + index * (lowerW + lowerGap), y: lowerY, w: lowerW, h: lowerH },
-        pal.card,
-        mixHex(pal.canvas, pal.border, 0.84),
-        accentColor(pal, hero.length + index),
-        pal.text,
-        pal.lightMuted
-      );
-    });
-    addPanel(slide, { x: bounds.x, y: lowerY + lowerH + 0.14, w: bounds.w, h: 0.34 }, mixHex(pal.canvas, pal.border, 0.18), mixHex(pal.canvas, pal.border, 0.18), 0.06);
-    addText(slide, buildLead(plan) || `${stats[0].value} signals the current headline outcome for this slide.`, { x: bounds.x + 0.18, y: lowerY + lowerH + 0.2, w: bounds.w - 0.36, h: 0.2 }, {
+  stats.slice(2).forEach((stat, index) => {
+    renderMetricTile(
+      slide,
+      stat,
+      { x: bounds.x + index * (cardW + gap), y: lowerY, w: cardW, h: lowerH },
+      pal.card,
+      mixHex(pal.canvas, pal.border, 0.84),
+      accentColor(pal, index + 2),
+      pal.text,
+      pal.lightMuted
+    );
+  });
+  if (stats.length > 2) {
+    addPanel(slide, { x: bounds.x, y: bounds.y + bounds.h - bandH, w: bounds.w, h: bandH }, mixHex(pal.canvas, pal.header, 0.08), mixHex(pal.canvas, pal.border, 0.76), 0.04);
+    addText(slide, proposalStatsTakeaway(stats), { x: bounds.x + 0.18, y: bounds.y + bounds.h - bandH + 0.12, w: bounds.w - 0.36, h: bandH - 0.2 }, {
       fontFace: FONT_BODY,
-      fontSize: 10,
+      fontSize: 10.2,
       color: pal.text,
       bold: true,
-      align: "center"
+      fit: "shrink"
     });
   }
 }
@@ -15652,42 +15940,51 @@ function renderPointList(slide, items, bounds, pal, offset = 0) {
 function renderBullets(slide, plan, bounds, pal) {
   const points = (plan.points ?? []).slice(0, 8);
   const stats = (plan.stats ?? []).slice(0, 4);
-  let y = bounds.y;
+  let cursorY = bounds.y;
   if (stats.length > 0) {
-    const chipGap = 0.18;
-    const chipW = (bounds.w - chipGap * (stats.length - 1)) / stats.length;
+    const gap2 = 0.14;
+    const cardW = (bounds.w - gap2 * 3) / 4;
+    const cardH = 1.18;
     stats.forEach((stat, index) => {
-      renderMetricTile(slide, stat, { x: bounds.x + index * (chipW + chipGap), y, w: chipW, h: 1.15 }, pal.card, mixHex(pal.canvas, pal.border, 0.84), accentColor(pal, index), pal.text, pal.lightMuted);
+      renderMetricTile(
+        slide,
+        stat,
+        { x: bounds.x + index * (cardW + gap2), y: bounds.y, w: cardW, h: cardH },
+        pal.card,
+        mixHex(pal.canvas, pal.border, 0.84),
+        accentColor(pal, index),
+        pal.text,
+        pal.lightMuted
+      );
     });
-    y += 1.34;
+    cursorY += cardH + 0.24;
   }
-  const lead = buildLead(plan);
+  const lead = proposalLeadText(plan, points);
   if (lead) {
-    addText(slide, lead, { x: bounds.x, y, w: bounds.w, h: 0.45 }, {
-      fontFace: FONT_HEAD,
-      fontSize: 16,
-      color: pal.text,
-      bold: true
+    addText(slide, lead, { x: bounds.x, y: cursorY, w: bounds.w, h: 0.58 }, {
+      fontFace: "Georgia",
+      fontSize: 13.2,
+      color: pal.lightMuted,
+      breakLine: true,
+      fit: "shrink"
     });
-    y += 0.55;
+    cursorY += 0.72;
   }
-  addText(slide, (plan.purpose?.trim() || "Key points").toUpperCase(), { x: bounds.x, y, w: 2.8, h: 0.16 }, {
+  addText(slide, proposalSectionLabel(plan), { x: bounds.x, y: cursorY, w: 3.2, h: 0.18 }, {
     fontFace: FONT_BODY,
-    fontSize: 8.5,
+    fontSize: 8.8,
     bold: true,
     color: pal.lightMuted,
-    charSpace: 1
+    charSpace: 0.8
   });
-  y += 0.3;
+  cursorY += 0.28;
   const [left, right] = pointColumns(points);
-  const gap = 0.36;
+  const gap = right.length > 0 ? 0.34 : 0;
+  const colW = right.length > 0 ? (bounds.w - gap) / 2 : bounds.w;
+  renderPointList(slide, left, { x: bounds.x, y: cursorY, w: colW, h: bounds.h - (cursorY - bounds.y) }, pal, 0);
   if (right.length > 0) {
-    const colW = (bounds.w - gap) / 2;
-    renderPointList(slide, left, { x: bounds.x, y, w: colW, h: bounds.h - (y - bounds.y) }, pal, 0);
-    renderPointList(slide, right, { x: bounds.x + colW + gap, y, w: colW, h: bounds.h - (y - bounds.y) }, pal, left.length);
-    return;
+    renderPointList(slide, right, { x: bounds.x + colW + gap, y: cursorY, w: colW, h: bounds.h - (cursorY - bounds.y) }, pal, left.length);
   }
-  renderPointList(slide, left, { x: bounds.x, y, w: bounds.w, h: bounds.h - (y - bounds.y) }, pal, 0);
 }
 function renderRoadmapRow(slide, index, title, meta, desc, token, bounds, pal) {
   addPanel(slide, bounds, index % 2 === 1 ? mixHex(pal.canvas, pal.card, 0.74) : pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.08);
@@ -15748,17 +16045,18 @@ function renderCards(slide, plan, bounds, pal) {
   if (cards.length === 0) {
     return renderBullets(slide, plan, bounds, pal);
   }
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, slideIconToken(plan));
   const cols = cards.length <= 2 ? 2 : 3;
   const rows = Math.ceil(cards.length / cols);
   const gapX = 0.22;
   const gapY = 0.22;
   const cardW = (bounds.w - gapX * (cols - 1)) / cols;
-  const cardH = (bounds.h - gapY * (rows - 1)) / rows;
+  const cardH = (bounds.h - (startY - bounds.y) - gapY * (rows - 1)) / rows;
   cards.forEach((card, index) => {
     const col = index % cols;
     const row = Math.floor(index / cols);
     const x = bounds.x + col * (cardW + gapX);
-    const y = bounds.y + row * (cardH + gapY);
+    const y = startY + row * (cardH + gapY);
     addPanel(slide, { x, y, w: cardW, h: cardH }, row % 2 === 0 ? pal.card : mixHex(pal.canvas, pal.card, 0.74), mixHex(pal.canvas, pal.border, 0.84), 0.08);
     addIcon(slide, card.icon || card.title, x + 0.18, y + 0.18, 0.42, {
       ...pal,
@@ -15812,11 +16110,13 @@ function renderChart(slide, plan, bounds, pal) {
   if (categories.length === 0 || series.length === 0) {
     return renderBullets(slide, plan, bounds, pal);
   }
-  const mainW = 8.45;
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, "chart");
+  const usableH = bounds.h - (startY - bounds.y);
+  const mainW = 8.55;
   const sideW = bounds.w - mainW - 0.28;
-  addPanel(slide, { x: bounds.x, y: bounds.y, w: mainW, h: bounds.h }, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.06);
-  addPanel(slide, { x: bounds.x + mainW + 0.28, y: bounds.y, w: sideW, h: bounds.h }, mixHex(pal.canvas, pal.card, 0.74), mixHex(pal.canvas, pal.border, 0.84), 0.06);
-  addPanel(slide, { x: bounds.x, y: bounds.y, w: mainW, h: 0.04 }, pal.accent, pal.accent, 0);
+  addPanel(slide, { x: bounds.x, y: startY, w: mainW, h: usableH }, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.06);
+  addPanel(slide, { x: bounds.x + mainW + 0.28, y: startY, w: sideW, h: usableH }, mixHex(pal.canvas, pal.card, 0.74), mixHex(pal.canvas, pal.border, 0.84), 0.06);
+  addPanel(slide, { x: bounds.x, y: startY, w: mainW, h: 0.04 }, pal.accent, pal.accent, 0);
   const chartData = series.map((entry) => ({
     name: entry.name,
     labels: categories,
@@ -15824,10 +16124,10 @@ function renderChart(slide, plan, bounds, pal) {
   }));
   const type = chartTypeName(plan.chart_type ?? "");
   slide.addChart(type, chartData, {
-    x: bounds.x + 0.22,
-    y: bounds.y + 0.32,
+    x: bounds.x + 0.18,
+    y: startY + 0.24,
     w: mainW - 0.44,
-    h: bounds.h - 0.58,
+    h: usableH - 0.42,
     showLegend: series.length > 1,
     legendPos: "b",
     chartColors: series.map((entry, index) => normalizeHex(entry.color || accentColor(pal, index))),
@@ -15857,14 +16157,14 @@ function renderChart(slide, plan, bounds, pal) {
     dataBorder: { color: "FFFFFF", pt: 0 },
     layout: { x: 0.12, y: 0.05, w: 0.84, h: 0.8 }
   });
-  addText(slide, "Key read", { x: bounds.x + mainW + 0.48, y: bounds.y + 0.28, w: sideW - 0.4, h: 0.22 }, {
+  addText(slide, "Key read", { x: bounds.x + mainW + 0.48, y: startY + 0.24, w: sideW - 0.4, h: 0.22 }, {
     fontFace: FONT_BODY,
     fontSize: 9.2,
     bold: true,
     color: pal.lightMuted,
     charSpace: 0.7
   });
-  addText(slide, chartInsight(plan), { x: bounds.x + mainW + 0.46, y: bounds.y + 0.62, w: sideW - 0.56, h: 0.9 }, {
+  addText(slide, chartInsight(plan), { x: bounds.x + mainW + 0.46, y: startY + 0.56, w: sideW - 0.56, h: 0.86 }, {
     fontFace: FONT_HEAD,
     fontSize: 15,
     bold: true,
@@ -15873,7 +16173,7 @@ function renderChart(slide, plan, bounds, pal) {
     valign: "top"
   });
   series.slice(0, 4).forEach((entry, index) => {
-    const rowY = bounds.y + 1.8 + index * 0.9;
+    const rowY = startY + 1.62 + index * 0.88;
     addPanel(slide, { x: bounds.x + mainW + 0.42, y: rowY, w: sideW - 0.52, h: 0.72 }, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.05);
     slide.addShape("rect", {
       x: bounds.x + mainW + 0.56,
@@ -15900,12 +16200,13 @@ function renderChart(slide, plan, bounds, pal) {
 }
 function renderTimeline(slide, plan, bounds, pal) {
   const items = (plan.timeline ?? []).slice(0, 6);
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, "strategy");
   const rowGap = 0.18;
-  const rowH = (bounds.h - rowGap * Math.max(items.length - 1, 0)) / Math.max(items.length, 1);
+  const rowH = (bounds.h - (startY - bounds.y) - rowGap * Math.max(items.length - 1, 0)) / Math.max(items.length, 1);
   items.forEach((item, index) => {
     renderRoadmapRow(slide, index, item.title, item.date || `Phase ${index + 1}`, item.desc?.trim() || item.title, inferIconToken(item.title) || slideIconToken(plan), {
       x: bounds.x,
-      y: bounds.y + index * (rowH + rowGap),
+      y: startY + index * (rowH + rowGap),
       w: bounds.w,
       h: rowH
     }, pal);
@@ -15914,21 +16215,22 @@ function renderTimeline(slide, plan, bounds, pal) {
 function renderCompare(slide, plan, bounds, pal) {
   const left = plan.left_column ?? { heading: "Current State", points: [] };
   const right = plan.right_column ?? { heading: "Future State", points: [] };
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, "integration");
   const gap = 0.28;
   const colW = (bounds.w - gap) / 2;
   [
     { data: left, x: bounds.x, accent: accentColor(pal, 0), offset: 0 },
     { data: right, x: bounds.x + colW + gap, accent: accentColor(pal, 1), offset: left.points.length }
   ].forEach((column) => {
-    addPanel(slide, { x: column.x, y: bounds.y, w: colW, h: bounds.h }, column.data === left ? mixHex(pal.canvas, pal.card, 0.74) : pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.08);
-    addPanel(slide, { x: column.x, y: bounds.y, w: colW, h: 0.06 }, column.accent, column.accent, 0);
-    addText(slide, column.data.heading, { x: column.x + 0.18, y: bounds.y + 0.18, w: colW - 0.36, h: 0.24 }, {
+    addPanel(slide, { x: column.x, y: startY, w: colW, h: bounds.h - (startY - bounds.y) }, column.data === left ? mixHex(pal.canvas, pal.card, 0.74) : pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.08);
+    addPanel(slide, { x: column.x, y: startY, w: colW, h: 0.06 }, column.accent, column.accent, 0);
+    addText(slide, column.data.heading, { x: column.x + 0.18, y: startY + 0.18, w: colW - 0.36, h: 0.24 }, {
       fontFace: FONT_HEAD,
       fontSize: 15,
       bold: true,
       color: pal.text
     });
-    renderPointList(slide, column.data.points.slice(0, 6), { x: column.x + 0.18, y: bounds.y + 0.62, w: colW - 0.36, h: bounds.h - 0.8 }, pal, column.offset);
+    renderPointList(slide, column.data.points.slice(0, 6), { x: column.x + 0.18, y: startY + 0.62, w: colW - 0.36, h: bounds.h - (startY - bounds.y) - 0.8 }, pal, column.offset);
   });
 }
 function renderTable(slide, plan, bounds, pal) {
@@ -15936,8 +16238,9 @@ function renderTable(slide, plan, bounds, pal) {
   if (!table || table.headers.length === 0) {
     return renderBullets(slide, plan, bounds, pal);
   }
-  addPanel(slide, bounds, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.04);
-  addPanel(slide, { x: bounds.x, y: bounds.y, w: bounds.w, h: 0.04 }, pal.accent, pal.accent, 0);
+  const startY = addTopSummaryStrip(slide, plan, bounds, pal, "shield");
+  addPanel(slide, { x: bounds.x, y: startY, w: bounds.w, h: bounds.h - (startY - bounds.y) }, pal.card, mixHex(pal.canvas, pal.border, 0.84), 0.04);
+  addPanel(slide, { x: bounds.x, y: startY, w: bounds.w, h: 0.04 }, pal.accent, pal.accent, 0);
   const rows = [
     table.headers.map((header) => ({
       text: header,
@@ -15968,9 +16271,9 @@ function renderTable(slide, plan, bounds, pal) {
   const colW = table.headers.map(() => Number((bounds.w / table.headers.length).toFixed(2)));
   slide.addTable(rows, {
     x: bounds.x + 0.16,
-    y: bounds.y + 0.18,
+    y: startY + 0.18,
     w: bounds.w - 0.32,
-    h: bounds.h - 0.36,
+    h: bounds.h - (startY - bounds.y) - 0.36,
     colW,
     border: { pt: 1, color: mixHex(pal.canvas, pal.border, 0.84) },
     margin: 0.06,
@@ -15983,22 +16286,22 @@ function renderTable(slide, plan, bounds, pal) {
 }
 function renderSection(slide, plan, bounds, family, pal) {
   const fill = family === "proposal" ? pal.header : mixHex(pal.header, pal.accent, 0.12);
-  addPanel(slide, { x: bounds.x + 0.2, y: bounds.y + 0.6, w: bounds.w - 0.4, h: 3.9 }, fill, mixHex(fill, pal.card, 0.14), 0.08);
-  addText(slide, (plan.purpose?.trim() || "Section transition").toUpperCase(), { x: bounds.x + 0.56, y: bounds.y + 1.08, w: 3.2, h: 0.2 }, {
+  addPanel(slide, { x: bounds.x + 0.1, y: bounds.y + 0.42, w: bounds.w - 0.2, h: 4.35 }, fill, mixHex(fill, pal.card, 0.14), 0.08);
+  addText(slide, (plan.purpose?.trim() || "Section transition").toUpperCase(), { x: bounds.x + 0.42, y: bounds.y + 0.82, w: 3.2, h: 0.2 }, {
     fontFace: FONT_BODY,
     fontSize: 9,
     bold: true,
     color: pal.darkMuted,
     charSpace: 0.9
   });
-  addText(slide, plan.heading, { x: bounds.x + 0.52, y: bounds.y + 1.48, w: bounds.w - 1.04, h: 0.95 }, {
+  addText(slide, plan.heading, { x: bounds.x + 0.38, y: bounds.y + 1.22, w: bounds.w - 0.76, h: 1.05 }, {
     fontFace: FONT_HEAD,
-    fontSize: 28,
+    fontSize: 30,
     bold: true,
     color: family === "proposal" ? "FFFFFF" : pal.text,
     breakLine: true
   });
-  addText(slide, buildLead(plan), { x: bounds.x + 0.56, y: bounds.y + 2.9, w: bounds.w - 1.12, h: 0.6 }, {
+  addText(slide, buildLead(plan), { x: bounds.x + 0.42, y: bounds.y + 2.68, w: bounds.w - 0.84, h: 0.8 }, {
     fontFace: FONT_BODY,
     fontSize: 12,
     color: family === "proposal" ? pal.darkMuted : pal.lightMuted,
