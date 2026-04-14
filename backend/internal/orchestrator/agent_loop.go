@@ -57,6 +57,9 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 12. For AI, digital-future, innovation, or forward-looking subjects, prefer airy split/gallery compositions, restrained surfaces, and a fresh palette rather than classroom amber or old business-deck blue.
 13. Keep one coherent deck system across the full presentation: cover language, header treatment, spacing, card style, and table/chart chrome should feel like one designed document, not a different template on every slide.
 14. If the request is a rollout, proposal, cost estimate, implementation plan, or delivery roadmap, treat it as a structured proposal/report system even if the subject is AI, healthcare, or technology.
+15. Keep density disciplined in authored HTML: most slides should use 56-78px page padding, 12-24px gaps, 18-22px body copy, and 32-42px section titles unless the slide has a deliberate reason to break that range.
+16. Avoid empty hero frames, giant icon boxes, oversized rounded cards, and slides that leave large parts of the canvas unused.
+17. Do not bottom-anchor the full cover composition; the cover should occupy the canvas intentionally instead of leaving a large empty upper half.
 
 TYPE REFERENCE — choose the right type per slide:
 

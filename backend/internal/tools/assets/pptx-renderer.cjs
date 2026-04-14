@@ -15085,8 +15085,8 @@ var PptxGenJS = class {
 // src/render-pptx.ts
 var SLIDE_W = 13.333;
 var SLIDE_H = 7.5;
-var FONT_HEAD = "Avenir Next";
-var FONT_BODY = "Avenir Next";
+var FONT_HEAD = "Aptos";
+var FONT_BODY = "Aptos";
 var legacyEmojiIcons = {
   "\u26A1": "automation",
   "\u{1F512}": "shield",
@@ -16891,6 +16891,7 @@ async function buildPresentationFromHTML(htmlDocument, outputPath, domBundlePath
       }
       return window.domToPptx.exportToPptx(slides, {
         fileName,
+        layout: "LAYOUT_WIDE",
         svgAsVector: true
       });
     }, import_node_path.default.basename(outputPath));

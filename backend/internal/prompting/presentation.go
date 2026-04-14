@@ -85,6 +85,27 @@ PRIMARY RENDERING MODE
   - compare-grid, compare-col
 - You may define additional classes in deck.theme_css as needed. The goal is a custom deck system, not a fixed template.
 
+HTML/CSS AUTHORING RULES
+- Design for the exported PowerPoint file, not for a browser mockup.
+- Use PowerPoint-safe typography. Prefer:
+  - sans: Aptos, Arial, Helvetica Neue
+  - serif accents only when deliberate: Georgia
+- Avoid depending on niche web fonts or platform-specific UI fonts as the primary design move.
+- Keep spacing disciplined:
+  - normal page padding should usually land around 56-78px, not 90-120px
+  - grid gaps should usually be 12-24px
+  - body copy should usually sit around 18-22px
+  - section headings should usually sit around 32-42px
+  - cover titles should usually sit around 46-64px
+- Use the canvas well:
+- slides should feel intentionally filled, not crowded and not hollow
+- most slides should visually occupy roughly 70-85% of the canvas
+- avoid giant empty hero zones, empty side rails, or large decorative boxes with no information
+- do not bottom-anchor the whole cover composition and leave the upper half empty
+- If you place an icon or illustration area on a slide, it must support real content, not act as a blank filler panel.
+- Roadmaps, proposal pages, decision pages, capability pages, and operating-plan pages should read like designed documents with strong hierarchy and dense useful information.
+- Prefer crisp rectangular or lightly rounded geometry over oversized bubbly cards unless the topic explicitly calls for a playful treatment.
+
 DECK BRIEF QUALITY BAR
 - Make the brief specific to the actual subject, audience, and requested tone.
 - Do not reuse generic phrases like "executive framework", "modern business deck", or boilerplate color stories.
@@ -107,6 +128,7 @@ DECK BRIEF QUALITY BAR
 SLIDE QUALITY BAR
 - Every slide must carry real information density.
 - Avoid thin slides, filler one-liners, and empty decorative space.
+- Avoid giant icon boxes, empty right-side hero frames, and cover pages that sacrifice content for decoration.
 - Avoid repeating the same composition with only text changed.
 - If you use authored HTML slides, each slide must still feel like one coherent deck system rather than unrelated experiments.
 - Use charts only with real data series.
@@ -152,6 +174,7 @@ REFERENCE-DECK BEHAVIOR
   - do not clone its text
   - do not mechanically imitate one slide on every page
   - translate its strengths into a fresh HTML/CSS slide system when that is the best way to preserve refinement in the final .pptx
+- Explicitly inherit the reference deck's density and restraint if those are among its strengths.
 - A good reference should influence structure, spacing, and refinement, not force copy-paste templating.
 
 ANTI-PATTERNS TO AVOID
