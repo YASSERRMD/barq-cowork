@@ -37,16 +37,53 @@ WORKFLOW
    - coherent layout mix
 5. Then plan each slide:
    - purpose
-   - best layout type
+   - best rendering mode
    - concrete content
    - whether it needs chart / timeline / compare / table / cards
    - whether it needs semantic icons
+   - whether it should be an authored HTML slide instead of a legacy structured layout
 6. Audit the draft deck before rendering:
    - opener does not repeat the cover title
    - every slide has enough content density for its layout
    - no visible planning language leaks into the audience-facing copy
    - layout mix is varied but still one coherent design system
 7. Only after that call write_pptx.
+
+PRIMARY RENDERING MODE
+- New deck generation is authored HTML slides, not fixed templates.
+- Use these fields on every serious client-facing deck so preview stays consistent with the downloaded .pptx:
+  - deck.theme_css
+  - deck.cover_html
+  - slides[].type = "html"
+  - slides[].html
+- Think of theme_css as the deck design system:
+  - spacing
+  - typography
+  - color treatment
+  - panel geometry
+  - grid behavior
+  - inline SVG styling
+- Think of cover_html and slides[].html as the actual slide composition chosen by the model.
+- Use simple, valid HTML with inline SVG where needed. Do not use scripts or external assets.
+- The write_pptx tool rejects incomplete HTML/CSS deck contracts, so do not stop at a deck brief or structured-only slide list.
+- Use the legacy structured slide types only when the user explicitly asks for a very simple internal draft.
+- Available baseline class kit for authored slides:
+  - eyebrow
+  - display-title
+  - section-title
+  - lede
+  - body-copy
+  - muted-copy
+  - rule
+  - tag
+  - panel
+  - panel-light
+  - grid-2, grid-3, grid-4
+  - stat-card, stat-value, stat-label, stat-desc
+  - bullet-list, bullet-item
+  - timeline-list, timeline-row, timeline-date
+  - compare-grid, compare-col
+- You may define additional classes in deck.theme_css as needed. The goal is a custom deck system, not a fixed template.
 
 DECK BRIEF QUALITY BAR
 - Make the brief specific to the actual subject, audience, and requested tone.
@@ -71,6 +108,7 @@ SLIDE QUALITY BAR
 - Every slide must carry real information density.
 - Avoid thin slides, filler one-liners, and empty decorative space.
 - Avoid repeating the same composition with only text changed.
+- If you use authored HTML slides, each slide must still feel like one coherent deck system rather than unrelated experiments.
 - Use charts only with real data series.
 - Use timelines only with actual milestones.
 - Use compare / table only when the comparison matters.
@@ -113,6 +151,7 @@ REFERENCE-DECK BEHAVIOR
   - match its professionalism and discipline
   - do not clone its text
   - do not mechanically imitate one slide on every page
+  - translate its strengths into a fresh HTML/CSS slide system when that is the best way to preserve refinement in the final .pptx
 - A good reference should influence structure, spacing, and refinement, not force copy-paste templating.
 
 ANTI-PATTERNS TO AVOID
@@ -129,5 +168,6 @@ ANTI-PATTERNS TO AVOID
 
 TOOL CALL REQUIREMENTS
 - Call write_pptx with a complete deck object on every presentation task.
-- Provide enough structured content that the renderer can build a professional result.
+- Provide enough authored HTML/CSS content that the renderer can build a professional result directly from the shared slide DOM.
+- Use deck.cover_html for the cover and authored HTML for every content slide.
 - Do not stop at prose, outline, or planning text. The task is not complete until the .pptx file is written.`

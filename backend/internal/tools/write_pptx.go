@@ -25,9 +25,9 @@ const (
 
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
-	return "Create a professional PowerPoint presentation (.pptx) powered by an embedded PptxGenJS renderer. " +
+	return "Create a professional PowerPoint presentation (.pptx) powered by an HTML-to-editable-PowerPoint worker. " +
 		"Requires a complete deck design brief chosen by the model, then audits each slide for content fit, layout fit, and visual fit before rendering. " +
-		"Supports 10 rich slide types: bullets, stats, steps, cards, chart, timeline, compare, table, title, blank. " +
+		"New deck generation requires a full LLM-authored HTML/CSS slide system so preview and downloadable PPTX come from the same slide DOM instead of a fallback template. " +
 		"Use this for ALL presentation, slides, deck, or slideshow requests. " +
 		"Saves to slides/<filename>.pptx."
 }
@@ -121,7 +121,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 	}
 	deckSchema := map[string]any{
 		"type":        "object",
-		"description": "Required deck-level design plan chosen by the model. Fill this completely so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults.",
+		"description": "Required deck-level design plan chosen by the model. Fill this completely so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults. New deck generation requires theme_css and cover_html so preview and PPT export use the same authored slide DOM.",
 		"properties": map[string]any{
 			"archetype":    map[string]any{"type": "string", "description": "Deck archetype such as proposal, operating plan, executive brief, policy brief, civic strategy, product narrative, technology showcase, or educational explainer"},
 			"subject":      map[string]any{"type": "string", "description": "Explicit subject framing if it should differ from the title"},
@@ -135,8 +135,10 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"kicker":       map[string]any{"type": "string", "description": "Short cover kicker shown above the title"},
 			"design":       deckDesignSchema,
 			"palette":      paletteSchema,
+			"theme_css":    map[string]any{"type": "string", "description": "Required self-contained CSS for the LLM-authored slide system. Use CSS variables, classes, gradients, SVG styling, and layout rules. No external assets or scripts."},
+			"cover_html":   map[string]any{"type": "string", "description": "Required HTML markup for the cover slide body. No scripts."},
 		},
-		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette"},
+		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette", "theme_css", "cover_html"},
 	}
 
 	return map[string]any{
@@ -149,20 +151,21 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"deck":     deckSchema,
 			"slides": map[string]any{
 				"type":        "array",
-				"description": "Slides array — first slide is auto-made the cover/title slide. Plan the overall narrative and vary slide types based on the subject instead of using a fixed template. Aim for 6-10 slides.",
+				"description": "Slides array — deck.cover_html defines the cover slide, and each content slide should be authored with slide html markup so the preview and downloadable PPTX share the same DOM. Plan the overall narrative and vary compositions based on the subject instead of using a fixed template. Aim for 6-10 slides.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"heading": map[string]any{"type": "string", "description": "Slide heading (max 60 chars)"},
 						"type": map[string]any{
 							"type": "string",
-							"enum": []string{"bullets", "stats", "steps", "cards", "chart", "timeline", "compare", "table", "blank"},
+							"enum": []string{"html", "bullets", "stats", "steps", "cards", "chart", "timeline", "compare", "table", "blank"},
 							"description": "Slide layout type. " +
-								"bullets=text list; stats=KPI metrics; steps=process flow; cards=feature grid; " +
+								"html=LLM-authored HTML slide; bullets=text list; stats=KPI metrics; steps=process flow; cards=feature grid; " +
 								"chart=data visualisation; timeline=milestone roadmap; compare=two-column; table=data table; blank=empty.",
 						},
 						"speaker_notes": map[string]any{"type": "string", "description": "Optional speaker notes for this slide"},
 						"design":        slideDesignSchema,
+						"html":          map[string]any{"type": "string", "description": "[html] Required HTML markup for this slide body when creating a new deck. Preferred for unique, non-templated slide compositions. No scripts or external assets."},
 
 						// bullets
 						"points": map[string]any{
@@ -259,6 +262,8 @@ type pptxDeckDesignInput struct {
 	Kicker      string            `json:"kicker,omitempty"`
 	Design      *pptxDeckDesign   `json:"design,omitempty"`
 	Palette     *pptxPaletteInput `json:"palette,omitempty"`
+	ThemeCSS    string            `json:"theme_css,omitempty"`
+	CoverHTML   string            `json:"cover_html,omitempty"`
 }
 
 type pptxDeckDesign struct {
@@ -316,6 +321,7 @@ type pptxSlide struct {
 	Layout       string           `json:"layout"` // backward-compat alias for Type
 	SpeakerNotes string           `json:"speaker_notes"`
 	Design       *pptxSlideDesign `json:"design,omitempty"`
+	HTML         string           `json:"html,omitempty"`
 	// bullets
 	Points []string `json:"points,omitempty"`
 	// stats
@@ -568,6 +574,12 @@ func missingDeckDesignFields(deck pptxDeckDesignInput) []string {
 	if strings.TrimSpace(deck.Kicker) == "" {
 		missing = append(missing, "deck.kicker")
 	}
+	if cssRuleCount(deck.ThemeCSS) < 4 {
+		missing = append(missing, "deck.theme_css")
+	}
+	if !htmlStructuredContentReady(deck.CoverHTML, 28) {
+		missing = append(missing, "deck.cover_html")
+	}
 	if deck.Palette == nil {
 		missing = append(missing, "deck.palette")
 	} else {
@@ -625,6 +637,9 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, args.Deck)
 	if err := validatePPTXPresentation(planned); err != nil {
 		return Err("plan pptx: %v", err)
+	}
+	if err := validatePlannedHTMLDeckSource(planned); err != nil {
+		return Err("%v", err)
 	}
 	manifest, err := buildPPTXPreviewManifest(args.Title, args.Subtitle, planned)
 	if err != nil {

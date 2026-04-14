@@ -11,15 +11,16 @@ import (
 const pptxPreviewManifestPath = "customXml/barq-presentation.json"
 
 type pptxPreviewManifest struct {
-	Version   int                 `json:"version"`
-	Title     string              `json:"title"`
-	Subtitle  string              `json:"subtitle,omitempty"`
-	Theme     string              `json:"theme"`
-	Palette   pptxPreviewPalette  `json:"palette"`
-	DeckPlan  pptxPreviewDeckPlan `json:"deck_plan"`
-	Narrative string              `json:"narrative"`
-	LayoutMix []string            `json:"layout_mix,omitempty"`
-	Slides    []pptxPreviewSlide  `json:"slides"`
+	Version      int                 `json:"version"`
+	Title        string              `json:"title"`
+	Subtitle     string              `json:"subtitle,omitempty"`
+	Theme        string              `json:"theme"`
+	Palette      pptxPreviewPalette  `json:"palette"`
+	DeckPlan     pptxPreviewDeckPlan `json:"deck_plan"`
+	Narrative    string              `json:"narrative"`
+	LayoutMix    []string            `json:"layout_mix,omitempty"`
+	Slides       []pptxPreviewSlide  `json:"slides"`
+	HTMLDocument string              `json:"html_document,omitempty"`
 }
 
 type pptxPreviewPalette struct {
@@ -45,6 +46,8 @@ type pptxPreviewDeckPlan struct {
 	Kicker          string         `json:"kicker,omitempty"`
 	Design          pptxDeckDesign `json:"design,omitempty"`
 	LayoutMix       []string       `json:"layout_mix,omitempty"`
+	ThemeCSS        string         `json:"theme_css,omitempty"`
+	CoverHTML       string         `json:"cover_html,omitempty"`
 }
 
 type pptxPreviewSlide struct {
@@ -58,6 +61,7 @@ type pptxPreviewSlide struct {
 	Design          *pptxSlideDesign      `json:"design,omitempty"`
 	Audit           plannedPPTXSlideAudit `json:"audit"`
 	SpeakerNotes    string                `json:"speaker_notes,omitempty"`
+	HTML            string                `json:"html,omitempty"`
 	Points          []string              `json:"points,omitempty"`
 	Stats           []pptxStat            `json:"stats,omitempty"`
 	Steps           []string              `json:"steps,omitempty"`
@@ -100,6 +104,8 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			Kicker:          planned.DeckPlan.Kicker,
 			Design:          planned.DeckPlan.Design,
 			LayoutMix:       append([]string(nil), planned.DeckPlan.LayoutMix...),
+			ThemeCSS:        planned.DeckPlan.ThemeCSS,
+			CoverHTML:       planned.DeckPlan.CoverHTML,
 		},
 		Narrative: firstNonEmpty(strings.TrimSpace(planned.DeckPlan.NarrativeArc), previewNarrative(planned.Slides)),
 		LayoutMix: append([]string(nil), planned.DeckPlan.LayoutMix...),
@@ -118,6 +124,7 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			Design:          cloneSlideDesign(slide.Slide.Design),
 			Audit:           slide.Audit,
 			SpeakerNotes:    strings.TrimSpace(slide.Slide.SpeakerNotes),
+			HTML:            strings.TrimSpace(slide.Slide.HTML),
 			Points:          append([]string(nil), slide.Slide.Points...),
 			Stats:           append([]pptxStat(nil), slide.Slide.Stats...),
 			Steps:           append([]string(nil), slide.Slide.Steps...),
@@ -132,6 +139,11 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 			Table:           cloneTable(slide.Slide.Table),
 		})
 	}
+
+	if issues := htmlManifestAuthoringIssues(manifest); len(issues) > 0 {
+		return nil, fmt.Errorf("pptx html authoring contract is incomplete: %s", strings.Join(issues, ", "))
+	}
+	manifest.HTMLDocument = buildPPTXHTMLDocument(manifest)
 
 	return json.MarshalIndent(manifest, "", "  ")
 }
@@ -161,6 +173,9 @@ func loadPPTXPreviewManifest(data []byte) (pptxPreviewManifest, bool, error) {
 }
 
 func renderPPTXPreviewManifest(manifest pptxPreviewManifest) string {
+	if strings.TrimSpace(manifest.HTMLDocument) != "" {
+		return manifest.HTMLDocument
+	}
 	pal := previewManifestPalette(manifest)
 	family := previewDeckRenderFamily(manifest)
 	var body strings.Builder

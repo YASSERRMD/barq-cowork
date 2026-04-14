@@ -17,14 +17,18 @@ import (
 //go:embed assets/pptx-renderer.cjs
 var embeddedPPTXRenderer []byte
 
+//go:embed assets/dom-to-pptx.bundle.js
+var embeddedDOMToPPTXBundle []byte
+
 var (
-	pptxRendererOnce sync.Once
-	pptxRendererPath string
-	pptxRendererErr  error
+	pptxRendererOnce    sync.Once
+	pptxRendererPath    string
+	domToPPTXBundlePath string
+	pptxRendererErr     error
 )
 
 func buildPPTXWithRenderer(ctx context.Context, manifest []byte) ([]byte, error) {
-	scriptPath, err := ensurePPTXRendererScript()
+	scriptPath, domBundlePath, err := ensurePPTXRendererAssets()
 	if err != nil {
 		return nil, err
 	}
@@ -40,8 +44,9 @@ func buildPPTXWithRenderer(ctx context.Context, manifest []byte) ([]byte, error)
 	defer os.RemoveAll(tmpDir)
 
 	outputPath := filepath.Join(tmpDir, "presentation.pptx")
-	cmd := exec.CommandContext(ctx, nodePath, scriptPath, "--output", outputPath)
+	cmd := exec.CommandContext(ctx, nodePath, scriptPath, "--output", outputPath, "--dom-bundle", domBundlePath)
 	cmd.Stdin = bytes.NewReader(manifest)
+	cmd.Env = append(os.Environ(), rendererNodePathEnv()...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("pptx renderer failed: %w: %s", err, strings.TrimSpace(string(output)))
@@ -54,28 +59,74 @@ func buildPPTXWithRenderer(ctx context.Context, manifest []byte) ([]byte, error)
 	return injectPPTXPreviewManifest(data, manifest)
 }
 
-func ensurePPTXRendererScript() (string, error) {
+func ensurePPTXRendererAssets() (string, string, error) {
 	pptxRendererOnce.Do(func() {
 		if len(embeddedPPTXRenderer) == 0 {
 			pptxRendererErr = fmt.Errorf("embedded pptx renderer bundle is empty")
 			return
 		}
-		sum := sha256.Sum256(embeddedPPTXRenderer)
-		name := fmt.Sprintf("barq-pptx-renderer-%x.cjs", sum[:8])
-		target := filepath.Join(os.TempDir(), name)
-
-		current, err := os.ReadFile(target)
-		if err == nil && bytes.Equal(current, embeddedPPTXRenderer) {
-			pptxRendererPath = target
+		if len(embeddedDOMToPPTXBundle) == 0 {
+			pptxRendererErr = fmt.Errorf("embedded dom-to-pptx bundle is empty")
 			return
 		}
-		if err := os.WriteFile(target, embeddedPPTXRenderer, 0o755); err != nil {
+		rendererPath, err := writeEmbeddedRendererAsset("barq-pptx-renderer", ".cjs", embeddedPPTXRenderer, 0o755)
+		if err != nil {
 			pptxRendererErr = fmt.Errorf("write embedded pptx renderer: %w", err)
 			return
 		}
-		pptxRendererPath = target
+		bundlePath, err := writeEmbeddedRendererAsset("barq-dom-to-pptx", ".js", embeddedDOMToPPTXBundle, 0o644)
+		if err != nil {
+			pptxRendererErr = fmt.Errorf("write embedded dom-to-pptx bundle: %w", err)
+			return
+		}
+		pptxRendererPath = rendererPath
+		domToPPTXBundlePath = bundlePath
 	})
-	return pptxRendererPath, pptxRendererErr
+	return pptxRendererPath, domToPPTXBundlePath, pptxRendererErr
+}
+
+func writeEmbeddedRendererAsset(prefix, ext string, payload []byte, mode os.FileMode) (string, error) {
+	sum := sha256.Sum256(payload)
+	name := fmt.Sprintf("%s-%x%s", prefix, sum[:8], ext)
+	target := filepath.Join(os.TempDir(), name)
+	current, err := os.ReadFile(target)
+	if err == nil && bytes.Equal(current, payload) {
+		return target, nil
+	}
+	if err := os.WriteFile(target, payload, mode); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+func rendererNodePathEnv() []string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	candidates := []string{}
+	dir := wd
+	for i := 0; i < 6; i++ {
+		candidates = append(candidates,
+			filepath.Join(dir, "pptx_renderer", "node_modules"),
+			filepath.Join(dir, "backend", "pptx_renderer", "node_modules"),
+		)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	var existing []string
+	for _, candidate := range candidates {
+		if stat, err := os.Stat(candidate); err == nil && stat.IsDir() {
+			existing = append(existing, candidate)
+		}
+	}
+	if len(existing) == 0 {
+		return nil
+	}
+	return []string{"NODE_PATH=" + strings.Join(existing, string(os.PathListSeparator))}
 }
 
 func injectPPTXPreviewManifest(pptxData, manifest []byte) ([]byte, error) {

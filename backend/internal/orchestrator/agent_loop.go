@@ -49,6 +49,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
 7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, kicker, a full palette, and deck.design render directives.
+7a. New PowerPoint generation is HTML-authored by default: provide deck.theme_css, deck.cover_html, and HTML markup for every content slide. Do not rely on structured fallback slides for client-facing decks.
 8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
 9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
 10. The HTML preview and the downloaded PPTX must look like the same deck. Choose design directives that the native renderer can follow, and add slide-level design objects when a slide needs a specific composition.
@@ -94,6 +95,8 @@ DECK OBJECT — REQUIRED on every write_pptx call:
       "accent_mode":"<rail|band|chip|ribbon|glow|block>",
       "hero_layout":"<motif|figures|data|people|product|abstract>"
     },
+    "theme_css":"<optional CSS design system for authored HTML slides>",
+    "cover_html":"<optional HTML body for the cover slide>",
     "palette":{"background":"<hex>","card":"<hex>","accent":"<hex>","accent2":"<hex>","text":"<hex>","muted":"<hex>","border":"<hex>"}
   }
 
@@ -105,6 +108,29 @@ OPTIONAL SLIDE DESIGN — use when a slide needs a deliberate composition:
     "density":"<airy|balanced|dense>",
     "visual_focus":"<text|metric|icon|data|process|compare>"
   }
+
+HTML SLIDE MODE — required for bespoke decks and the default for new decks:
+  {
+    "heading":"<user-facing slide title>",
+    "type":"html",
+    "html":"<self-contained slide body markup using the deck theme_css classes and inline SVG when needed>",
+    "speaker_notes":"<optional presenter notes>"
+  }
+- Use HTML slide mode for every new deck unless the user explicitly asks for a very simple internal draft.
+- Keep markup semantic and self-contained.
+- No scripts.
+- No external assets.
+- Use inline SVG for real icons and diagrams.
+- Preview and downloaded PPTX are expected to come from the same HTML slide DOM.
+- The write_pptx tool rejects incomplete HTML/CSS deck contracts.
+- Baseline class kit available in the HTML slide shell:
+  - eyebrow, display-title, section-title, lede, body-copy, muted-copy, rule
+  - tag, panel, panel-light
+  - grid-2, grid-3, grid-4
+  - stat-card, stat-value, stat-label, stat-desc
+  - bullet-list, bullet-item
+  - timeline-list, timeline-row, timeline-date
+  - compare-grid, compare-col
 
 TYPE "chart"  → full-slide native PowerPoint chart
   "chart_type": "column" | "bar" | "line" | "pie" | "doughnut" | "area"
@@ -134,7 +160,7 @@ TYPE "blank"  → empty slide (use for section dividers)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LAYOUT STRATEGY — MIX TYPES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Slide 1: first slide auto-becomes the cover. Set "type":"bullets" or omit type for slide 1 and let it auto-convert.
+- The cover comes from deck.cover_html. Every slide in "slides" is a content slide and should carry its own authored HTML.
 - Use "stats" for any slide with 2+ numeric metrics or KPIs.
 - Use "chart" for any slide with time-series, comparison bars, or trend data.
 - Use "steps" for process, pipeline, or how-it-works slides.
@@ -229,6 +255,7 @@ func (a *AgentLoop) Run(
 	var result ExecuteResult
 	stepOrder := 0
 	forcedToolNudges := 0
+	const maxForcedToolNudges = 4
 
 	a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepStarted, map[string]any{
 		"message": "agent loop started",
@@ -241,10 +268,15 @@ func (a *AgentLoop) Run(
 
 		a.logger.Info("agent loop iteration", "task_id", task.ID, "iter", iter, "messages", len(messages))
 
+		maxTokens := 2048
+		if requiredOutputTool(task) == "write_pptx" {
+			maxTokens = 8192
+		}
+
 		req := provider.ChatCompletionRequest{
 			Model:       a.cfg.Model,
 			Stream:      true,
-			MaxTokens:   2048,
+			MaxTokens:   maxTokens,
 			Temperature: taskTemperature(task),
 			Messages:    messages,
 			Tools:       toolDefs,
@@ -287,22 +319,32 @@ func (a *AgentLoop) Run(
 		// No tool calls → agent decided it is done
 		if len(toolCalls) == 0 {
 			requiredTool := requiredOutputTool(task)
-			if requiredTool != "" && result.Completed == 0 && forcedToolNudges < 2 {
+			if requiredTool != "" && result.Completed == 0 && forcedToolNudges < maxForcedToolNudges {
 				forcedToolNudges++
+				nudge := fmt.Sprintf(
+					"You have not called any tool yet. Your next response MUST be exactly one tool call to %s. "+
+						"Do not answer with prose, planning text, or explanation. "+
+						"Write the output file in this turn now.",
+					requiredTool,
+				)
+				if requiredTool == "write_pptx" {
+					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup for every content slide. Do not fall back to structured-only slides."
+				}
 				messages = append(messages, provider.ChatMessage{
 					Role:    "assistant",
 					Content: content,
 				})
 				messages = append(messages, provider.ChatMessage{
-					Role: "system",
-					Content: fmt.Sprintf(
-						"You have not called any tool yet. Stop planning and call %s now. "+
-							"Produce the output file in this turn and do not answer with prose only.",
-						requiredTool,
-					),
+					Role:    "system",
+					Content: nudge,
 				})
 				a.logger.Warn("agent loop: no tool calls, nudging required output tool", "task_id", task.ID, "iter", iter, "tool", requiredTool, "nudges", forcedToolNudges)
 				continue
+			}
+			if requiredTool != "" && result.Completed == 0 {
+				a.logger.Error("agent loop: stopping without required output tool", "task_id", task.ID, "iter", iter, "tool", requiredTool)
+				result.Failed++
+				break
 			}
 			a.logger.Info("agent loop: no tool calls, stopping", "task_id", task.ID, "iter", iter)
 			break
@@ -486,7 +528,7 @@ func requiredOutputTool(task *domain.Task) string {
 
 func taskTemperature(task *domain.Task) float64 {
 	if requiredOutputTool(task) == "write_pptx" {
-		return 0.55
+		return 0.7
 	}
 	return 0.3
 }
