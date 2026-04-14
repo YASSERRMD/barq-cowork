@@ -114,13 +114,64 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	if len(firstMessages) < 3 {
 		t.Fatalf("expected extra system prompts in first request, got %d messages", len(firstMessages))
 	}
+	if prov.requests[0].MaxTokens != 8192 {
+		t.Fatalf("expected larger max token budget for presentation tasks, got %d", prov.requests[0].MaxTokens)
+	}
 	if !strings.Contains(firstMessages[1].Content, "Active skill prompt") || !strings.Contains(firstMessages[2].Content, "Project instructions") {
 		t.Fatalf("expected injected skill and project prompts, got %+v", firstMessages)
 	}
 
 	lastMessage := prov.requests[1].Messages[len(prov.requests[1].Messages)-1].Content
-	if !strings.Contains(lastMessage, "call write_pptx now") {
+	if !strings.Contains(lastMessage, "MUST be exactly one tool call to write_pptx") {
 		t.Fatalf("expected forced tool reminder in second request, got %q", lastMessage)
+	}
+}
+
+type fakeNoToolProvider struct {
+	requests []provider.ChatCompletionRequest
+}
+
+func (f *fakeNoToolProvider) Name() string { return "fake-no-tool" }
+
+func (f *fakeNoToolProvider) ValidateConfig(provider.ProviderConfig) error { return nil }
+
+func (f *fakeNoToolProvider) Chat(_ context.Context, _ provider.ProviderConfig, req provider.ChatCompletionRequest) (<-chan provider.ChatCompletionChunk, error) {
+	f.requests = append(f.requests, req)
+	ch := make(chan provider.ChatCompletionChunk, 2)
+	ch <- provider.ChatCompletionChunk{ContentDelta: "Still planning the deck."}
+	ch <- provider.ChatCompletionChunk{Done: true}
+	close(ch)
+	return ch, nil
+}
+
+func TestAgentLoop_FailsPresentationTaskWithoutRequiredToolCall(t *testing.T) {
+	prov := &fakeNoToolProvider{}
+	registry := tools.NewRegistry()
+	registry.Register(fakeWritePPTXTool{})
+	loop := NewAgentLoop(
+		prov,
+		provider.ProviderConfig{Model: "fake"},
+		registry,
+		fakePlanStore{},
+		&fakeArtifactStore{},
+		fakeEventEmitter{},
+		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	)
+
+	task := &domain.Task{
+		ID:          "task-2",
+		Title:       "Create a presentation about AI in healthcare",
+		Description: "Need a PowerPoint deck",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	result := loop.Run(context.Background(), task, t.TempDir())
+	if result.Completed != 0 || result.Failed == 0 {
+		t.Fatalf("expected failure when write_pptx is never called, got %+v", result)
+	}
+	if len(prov.requests) != 5 {
+		t.Fatalf("expected four forced retries plus final failure turn, got %d", len(prov.requests))
 	}
 }
 
