@@ -114,6 +114,9 @@ func renderDeckSlide(s pptxSlide, pal pptxPalette, deck pptxDeckContext, slideIn
 }
 
 func effectivePPTXLayout(s pptxSlide) string {
+	if strings.TrimSpace(s.HTML) != "" {
+		return "html"
+	}
 	if kind := normalizeSlideKind(s.Type); kind != "" {
 		return kind
 	}
@@ -144,7 +147,7 @@ func effectivePPTXLayout(s pptxSlide) string {
 
 func normalizeSlideKind(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "bullets", "stats", "steps", "cards", "chart", "timeline", "compare", "table", "title", "blank":
+	case "html", "bullets", "stats", "steps", "cards", "chart", "timeline", "compare", "table", "title", "blank":
 		return strings.ToLower(strings.TrimSpace(raw))
 	case "bullets_slide":
 		return "bullets"
