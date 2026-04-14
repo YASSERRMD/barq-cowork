@@ -151,7 +151,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"deck":     deckSchema,
 			"slides": map[string]any{
 				"type":        "array",
-				"description": "Slides array — deck.cover_html defines the cover slide, and each content slide should be authored with slide html markup so the preview and downloadable PPTX share the same DOM. Plan the overall narrative and vary compositions based on the subject instead of using a fixed template. Aim for 6-10 slides.",
+				"description": "Slides array — deck.cover_html defines the cover slide, and each content slide should be authored with slide html markup so the preview and downloadable PPTX share the same DOM. Plan the overall narrative and vary compositions based on the subject instead of using a fixed template. Respect any explicit user slide count. If no count is given, 6-10 total slides is a normal default range.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{

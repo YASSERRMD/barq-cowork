@@ -193,10 +193,12 @@ type SideTab = "steps" | "artifacts" | "events" | "agents";
 
 function ArtifactsList({
   artifacts,
+  downloadsEnabled = true,
   onPreview,
   previewId,
 }: {
   artifacts: Artifact[];
+  downloadsEnabled?: boolean;
   onPreview?: (a: Artifact) => void;
   previewId?: string;
 }) {
@@ -251,11 +253,11 @@ function ArtifactsList({
                 </button>
                 {a.content_path && (
                   <a
-                    href={`http://localhost:7331/api/v1/artifacts/${a.id}/download`}
-                    download
                     className="btn-ghost btn-xs"
-                    title="Download"
-                    style={{ display: "flex", alignItems: "center" }}
+                    title={downloadsEnabled ? "Download" : "Download available after completion"}
+                    style={{ display: "flex", alignItems: "center", opacity: downloadsEnabled ? 1 : 0.45, pointerEvents: downloadsEnabled ? "auto" : "none" }}
+                    href={downloadsEnabled ? `http://localhost:7331/api/v1/artifacts/${a.id}/download` : undefined}
+                    download={downloadsEnabled ? true : undefined}
                   >
                     <Download size={11} />
                   </a>
@@ -738,9 +740,11 @@ function JsonPreview({ downloadUrl }: { downloadUrl: string }) {
 
 function ContentPreviewPanel({
   artifact,
+  downloadsEnabled,
   onClose,
 }: {
   artifact: Artifact;
+  downloadsEnabled: boolean;
   onClose: () => void;
 }) {
   const downloadUrl = `http://localhost:7331/api/v1/artifacts/${artifact.id}/download`;
@@ -794,11 +798,11 @@ function ContentPreviewPanel({
         </span>
         <span className="badge-gray" style={{ fontSize: 10, flexShrink: 0 }}>{artifact.type}</span>
         <a
-          href={downloadUrl}
-          download
           className="btn-ghost btn-xs"
-          title="Download"
-          style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+          title={downloadsEnabled ? "Download" : "Download available after completion"}
+          style={{ display: "flex", alignItems: "center", flexShrink: 0, opacity: downloadsEnabled ? 1 : 0.45, pointerEvents: downloadsEnabled ? "auto" : "none" }}
+          href={downloadsEnabled ? downloadUrl : undefined}
+          download={downloadsEnabled ? true : undefined}
         >
           <Download size={13} />
         </a>
@@ -855,8 +859,9 @@ function ContentPreviewPanel({
               display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
             }}>
               <a href={downloadUrl} download className="btn-primary btn-sm"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12 }}>
-                <Download size={13} /> Download {ext.toUpperCase()}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12, opacity: downloadsEnabled ? 1 : 0.45, pointerEvents: downloadsEnabled ? "auto" : "none" }}
+                onClick={(e) => { if (!downloadsEnabled) e.preventDefault(); }}>
+                <Download size={13} /> {downloadsEnabled ? `Download ${ext.toUpperCase()}` : "Finalizing export…"}
               </a>
               <a href={downloadUrl} target="_blank" rel="noreferrer"
                 className="btn-ghost btn-sm"
@@ -881,8 +886,9 @@ function ContentPreviewPanel({
               display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
             }}>
               <a href={downloadUrl} download className="btn-primary btn-sm"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12 }}>
-                <Download size={13} /> Download PDF
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12, opacity: downloadsEnabled ? 1 : 0.45, pointerEvents: downloadsEnabled ? "auto" : "none" }}
+                onClick={(e) => { if (!downloadsEnabled) e.preventDefault(); }}>
+                <Download size={13} /> {downloadsEnabled ? "Download PDF" : "Finalizing export…"}
               </a>
             </div>
             <iframe
@@ -917,8 +923,9 @@ function ContentPreviewPanel({
                 {ext.toUpperCase()} · {formatBytes(artifact.size)}
               </div>
               <a href={downloadUrl} download className="btn-primary"
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, textDecoration: "none", padding: "10px 24px", borderRadius: 10 }}>
-                <Download size={16} /> Download {ext.toUpperCase()}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, textDecoration: "none", padding: "10px 24px", borderRadius: 10, opacity: downloadsEnabled ? 1 : 0.45, pointerEvents: downloadsEnabled ? "auto" : "none" }}
+                onClick={(e) => { if (!downloadsEnabled) e.preventDefault(); }}>
+                <Download size={16} /> {downloadsEnabled ? `Download ${ext.toUpperCase()}` : "Finalizing export…"}
               </a>
             </div>
           </div>
@@ -1186,6 +1193,7 @@ export function TaskRunPage() {
           {previewArtifact ? (
             <ContentPreviewPanel
               artifact={previewArtifact}
+              downloadsEnabled={!isActive}
               onClose={() => setPreviewArtifact(null)}
             />
           ) : (
@@ -1324,6 +1332,7 @@ export function TaskRunPage() {
               {sideTab === "artifacts" && (
                 <ArtifactsList
                   artifacts={artifacts}
+                  downloadsEnabled={!isActive}
                   onPreview={(a) => { setPreviewArtifact(previewArtifact?.id === a.id ? null : a); setPanelOpen(false); }}
                   previewId={previewArtifact?.id}
                 />

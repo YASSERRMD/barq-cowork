@@ -119,15 +119,37 @@ func htmlStructuredContentReady(raw string, minVisibleChars int) bool {
 	blocks := htmlInformationBlockCount(raw)
 	return htmlHasStructuredBlocks(raw) &&
 		textLen >= minVisibleChars &&
-		(textLen >= minVisibleChars+60 || blocks >= 3)
+		(textLen >= minVisibleChars+24 || blocks >= 2)
 }
 
 func htmlCoverContentReady(raw string) bool {
-	return htmlStructuredContentReady(raw, 96) && htmlInformationBlockCount(raw) >= 4
+	raw = sanitizeHTMLMarkup(raw)
+	if !htmlHasStructuredBlocks(raw) || len(htmlVisibleText(raw)) < 40 {
+		return false
+	}
+	lower := strings.ToLower(raw)
+	hasHeading := strings.Contains(lower, "<h1") ||
+		strings.Contains(lower, "display-title") ||
+		strings.Contains(lower, "section-title")
+	hasSupport := strings.Contains(lower, "<p") ||
+		strings.Contains(lower, "lede") ||
+		strings.Contains(lower, "tag") ||
+		strings.Contains(lower, "panel") ||
+		strings.Contains(lower, "summary-chip") ||
+		strings.Contains(lower, "<svg")
+	return hasHeading && hasSupport
 }
 
 func htmlSlideContentReady(raw string) bool {
-	return htmlStructuredContentReady(raw, 90)
+	raw = sanitizeHTMLMarkup(raw)
+	if !htmlHasStructuredBlocks(raw) || len(htmlVisibleText(raw)) < 56 {
+		return false
+	}
+	lower := strings.ToLower(raw)
+	hasHeading := strings.Contains(lower, "<h2") ||
+		strings.Contains(lower, "<h3") ||
+		strings.Contains(lower, "section-title")
+	return hasHeading || htmlInformationBlockCount(raw) >= 2
 }
 
 func buildPPTXHTMLDocument(manifest pptxPreviewManifest) string {

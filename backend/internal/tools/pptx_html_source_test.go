@@ -137,3 +137,10 @@ func TestSanitizeCSSMarkup_NormalizesThemeTypographyAndSpacing(t *testing.T) {
 		}
 	}
 }
+
+func TestHTMLCoverContentReady_AcceptsConciseCover(t *testing.T) {
+	raw := `<div style="padding:80px;background-color:#F5F0E8"><h1 style="font-size:48px">Islamic Parenting</h1><p style="font-size:20px">Raising righteous children with faith, love, and wisdom.</p></div>`
+	if !htmlCoverContentReady(raw) {
+		t.Fatalf("expected concise but well-formed cover html to be accepted")
+	}
+}
