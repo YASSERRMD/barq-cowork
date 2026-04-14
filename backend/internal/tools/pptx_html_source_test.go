@@ -14,7 +14,7 @@ func TestBuildPPTXPreviewManifest_EmbedsHTMLDocument(t *testing.T) {
 			{
 				Heading: "Operational imperative",
 				Type:    "html",
-				HTML:    `<div style="padding:96px"><h2 class="section-title">Operational imperative</h2><p class="body-copy">Scale requires governance, workflow fit, and measurable outcomes.</p></div>`,
+				HTML:    `<div style="padding:96px;display:grid;gap:22px"><div class="eyebrow">EXECUTIVE SUMMARY</div><h2 class="section-title">Operational imperative</h2><p class="body-copy">Scale requires governance, workflow fit, measurable outcomes, accountable ownership, and one operating rhythm that leaders can trust.</p><div class="grid-2"><div class="panel-light">Governance, workflow, and KPI ownership must move together.</div><div class="panel-light">The rollout succeeds when measurement is operational, not decorative.</div></div></div>`,
 			},
 		},
 		pptxDeckDesignInput{
@@ -27,8 +27,8 @@ func TestBuildPPTXPreviewManifest_EmbedsHTMLDocument(t *testing.T) {
 			ColorStory:  "cool clinical depth",
 			Motif:       "health",
 			Kicker:      "From pilot to production",
-			ThemeCSS:    `.cover-grid{display:grid;grid-template-columns:1.2fr 420px;gap:42px}.cover-stack{display:grid;gap:24px}.panel{padding:24px;border:1px solid var(--border)}.tag{display:inline-flex;padding:8px 12px}`,
-			CoverHTML:   `<div class="cover-grid" style="padding:96px"><div><div class="eyebrow">FROM PILOT TO PRODUCTION</div><h1 class="display-title">AI in Healthcare Operational Rollout</h1></div><div class="panel"></div></div>`,
+			ThemeCSS:    `.cover-grid{display:grid;grid-template-columns:1.2fr 420px;gap:42px}.cover-stack{display:grid;gap:24px}.summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.summary-chip{padding:14px;border:1px solid var(--border)}.panel{padding:24px;border:1px solid var(--border)}.tag{display:inline-flex;padding:8px 12px}`,
+			CoverHTML:   `<div class="cover-grid" style="padding:96px"><div class="cover-stack"><div class="eyebrow">FROM PILOT TO PRODUCTION</div><h1 class="display-title">AI in Healthcare Operational Rollout</h1><p class="lede">Enterprise operating plan for safe, measurable clinical scale-up across governance, workflow, and adoption.</p><div class="tag-row"><span class="tag">Clinical operations</span><span class="tag">Governance</span><span class="tag">Measurement</span></div></div><div style="display:grid;gap:16px"><div class="panel">Audience: healthcare executives and clinical operations leaders.</div><div class="summary-strip"><div class="summary-chip">Scope: rollout governance</div><div class="summary-chip">Horizon: 12 months</div><div class="summary-chip">Goal: measured scale-up</div></div></div></div>`,
 			Palette: &pptxPaletteInput{
 				Background: "0F172A",
 				Card:       "172033",
@@ -104,5 +104,36 @@ func TestValidatePlannedHTMLDeckSource_RejectsStructuredFallback(t *testing.T) {
 
 	if err := validatePlannedHTMLDeckSource(planned); err == nil {
 		t.Fatalf("expected structured fallback to fail html deck validation")
+	}
+}
+
+func TestSanitizeHTMLMarkup_NormalizesOversizedInlineStyles(t *testing.T) {
+	got := sanitizeHTMLMarkup(`<div style="padding: 96px 104px 88px; gap: 36px; font-family: Inter, system-ui, sans-serif; font-size: 84px; line-height: 1.8">Slide</div>`)
+	for _, want := range []string{
+		`padding: 78px 78px 78px`,
+		`gap: 24px`,
+		`font-family: "Aptos", "Helvetica Neue", Arial, sans-serif`,
+		`font-size: 68px`,
+		`line-height: 1.45`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in sanitized html, got %s", want, got)
+		}
+	}
+}
+
+func TestSanitizeCSSMarkup_NormalizesThemeTypographyAndSpacing(t *testing.T) {
+	got := sanitizeCSSMarkup(`.cover{padding:110px 96px 88px;gap:32px;font-family:"Avenir Next","SF Pro Display",sans-serif;font-size:72px}.body{margin-top:64px;line-height:1.7}`)
+	for _, want := range []string{
+		`padding: 78px 78px 78px`,
+		`gap: 24px`,
+		`font-family: "Aptos", "Helvetica Neue", Arial, sans-serif`,
+		`font-size: 68px`,
+		`margin-top: 42px`,
+		`line-height: 1.45`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in sanitized css, got %s", want, got)
+		}
 	}
 }

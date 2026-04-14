@@ -149,8 +149,8 @@ type Bounds = {
 
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
-const FONT_HEAD = "Avenir Next";
-const FONT_BODY = "Avenir Next";
+const FONT_HEAD = "Aptos";
+const FONT_BODY = "Aptos";
 
 const legacyEmojiIcons: Record<string, string> = {
   "⚡": "automation",
@@ -2162,6 +2162,7 @@ async function buildPresentationFromHTML(htmlDocument: string, outputPath: strin
       }
       return (window as any).domToPptx.exportToPptx(slides, {
         fileName,
+        layout: "LAYOUT_WIDE",
         svgAsVector: true,
       });
     }, path.basename(outputPath));

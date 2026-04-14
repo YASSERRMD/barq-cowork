@@ -166,8 +166,8 @@ func TestWritePPTXTool_CreatesHTMLAuthoredDeck(t *testing.T) {
 			"color_story":"cool clinical depth",
 			"motif":"health",
 			"kicker":"From pilot to production",
-			"theme_css":".cover-grid{display:grid;grid-template-columns:1.25fr 420px;gap:42px;align-items:end}.chapter-card{padding:28px 30px;background:rgba(255,255,255,0.08);border-left:10px solid var(--accent)}.rule{height:6px}.bullet-list{display:grid;gap:18px}.stat-card{padding:28px 30px;background:rgba(255,255,255,0.96)}",
-			"cover_html":"<div class='cover-grid' style='position:absolute;inset:96px'><div style='display:grid;gap:24px;align-content:end'><div class='eyebrow'>FROM PILOT TO PRODUCTION</div><div class='rule'></div><h1 class='display-title'>AI in Healthcare Operational Rollout</h1><p class='lede'>Operating plan for enterprise-scale clinical deployment</p></div><div style='display:grid;gap:18px'><div class='chapter-card'><strong>01</strong><div>Operational imperative</div></div><div class='chapter-card'><strong>02</strong><div>Capability pillars</div></div><div class='chapter-card'><strong>03</strong><div>Implementation roadmap</div></div></div></div>",
+			"theme_css":".cover-grid{display:grid;grid-template-columns:1.25fr 420px;gap:42px;align-items:end}.chapter-card{padding:28px 30px;background:rgba(255,255,255,0.08);border-left:10px solid var(--accent)}.summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.summary-chip{padding:14px 16px;border:1px solid rgba(255,255,255,0.1)}.rule{height:6px}.bullet-list{display:grid;gap:18px}.stat-card{padding:28px 30px;background:rgba(255,255,255,0.96)}",
+			"cover_html":"<div class='cover-grid' style='position:absolute;inset:96px'><div style='display:grid;gap:24px;align-content:end'><div class='eyebrow'>FROM PILOT TO PRODUCTION</div><div class='rule'></div><h1 class='display-title'>AI in Healthcare Operational Rollout</h1><p class='lede'>Operating plan for enterprise-scale clinical deployment with one governance spine, one workflow model, and one scorecard.</p><div class='summary-strip'><div class='summary-chip'>Audience: healthcare executives</div><div class='summary-chip'>Scope: clinical operations</div><div class='summary-chip'>Goal: measured rollout</div></div></div><div style='display:grid;gap:18px'><div class='chapter-card'><strong>01</strong><div>Operational imperative</div></div><div class='chapter-card'><strong>02</strong><div>Capability pillars</div></div><div class='chapter-card'><strong>03</strong><div>Implementation roadmap</div></div></div></div>",
 			"palette":{
 				"background":"0F172A",
 				"card":"172033",
@@ -242,8 +242,8 @@ func TestWritePPTXTool_RejectsStructuredOnlyDeck(t *testing.T) {
 			"color_story":"cool clinical tones",
 			"motif":"health",
 			"kicker":"Operational briefing",
-			"theme_css":".deck-shell{display:grid;gap:20px}.panel{padding:24px;border:1px solid var(--border)}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.tag{display:inline-flex;padding:8px 12px}",
-			"cover_html":"<div class='deck-shell' style='padding:96px'><div class='eyebrow'>OPERATIONAL BRIEFING</div><h1 class='display-title'>Operational rollout</h1><div class='panel'>Governance, workflow design, and measurement</div></div>",
+			"theme_css":".deck-shell{display:grid;gap:20px}.summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.summary-chip{padding:14px;border:1px solid var(--border)}.panel{padding:24px;border:1px solid var(--border)}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.tag{display:inline-flex;padding:8px 12px}",
+			"cover_html":"<div class='deck-shell' style='padding:96px'><div class='eyebrow'>OPERATIONAL BRIEFING</div><h1 class='display-title'>Operational rollout</h1><p class='lede'>Governance, workflow design, measurement ownership, and phased execution in one operating brief.</p><div class='panel'>Audience: operations leaders who need a clear decision path for rollout funding and accountability.</div><div class='summary-strip'><div class='summary-chip'>Scope: governance</div><div class='summary-chip'>Horizon: two quarters</div><div class='summary-chip'>Goal: ready-to-scale operations</div></div></div>",
 			"palette":{
 				"background":"F5FAFE",
 				"card":"FFFFFF",
