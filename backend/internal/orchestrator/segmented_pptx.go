@@ -174,7 +174,7 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 		var slideErr error
 		if !skipSlideLLM {
 			slide, slideErr = a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
-			slide = completeSegmentedSlide(slide, brief)
+			slide = completeSegmentedSlide(slide, plan, brief, i, totalSlides)
 			if slideErr != nil {
 				skipSlideLLM = true
 				slide = finalSlides[i]
@@ -384,12 +384,14 @@ func (a *AgentLoop) chatSegmentedJSON(
 	retry := runtimeProfile.Retry
 	retry.MaxAttempts = 1
 	req := provider.ChatCompletionRequest{
-		Model:          a.cfg.Model,
-		Stream:         false,
-		MaxTokens:      maxTokens,
-		Temperature:    runtimeProfile.Temperature,
-		Messages:       messages,
-		ResponseFormat: map[string]any{"type": "json_object"},
+		Model:       a.cfg.Model,
+		Stream:      false,
+		MaxTokens:   maxTokens,
+		Temperature: runtimeProfile.Temperature,
+		Messages:    messages,
+	}
+	if segmentedProviderSupportsFastJSONMode(a.prov.Name()) {
+		req.ResponseFormat = map[string]any{"type": "json_object"}
 	}
 	ch, err := provider.ChatWithRetry(callCtx, a.prov, a.cfg, req, retry, a.logger)
 	if err != nil {
@@ -423,6 +425,15 @@ func (a *AgentLoop) chatSegmentedJSON(
 	return nil
 }
 
+func segmentedProviderSupportsFastJSONMode(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "zai", "ollama":
+		return false
+	default:
+		return true
+	}
+}
+
 func firstJSONObjectFromJSONArray(raw string) string {
 	var items []json.RawMessage
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &items); err != nil || len(items) == 0 {
@@ -448,8 +459,9 @@ func segmentedPlanTokenBudget(contentSlides int) int {
 
 func plannedSegmentedSlides(plan segmentedPPTXPlan) []presentationDraftSlide {
 	slides := make([]presentationDraftSlide, 0, len(plan.Slides))
-	for _, brief := range plan.Slides {
-		slides = append(slides, completeSegmentedSlide(presentationDraftSlide{}, brief))
+	totalSlides := len(plan.Slides) + 1
+	for i, brief := range plan.Slides {
+		slides = append(slides, completeSegmentedSlide(presentationDraftSlide{}, plan, brief, i, totalSlides))
 	}
 	return slides
 }
@@ -477,8 +489,8 @@ func fallbackSegmentedPPTXPlan(task *domain.Task, contentSlides, totalSlides int
 			Audience:    "the intended audience",
 			Narrative:   "context -> key ideas -> practical next steps",
 			Theme:       "modern briefing",
-			VisualStyle: "dense editorial cards with clear iconography",
-			CoverStyle:  "asymmetric title composition with compact context cards",
+			VisualStyle: "editorial field notes with strong visual hierarchy",
+			CoverStyle:  "split hero cover with agenda panels",
 			ColorStory:  "soft slate background with high-contrast accent colors",
 			Motif:       "connected insight cards",
 			Kicker:      "Presentation",
@@ -489,15 +501,7 @@ func fallbackSegmentedPPTXPlan(task *domain.Task, contentSlides, totalSlides int
 				"accent_mode":    "rail and badge",
 				"hero_layout":    "information-led",
 			},
-			Palette: map[string]string{
-				"background": "F6F8FB",
-				"card":       "FFFFFF",
-				"accent":     "0EA5E9",
-				"accent2":    "14B8A6",
-				"text":       "0F172A",
-				"muted":      "475569",
-				"border":     "CBD5E1",
-			},
+			Palette:  fallbackSegmentedPalette(subject),
 			ThemeCSS: defaultSegmentedThemeCSS(),
 		},
 		Stages: []string{
@@ -510,6 +514,33 @@ func fallbackSegmentedPPTXPlan(task *domain.Task, contentSlides, totalSlides int
 	plan.Deck.CoverHTML = defaultSegmentedCoverHTML(plan)
 	plan.Slides = fallbackSegmentedSlideBriefs(subject, contentSlides, totalSlides)
 	return plan
+}
+
+func fallbackSegmentedPalette(subject string) map[string]string {
+	palettes := []map[string]string{
+		{"background": "FFF7ED", "card": "FFFBF5", "accent": "F97316", "accent2": "16A34A", "text": "111827", "muted": "57534E", "border": "FED7AA"},
+		{"background": "F8FAFC", "card": "FFFFFF", "accent": "0F766E", "accent2": "EA580C", "text": "0F172A", "muted": "475569", "border": "CBD5E1"},
+		{"background": "F5F3FF", "card": "FFFFFF", "accent": "6D28D9", "accent2": "0891B2", "text": "18181B", "muted": "52525B", "border": "DDD6FE"},
+		{"background": "ECFEFF", "card": "F8FAFC", "accent": "0369A1", "accent2": "0D9488", "text": "082F49", "muted": "475569", "border": "BAE6FD"},
+		{"background": "F7FEE7", "card": "FFFFFF", "accent": "4D7C0F", "accent2": "CA8A04", "text": "1A2E05", "muted": "4D5D2A", "border": "D9F99D"},
+	}
+	lower := strings.ToLower(subject)
+	if strings.Contains(lower, "india") {
+		return cloneSegmentedPalette(palettes[0])
+	}
+	sum := 0
+	for _, r := range lower {
+		sum += int(r)
+	}
+	return cloneSegmentedPalette(palettes[sum%len(palettes)])
+}
+
+func cloneSegmentedPalette(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func inferSegmentedSubject(task *domain.Task) string {
@@ -557,11 +588,15 @@ func fallbackSegmentedSlideBriefs(subject string, contentSlides, totalSlides int
 		icon    string
 	}{
 		{"Why It Matters", "cards", "frame the topic and explain why the audience should care", "three context cards", "bullseye"},
+		{"Landscape and Context", "cards", "map the background forces shaping the topic", "context map cards", "compass"},
+		{"People and Stakeholders", "cards", "show who is affected and what each group needs", "stakeholder cards", "people"},
 		{"Core Ideas", "cards", "break the subject into the few ideas the audience must understand", "dense concept cards", "diagram-3"},
 		{"Risks and Guardrails", "compare", "separate helpful practice from avoidable risk", "two-column comparison", "shield-check"},
-		{"Operating Playbook", "steps", "show how to apply the subject in a practical sequence", "numbered action flow", "list-check"},
 		{"Signals to Track", "stats", "give the audience concrete indicators to monitor", "metric cards", "bar-chart-line"},
 		{"Decision Framework", "table", "turn the topic into practical choices", "compact decision table", "grid-3x3-gap"},
+		{"Operating Playbook", "steps", "show how to apply the subject in a practical sequence", "numbered action flow", "list-check"},
+		{"Opportunities and Leverage", "cards", "highlight where the audience has the most room to act", "opportunity mosaic", "lightning-charge"},
+		{"Global or External Role", "timeline", "connect the topic to external milestones, markets, or influence", "milestone strip", "globe2"},
 		{"Action Plan", "steps", "close with immediate next steps", "roadmap steps", "check2-circle"},
 	}
 	slides := make([]segmentedPPTXSlideBrief, 0, contentSlides)
@@ -608,6 +643,13 @@ func fallbackSegmentedSlideBriefs(subject string, contentSlides, totalSlides int
 		if role.kind == "compare" {
 			brief.LeftColumn = &presentationDraftCompareColumn{Heading: "Helpful pattern", Points: []string{"Specific guidance", "Visible accountability", "Measured improvement"}}
 			brief.RightColumn = &presentationDraftCompareColumn{Heading: "Risk pattern", Points: []string{"Vague ownership", "Unverified assumptions", "No follow-through"}}
+		}
+		if role.kind == "timeline" {
+			brief.Timeline = []presentationDraftTimelineItem{
+				{Date: "Now", Title: "Current position", Desc: fmt.Sprintf("Where %s stands today.", subject)},
+				{Date: "Next", Title: "Emerging shift", Desc: "The next visible change the audience should watch."},
+				{Date: "Then", Title: "Strategic role", Desc: "How the topic can influence wider decisions or outcomes."},
+			}
 		}
 		if role.kind == "table" {
 			brief.Table = &presentationDraftTableData{
@@ -666,7 +708,10 @@ func normalizeSegmentedPPTXPlan(plan *segmentedPPTXPlan, task *domain.Task, cont
 	if strings.Count(plan.Deck.ThemeCSS, "{") < 4 {
 		plan.Deck.ThemeCSS = defaultSegmentedThemeCSS()
 	}
-	if strings.TrimSpace(plan.Deck.CoverHTML) == "" {
+	if !strings.Contains(plan.Deck.ThemeCSS, ".seg-slide") {
+		plan.Deck.ThemeCSS = strings.TrimSpace(plan.Deck.ThemeCSS) + segmentedHTMLThemeCSS()
+	}
+	if !strings.Contains(plan.Deck.CoverHTML, "seg-cover") {
 		plan.Deck.CoverHTML = defaultSegmentedCoverHTML(*plan)
 	}
 	if len(plan.Stages) == 0 {
@@ -702,7 +747,7 @@ func normalizeSegmentedPPTXPlan(plan *segmentedPPTXPlan, task *domain.Task, cont
 	}
 }
 
-func completeSegmentedSlide(slide presentationDraftSlide, brief segmentedPPTXSlideBrief) presentationDraftSlide {
+func completeSegmentedSlide(slide presentationDraftSlide, plan segmentedPPTXPlan, brief segmentedPPTXSlideBrief, index, totalSlides int) presentationDraftSlide {
 	slide.Heading = firstNonEmptyString(slide.Heading, brief.Heading, "Slide")
 	if slideHTMLLikelyReady(slide.HTML) {
 		slide.Type = "html"
@@ -710,7 +755,6 @@ func completeSegmentedSlide(slide presentationDraftSlide, brief segmentedPPTXSli
 		return slide
 	}
 
-	slide.HTML = ""
 	slide.Type = firstNonEmptyString(slide.Type, brief.Type, "cards")
 	fillMissingSegmentedStructuredContent(&slide, brief)
 	if !segmentedSlideHasStructuredContent(slide) {
@@ -718,6 +762,9 @@ func completeSegmentedSlide(slide presentationDraftSlide, brief segmentedPPTXSli
 		slide.Cards = cardsFromSegmentedBrief(brief)
 	}
 	ensureSegmentedSlideRenderable(&slide, brief)
+	slide.Type = "html"
+	slide.Layout = "html"
+	slide.HTML = segmentedSlideHTML(plan, slide, brief, index, totalSlides)
 	return slide
 }
 
@@ -841,6 +888,263 @@ func ensureSegmentedSlideRenderable(slide *presentationDraftSlide, brief segment
 	}
 }
 
+func segmentedSlideHTML(plan segmentedPPTXPlan, slide presentationDraftSlide, brief segmentedPPTXSlideBrief, index, totalSlides int) string {
+	layout := strings.ToLower(strings.TrimSpace(firstNonEmptyString(slide.Type, slide.Layout, brief.Type, "cards")))
+	eyebrow := escapePresentationDraftText(firstNonEmptyString(brief.Purpose, brief.Visual, plan.Deck.Kicker, "Briefing"))
+	heading := escapePresentationDraftText(firstNonEmptyString(slide.Heading, brief.Heading, plan.Title))
+	lead := escapePresentationDraftText(segmentedSlideLead(slide, brief, plan))
+	icon := segmentedIconHTML(firstNonEmptyString(brief.Icon, plan.Deck.Motif, "stars"))
+
+	var body string
+	switch layout {
+	case "stats":
+		body = segmentedStatsHTML(slide)
+	case "steps":
+		body = segmentedStepsHTML(slide)
+	case "timeline":
+		body = segmentedTimelineHTML(slide)
+	case "compare":
+		body = segmentedCompareHTML(slide)
+	case "table":
+		body = segmentedTableHTML(slide)
+	default:
+		body = segmentedCardsHTML(slide, brief, index)
+	}
+	if strings.TrimSpace(body) == "" {
+		body = segmentedCardsHTML(slide, brief, index)
+	}
+
+	switch segmentedCompositionVariant(layout, index) {
+	case "band":
+		return `<div class="seg-slide seg-slide-band"><div class="seg-band-copy"><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p><div class="seg-signal"><span class="seg-icon">` + icon + `</span><span>` + escapePresentationDraftText(firstNonEmptyString(brief.Visual, "Purpose-built visual system")) + `</span></div></div><div class="seg-band-body">` + body + `</div></div>`
+	case "stack":
+		return `<div class="seg-slide seg-slide-stack"><div class="seg-top"><span class="badge">` + escapePresentationDraftText(plan.Deck.Kicker) + `</span><span class="seg-mark">` + escapePresentationDraftText(plan.Deck.Motif) + `</span></div><div class="seg-stack-head"><span class="seg-icon">` + icon + `</span><div><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div></div><div class="seg-stack-body">` + body + `</div></div>`
+	case "canvas":
+		return `<div class="seg-slide seg-slide-canvas"><div class="seg-canvas-head"><div><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2></div><span class="seg-icon">` + icon + `</span></div><p class="seg-lead">` + lead + `</p><div class="seg-canvas-body">` + body + `</div></div>`
+	case "rail":
+		return `<div class="seg-slide seg-slide-rail"><div class="seg-rail"><span class="seg-icon">` + icon + `</span><span class="seg-mark">` + escapePresentationDraftText(plan.Deck.Motif) + `</span></div><div class="seg-rail-content"><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p><div class="seg-rail-body">` + body + `</div></div></div>`
+	case "poster":
+		return `<div class="seg-slide seg-slide-poster"><div class="seg-poster-title"><span class="badge">` + escapePresentationDraftText(plan.Deck.Kicker) + `</span><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div><div class="seg-poster-body">` + body + `</div></div>`
+	default:
+		return `<div class="seg-slide seg-slide-split"><div class="seg-top"><span class="badge">` + escapePresentationDraftText(plan.Deck.Kicker) + `</span><span class="seg-mark">` + escapePresentationDraftText(plan.Deck.Motif) + `</span></div><div class="seg-split-grid"><div class="seg-hero"><span class="seg-icon">` + icon + `</span><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div><div class="seg-main-panel">` + body + `</div></div></div>`
+	}
+}
+
+func segmentedCompositionVariant(layout string, index int) string {
+	switch layout {
+	case "stats":
+		if index%2 == 0 {
+			return "canvas"
+		}
+		return "poster"
+	case "steps", "timeline":
+		if index%2 == 0 {
+			return "rail"
+		}
+		return "band"
+	case "compare", "table":
+		if index%2 == 0 {
+			return "stack"
+		}
+		return "canvas"
+	}
+	variants := []string{"split", "band", "stack", "canvas", "rail", "poster"}
+	return variants[index%len(variants)]
+}
+
+func segmentedSlideLead(slide presentationDraftSlide, brief segmentedPPTXSlideBrief, plan segmentedPPTXPlan) string {
+	if strings.TrimSpace(brief.Visual) != "" && strings.TrimSpace(brief.Purpose) != "" {
+		return brief.Purpose + " through " + brief.Visual + "."
+	}
+	if len(slide.Points) > 0 {
+		return slide.Points[0]
+	}
+	if strings.TrimSpace(brief.Purpose) != "" {
+		return brief.Purpose
+	}
+	return firstNonEmptyString(plan.Deck.Narrative, plan.Subtitle, "A focused slide built from the requested subject.")
+}
+
+func segmentedCardsHTML(slide presentationDraftSlide, brief segmentedPPTXSlideBrief, index int) string {
+	cards := slide.Cards
+	if len(cards) < 3 {
+		cards = cardsFromSegmentedBrief(brief)
+	}
+	var out strings.Builder
+	if index%2 == 0 {
+		out.WriteString(`<div class="seg-card-mosaic">`)
+	} else {
+		out.WriteString(`<div class="seg-card-ladder">`)
+	}
+	for i, card := range cards {
+		if i >= 4 {
+			break
+		}
+		out.WriteString(`<div class="seg-card"><div class="seg-card-icon">`)
+		out.WriteString(segmentedIconHTML(firstNonEmptyString(card.Icon, brief.Icon, "stars")))
+		out.WriteString(`</div><h3>`)
+		out.WriteString(escapePresentationDraftText(firstNonEmptyString(card.Title, fmt.Sprintf("Point %d", i+1))))
+		out.WriteString(`</h3><p>`)
+		out.WriteString(escapePresentationDraftText(firstNonEmptyString(card.Desc, segmentedPointAt(slide.Points, i))))
+		out.WriteString(`</p></div>`)
+	}
+	out.WriteString(`</div>`)
+	return out.String()
+}
+
+func segmentedStatsHTML(slide presentationDraftSlide) string {
+	var out strings.Builder
+	out.WriteString(`<div class="seg-stat-grid">`)
+	for i, stat := range slide.Stats {
+		if i >= 4 {
+			break
+		}
+		out.WriteString(`<div class="seg-stat"><strong>`)
+		out.WriteString(escapePresentationDraftText(stat.Value))
+		out.WriteString(`</strong><span>`)
+		out.WriteString(escapePresentationDraftText(stat.Label))
+		out.WriteString(`</span><p>`)
+		out.WriteString(escapePresentationDraftText(stat.Desc))
+		out.WriteString(`</p></div>`)
+	}
+	out.WriteString(`</div>`)
+	return out.String()
+}
+
+func segmentedStepsHTML(slide presentationDraftSlide) string {
+	items := slide.Steps
+	if len(items) == 0 {
+		items = slide.Points
+	}
+	var out strings.Builder
+	out.WriteString(`<div class="seg-step-list">`)
+	for i, item := range items {
+		if i >= 5 {
+			break
+		}
+		out.WriteString(`<div class="seg-step"><span>`)
+		out.WriteString(fmt.Sprintf("%02d", i+1))
+		out.WriteString(`</span><p>`)
+		out.WriteString(escapePresentationDraftText(item))
+		out.WriteString(`</p></div>`)
+	}
+	out.WriteString(`</div>`)
+	return out.String()
+}
+
+func segmentedTimelineHTML(slide presentationDraftSlide) string {
+	var out strings.Builder
+	out.WriteString(`<div class="seg-timeline">`)
+	for i, item := range slide.Timeline {
+		if i >= 5 {
+			break
+		}
+		out.WriteString(`<div class="seg-time"><span>`)
+		out.WriteString(escapePresentationDraftText(firstNonEmptyString(item.Date, fmt.Sprintf("T%d", i+1))))
+		out.WriteString(`</span><h3>`)
+		out.WriteString(escapePresentationDraftText(item.Title))
+		out.WriteString(`</h3><p>`)
+		out.WriteString(escapePresentationDraftText(item.Desc))
+		out.WriteString(`</p></div>`)
+	}
+	out.WriteString(`</div>`)
+	return out.String()
+}
+
+func segmentedCompareHTML(slide presentationDraftSlide) string {
+	if slide.LeftColumn == nil || slide.RightColumn == nil {
+		return ""
+	}
+	return `<div class="seg-compare"><div class="seg-compare-col"><h3>` + escapePresentationDraftText(slide.LeftColumn.Heading) + `</h3>` + segmentedPointListHTML(slide.LeftColumn.Points) + `</div><div class="seg-compare-col seg-compare-alt"><h3>` + escapePresentationDraftText(slide.RightColumn.Heading) + `</h3>` + segmentedPointListHTML(slide.RightColumn.Points) + `</div></div>`
+}
+
+func segmentedTableHTML(slide presentationDraftSlide) string {
+	if slide.Table == nil || len(slide.Table.Headers) == 0 {
+		return ""
+	}
+	var out strings.Builder
+	out.WriteString(`<table class="seg-table"><thead><tr>`)
+	for _, header := range slide.Table.Headers {
+		out.WriteString(`<th>`)
+		out.WriteString(escapePresentationDraftText(header))
+		out.WriteString(`</th>`)
+	}
+	out.WriteString(`</tr></thead><tbody>`)
+	for i, row := range slide.Table.Rows {
+		if i >= 4 {
+			break
+		}
+		out.WriteString(`<tr>`)
+		for _, cell := range row {
+			out.WriteString(`<td>`)
+			out.WriteString(escapePresentationDraftText(cell))
+			out.WriteString(`</td>`)
+		}
+		out.WriteString(`</tr>`)
+	}
+	out.WriteString(`</tbody></table>`)
+	return out.String()
+}
+
+func segmentedPointListHTML(points []string) string {
+	var out strings.Builder
+	out.WriteString(`<ul class="seg-points">`)
+	for i, point := range points {
+		if i >= 5 {
+			break
+		}
+		out.WriteString(`<li>`)
+		out.WriteString(escapePresentationDraftText(point))
+		out.WriteString(`</li>`)
+	}
+	out.WriteString(`</ul>`)
+	return out.String()
+}
+
+func segmentedPointAt(points []string, index int) string {
+	if index >= 0 && index < len(points) {
+		return points[index]
+	}
+	return "A concrete supporting point for this slide."
+}
+
+func segmentedIconHTML(value string) string {
+	icon := segmentedBootstrapIcon(value)
+	return `<i class="bi bi-` + icon + `" aria-hidden="true"></i>`
+}
+
+func segmentedBootstrapIcon(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "_", "-")
+	switch value {
+	case "automation", "ai", "chip", "technology":
+		return "cpu"
+	case "spark", "star", "stars", "magic":
+		return "stars"
+	case "chart", "data", "metric", "metrics":
+		return "bar-chart-line"
+	case "people", "audience", "users":
+		return "people"
+	case "learning", "idea", "lightbulb":
+		return "lightbulb"
+	case "risk", "guardrail", "safety":
+		return "shield-check"
+	case "action", "takeaway", "check":
+		return "check2-circle"
+	}
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	cleaned := strings.Trim(b.String(), "-")
+	if cleaned == "" {
+		return "stars"
+	}
+	return cleaned
+}
+
 func promoteSegmentedSlideToCards(slide *presentationDraftSlide, brief segmentedPPTXSlideBrief) {
 	slide.Type = "cards"
 	slide.Layout = "cards"
@@ -918,19 +1222,33 @@ func ensurePaletteKey(palette map[string]string, key, fallback string) {
 }
 
 func defaultSegmentedThemeCSS() string {
-	return `.row{display:flex;gap:18px}.card{border-radius:22px;border:1px solid var(--border);background:var(--card);box-shadow:0 18px 44px rgba(15,23,42,.10)}.card-body{padding:24px;display:grid;gap:12px}.badge{border-radius:999px;padding:8px 12px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}.icon-badge{width:58px;height:58px;border-radius:16px;background:color-mix(in srgb,var(--accent) 14%,white);color:var(--accent)}.list-group-item{border-left:5px solid var(--accent);border-radius:16px;padding:16px 18px;background:var(--card)}`
+	return `.row{display:flex;gap:18px}.card{border-radius:22px;border:1px solid var(--border);background:var(--card);box-shadow:0 18px 44px rgba(15,23,42,.10)}.card-body{padding:24px;display:grid;gap:12px}.badge{border-radius:999px;padding:8px 12px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}.icon-badge{width:58px;height:58px;border-radius:16px;background:color-mix(in srgb,var(--accent) 14%,white);color:var(--accent)}.list-group-item{border-left:5px solid var(--accent);border-radius:16px;padding:16px 18px;background:var(--card)}` + segmentedHTMLThemeCSS()
+}
+
+func segmentedHTMLThemeCSS() string {
+	return `.seg-cover,.seg-slide{height:100%;padding:46px 54px;background:radial-gradient(circle at 88% 10%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 30%),var(--bg);color:var(--text)}.seg-cover{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;align-items:stretch}.seg-cover-left{display:flex;flex-direction:column;justify-content:center;gap:22px}.seg-cover-title{font-size:68px;line-height:.96;font-weight:900;letter-spacing:-.06em;margin:0}.seg-cover-lead{font-size:25px;line-height:1.32;color:var(--muted);margin:0;max-width:760px}.seg-cover-chips{display:flex;flex-wrap:wrap}.seg-cover-chips span{padding:12px 14px;border-radius:999px;background:var(--card);border:1px solid var(--border);font-size:17px;margin:0 12px 12px 0}.seg-cover-right{display:grid;grid-template-rows:1fr .78fr;gap:18px}.seg-cover-panel{border:1px solid var(--border);border-radius:28px;background:color-mix(in srgb,var(--card) 92%,transparent);box-shadow:0 20px 54px rgba(15,23,42,.12);padding:24px;display:flex;flex-direction:column;justify-content:space-between}.seg-cover-panel-main h2{font-size:32px;line-height:1.08;margin:18px 0 10px}.seg-cover-panel p{font-size:19px;line-height:1.34;color:var(--muted);margin:0}.seg-cover-row{display:grid;grid-template-columns:1fr 1fr;gap:18px}.seg-cover-panel strong{font-size:42px;color:var(--accent);line-height:1}.seg-cover-panel span{font-size:13px;font-weight:850;text-transform:uppercase;letter-spacing:.11em;color:var(--muted)}.seg-slide{display:flex;flex-direction:column;gap:22px}.seg-top{display:flex;justify-content:space-between;align-items:center}.seg-mark,.seg-eyebrow{font-size:13px;font-weight:850;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}.seg-title{font-size:45px;line-height:1.02;font-weight:880;letter-spacing:-.045em;margin:0}.seg-lead{font-size:22px;line-height:1.34;color:var(--muted);margin:0}.seg-icon,.seg-card-icon{display:inline-flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:18px;background:color-mix(in srgb,var(--accent) 15%,white);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,white)}.seg-slide-split .seg-split-grid{display:grid;grid-template-columns:.92fr 1.35fr;gap:28px;min-height:0;flex:1}.seg-hero,.seg-main-panel,.seg-band-copy,.seg-band-body{border:1px solid var(--border);border-radius:28px;background:color-mix(in srgb,var(--card) 92%,transparent);box-shadow:0 20px 54px rgba(15,23,42,.12)}.seg-hero{padding:30px;display:flex;flex-direction:column;justify-content:space-between}.seg-main-panel,.seg-band-body{padding:24px}.seg-slide-band{display:grid;grid-template-columns:.78fr 1.35fr;gap:28px}.seg-band-copy{padding:32px;display:flex;flex-direction:column;gap:18px;justify-content:center}.seg-band-body{display:flex;align-items:stretch}.seg-slide-stack{padding-top:42px}.seg-stack-head{display:grid;grid-template-columns:74px 1fr;gap:20px;align-items:center}.seg-stack-body{flex:1;min-height:0}.seg-slide-canvas{padding-top:42px}.seg-canvas-head{display:flex;justify-content:space-between;align-items:flex-start}.seg-canvas-body{flex:1;min-height:0;border:1px solid var(--border);border-radius:28px;background:color-mix(in srgb,var(--card) 92%,transparent);box-shadow:0 20px 54px rgba(15,23,42,.12);padding:24px}.seg-slide-rail{display:grid;grid-template-columns:112px 1fr;gap:28px}.seg-rail{border-radius:30px;background:linear-gradient(180deg,var(--accent),var(--accent2));color:white;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:24px 14px}.seg-rail .seg-icon{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.28);color:white}.seg-rail .seg-mark{writing-mode:vertical-rl;color:white;opacity:.88}.seg-rail-content{display:flex;flex-direction:column;gap:18px;min-width:0}.seg-rail-body{flex:1;border:1px solid var(--border);border-radius:28px;background:color-mix(in srgb,var(--card) 92%,transparent);padding:24px}.seg-slide-poster{display:grid;grid-template-columns:.9fr 1.1fr;gap:28px}.seg-poster-title{border-radius:32px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 92%,black),color-mix(in srgb,var(--accent2) 86%,black));color:white;padding:34px;display:flex;flex-direction:column;justify-content:space-between}.seg-poster-title .seg-lead,.seg-poster-title .badge{color:white}.seg-poster-body{border:1px solid var(--border);border-radius:28px;background:var(--card);padding:24px;display:flex;align-items:stretch}.seg-card-mosaic{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%}.seg-card-ladder{display:grid;grid-template-columns:1fr;gap:14px;width:100%}.seg-card{padding:18px;border-radius:22px;background:var(--card);border:1px solid var(--border);display:grid;gap:10px}.seg-card h3,.seg-compare h3,.seg-time h3{font-size:23px;line-height:1.12;margin:0;font-weight:820}.seg-card p,.seg-step p,.seg-time p,.seg-stat p,.seg-points li,.seg-table td{font-size:19px;line-height:1.34;color:var(--muted);margin:0}.seg-stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%}.seg-stat{padding:22px;border-radius:24px;background:var(--card);border:1px solid var(--border)}.seg-stat strong{display:block;font-size:42px;line-height:1;color:var(--accent);letter-spacing:-.04em}.seg-stat span{display:block;font-size:14px;font-weight:850;text-transform:uppercase;letter-spacing:.1em;margin:12px 0 8px}.seg-step-list{display:grid;gap:14px;width:100%}.seg-step{display:grid;grid-template-columns:58px 1fr;gap:14px;align-items:center;padding:16px;border-radius:20px;background:var(--card);border:1px solid var(--border)}.seg-step span{font-size:22px;font-weight:850;color:var(--accent)}.seg-compare{display:grid;grid-template-columns:1fr 1fr;gap:18px;width:100%}.seg-compare-col{padding:22px;border-radius:24px;background:var(--card);border:1px solid var(--border)}.seg-compare-alt{background:color-mix(in srgb,var(--accent2) 9%,var(--card))}.seg-points{display:grid;gap:10px;margin:14px 0 0;padding:0;list-style:none}.seg-points li{padding:10px 12px;border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:12px}.seg-table{width:100%;border-collapse:separate;border-spacing:0 10px}.seg-table th{font-size:13px;text-align:left;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.seg-table td{padding:14px 16px;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}.seg-timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.seg-time{padding:18px;border-radius:22px;background:var(--card);border:1px solid var(--border)}.seg-time span{font-size:13px;font-weight:850;color:var(--accent);text-transform:uppercase}`
 }
 
 func defaultSegmentedCoverHTML(plan segmentedPPTXPlan) string {
-	return `<div class="container-fluid h-100 d-grid gap-4" style="padding:68px 72px;align-content:center"><div class="badge">` +
-		stripPresentationDraftEmoji(plan.Deck.Kicker) +
-		`</div><h1 class="display-title">` + stripPresentationDraftEmoji(plan.Title) +
-		`</h1><p class="lead">` + stripPresentationDraftEmoji(plan.Deck.Narrative) +
-		`</p><div class="row"><div class="col-4"><div class="card"><div class="card-body">Audience: ` +
-		stripPresentationDraftEmoji(plan.Deck.Audience) +
-		`</div></div></div><div class="col-4"><div class="card"><div class="card-body">Theme: ` +
-		stripPresentationDraftEmoji(plan.Deck.Theme) +
-		`</div></div></div><div class="col-4"><div class="card"><div class="card-body">Motif: <i class="bi bi-stars" aria-hidden="true"></i></div></div></div></div></div>`
+	title := escapePresentationDraftText(plan.Title)
+	kicker := escapePresentationDraftText(plan.Deck.Kicker)
+	narrative := escapePresentationDraftText(plan.Deck.Narrative)
+	audience := escapePresentationDraftText(plan.Deck.Audience)
+	theme := escapePresentationDraftText(plan.Deck.Theme)
+	style := escapePresentationDraftText(plan.Deck.VisualStyle)
+	firstHeading, firstDesc := segmentedCoverAgenda(plan, 0, "Context", firstNonEmptyString(firstStage(plan.Stages), "Frame the subject"))
+	secondHeading, secondDesc := segmentedCoverAgenda(plan, 1, "Signal", firstNonEmptyString(lastStage(plan.Stages), "Close with action"))
+	return `<div class="seg-cover"><div class="seg-cover-left"><span class="badge">` + kicker + `</span><h1 class="seg-cover-title">` + title + `</h1><p class="seg-cover-lead">` + narrative + `</p><div class="seg-cover-chips"><span>Audience: ` + audience + `</span><span>Theme: ` + theme + `</span></div></div><div class="seg-cover-right"><div class="seg-cover-panel seg-cover-panel-main"><div class="seg-card-icon">` + segmentedIconHTML(plan.Deck.Motif) + `</div><h2>` + style + `</h2><p>` + escapePresentationDraftText(plan.Deck.CoverStyle) + `</p></div><div class="seg-cover-row"><div class="seg-cover-panel"><strong>01</strong><span>` + firstHeading + `</span><p>` + firstDesc + `</p></div><div class="seg-cover-panel"><strong>02</strong><span>` + secondHeading + `</span><p>` + secondDesc + `</p></div></div></div></div>`
+}
+
+func segmentedCoverAgenda(plan segmentedPPTXPlan, index int, fallbackHeading, fallbackDesc string) (string, string) {
+	if index >= 0 && index < len(plan.Slides) {
+		brief := plan.Slides[index]
+		heading := escapePresentationDraftText(firstNonEmptyString(brief.Heading, fallbackHeading))
+		desc := escapePresentationDraftText(firstNonEmptyString(brief.Purpose, segmentedPointAt(brief.Points, 0), fallbackDesc))
+		return heading, desc
+	}
+	return escapePresentationDraftText(fallbackHeading), escapePresentationDraftText(fallbackDesc)
 }
 
 func slugifySegmentedFilename(value string) string {
