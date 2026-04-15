@@ -910,7 +910,7 @@ func (a *AgentLoop) emitAgentEvent(ctx context.Context, taskID string, t domain.
 func requiredOutputTool(task *domain.Task) string {
 	text := strings.ToLower(strings.TrimSpace(task.Title + " " + task.Description))
 	switch {
-	case containsTaskKeyword(text, "presentation", "slides", "deck", "slideshow", "pptx", "powerpoint"):
+	case containsTaskKeyword(text, "presentation", "slide", "slides", "deck", "slideshow", "pptx", "powerpoint"):
 		return "write_pptx"
 	case containsTaskKeyword(text, "document", "report", "doc", "word", "brief", "proposal", "writeup", "paper"):
 		return "write_docx"
