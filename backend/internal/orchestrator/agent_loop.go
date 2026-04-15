@@ -296,6 +296,11 @@ func (a *AgentLoop) Run(
 		"message": "agent loop started",
 	})
 
+	if shouldUseSegmentedPresentationWorkflow(task) {
+		a.logger.Info("agent loop: using segmented presentation workflow", "task_id", task.ID)
+		return a.runSegmentedPresentationWorkflow(ctx, task, workspaceRoot, planID, extraSystemPrompts, runtimeProfile)
+	}
+
 	for iter := 0; iter < runtimeProfile.MaxIterations; iter++ {
 		if ctx.Err() != nil {
 			break

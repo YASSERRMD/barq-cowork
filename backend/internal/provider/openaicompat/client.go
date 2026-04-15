@@ -21,13 +21,14 @@ import (
 // ─────────────────────────────────────────────
 
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []wireMessage `json:"messages"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Stream      bool          `json:"stream"`
-	Tools       []wireTool    `json:"tools,omitempty"`
-	ToolChoice  any           `json:"tool_choice,omitempty"`
+	Model          string        `json:"model"`
+	Messages       []wireMessage `json:"messages"`
+	Temperature    float64       `json:"temperature,omitempty"`
+	MaxTokens      int           `json:"max_tokens,omitempty"`
+	Stream         bool          `json:"stream"`
+	Tools          []wireTool    `json:"tools,omitempty"`
+	ToolChoice     any           `json:"tool_choice,omitempty"`
+	ResponseFormat any           `json:"response_format,omitempty"`
 }
 
 type wireMessage struct {
@@ -375,12 +376,13 @@ func buildRequest(cfg provider.ProviderConfig, req provider.ChatCompletionReques
 	}
 
 	out := chatRequest{
-		Model:       model,
-		Messages:    msgs,
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Stream:      req.Stream,
-		Tools:       tools,
+		Model:          model,
+		Messages:       msgs,
+		Temperature:    req.Temperature,
+		MaxTokens:      req.MaxTokens,
+		Stream:         req.Stream,
+		Tools:          tools,
+		ResponseFormat: req.ResponseFormat,
 	}
 	if req.ForceToolName != "" && len(tools) > 0 {
 		out.ToolChoice = map[string]any{

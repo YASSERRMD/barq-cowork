@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -114,6 +115,105 @@ func (fakeWritePPTXTool) InputSchema() map[string]any { return map[string]any{"t
 
 func (fakeWritePPTXTool) Execute(context.Context, tools.InvocationContext, string) tools.Result {
 	return tools.OKData("ok", map[string]any{"path": "slides/forced-presentation.pptx", "size": int64(1234)})
+}
+
+type fakeSegmentedProvider struct {
+	requests []provider.ChatCompletionRequest
+}
+
+func (f *fakeSegmentedProvider) Name() string { return "fake-segmented" }
+
+func (f *fakeSegmentedProvider) ValidateConfig(provider.ProviderConfig) error { return nil }
+
+func (f *fakeSegmentedProvider) Chat(_ context.Context, _ provider.ProviderConfig, req provider.ChatCompletionRequest) (<-chan provider.ChatCompletionChunk, error) {
+	f.requests = append(f.requests, req)
+	ch := make(chan provider.ChatCompletionChunk, 2)
+	if len(f.requests) == 1 {
+		ch <- provider.ChatCompletionChunk{ContentDelta: `{
+			"filename":"gen-ai-kids",
+			"title":"Generative AI for Kids",
+			"subtitle":"A safe learning guide",
+			"deck":{
+				"subject":"Generative AI for Kids",
+				"audience":"parents and educators",
+				"narrative":"curiosity -> safe use -> practice",
+				"theme":"education",
+				"visual_style":"bright modern learning cards",
+				"cover_style":"editorial classroom",
+				"color_story":"warm paper with blue and green accents",
+				"motif":"stars",
+				"kicker":"Learning guide",
+				"palette":{"background":"F6F8FB","card":"FFFFFF","accent":"0EA5E9","accent2":"14B8A6","text":"0F172A","muted":"475569","border":"CBD5E1"},
+				"theme_css":".row{display:flex;gap:18px}.card{border:1px solid var(--border);border-radius:22px}.card-body{padding:24px}.badge{border-radius:999px}.list-group-item{border-left:5px solid var(--accent)}",
+				"cover_html":"<div class='container-fluid h-100 d-grid gap-4'><span class='badge'>Learning guide</span><h1 class='display-title'>Generative AI for Kids</h1><p class='lead'>A safe and practical introduction for families and classrooms.</p></div>"
+			},
+			"slides":[
+				{"heading":"What Gen AI Does","type":"cards","purpose":"explain the idea","visual":"three learning cards","icon":"stars","points":["It learns patterns from examples","It creates text, images, and ideas","Children need guided practice"]},
+				{"heading":"Safe Practice Rules","type":"bullets","purpose":"teach guardrails","visual":"checklist","icon":"shield-check","points":["Ask an adult before sharing personal details","Check answers against trusted sources","Use AI as a helper, not a replacement for thinking"]}
+			]
+		}`}
+	} else {
+		idx := len(f.requests) - 1
+		ch <- provider.ChatCompletionChunk{ContentDelta: fmt.Sprintf(`{"heading":"Drafted Slide %d","type":"html","html":"<div class='container-fluid h-100 d-grid gap-4'><div class='badge'>Learning</div><h2 class='display-4'>Drafted Slide %d</h2><div class='row'><div class='col-6'><div class='card'><div class='card-body'><span class='icon-badge'><i class='bi bi-stars' aria-hidden='true'></i></span><h3 class='card-title'>Core idea</h3><p class='card-text'>This slide has concrete readable content for the final PowerPoint export.</p></div></div></div><div class='col-6'><div class='card'><div class='card-body'><h3 class='card-title'>Classroom use</h3><p class='card-text'>The layout contains enough information density and no empty filler area.</p></div></div></div></div></div>"}`, idx, idx)}
+	}
+	ch <- provider.ChatCompletionChunk{Done: true}
+	close(ch)
+	return ch, nil
+}
+
+func TestAgentLoop_SegmentsExplicitSlideCountPresentation(t *testing.T) {
+	prov := &fakeSegmentedProvider{}
+	registry := tools.NewRegistry()
+	registry.Register(fakeWritePPTXTool{})
+	artifacts := &fakeArtifactStore{}
+	plans := &fakePlanStore{}
+	events := &recordingEventEmitter{}
+	loop := NewAgentLoop(
+		prov,
+		provider.ProviderConfig{Model: "fake"},
+		registry,
+		plans,
+		artifacts,
+		events,
+		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	)
+
+	task := &domain.Task{
+		ID:          "task-segmented",
+		Title:       "3-slide presentation about Generative AI for kids",
+		Description: "Show every slide while generating.",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	result := loop.Run(context.Background(), task, t.TempDir())
+	if result.Completed != 1 || result.Failed != 0 {
+		t.Fatalf("expected segmented presentation to render once, got %+v", result)
+	}
+	if len(prov.requests) != 3 {
+		t.Fatalf("expected one plan call and one call per content slide, got %d", len(prov.requests))
+	}
+	if prov.requests[0].ResponseFormat == nil || prov.requests[0].ForceToolName != "" || len(prov.requests[0].Tools) != 0 {
+		t.Fatalf("expected JSON response-format call without tools, got %+v", prov.requests[0])
+	}
+	if len(artifacts.artifacts) != 1 {
+		t.Fatalf("expected one artifact, got %d", len(artifacts.artifacts))
+	}
+	draftEvents := 0
+	for _, event := range events.events {
+		if event.Type == domain.EventTypePresentationSlide {
+			draftEvents++
+			if strings.Contains(event.Payload, "Slide 1 of") {
+				t.Fatalf("draft should not include visible slide counter payload: %s", event.Payload)
+			}
+		}
+	}
+	if draftEvents != 3 {
+		t.Fatalf("expected cover plus two slide draft events, got %d", draftEvents)
+	}
+	if len(plans.steps) != 4 {
+		t.Fatalf("expected plan, two slide drafts, and render step, got %d", len(plans.steps))
+	}
 }
 
 func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
