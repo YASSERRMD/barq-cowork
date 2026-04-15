@@ -230,8 +230,8 @@ func TestWritePPTXTool_RejectsIncompleteDeckBrief(t *testing.T) {
 	}
 }
 
-func TestWritePPTXTool_RejectsStructuredOnlyDeck(t *testing.T) {
-	ictx, _ := newTestCtx(t)
+func TestWritePPTXTool_AcceptsStructuredFallbackDeck(t *testing.T) {
+	ictx, dir := newTestCtx(t)
 	result := tools.WritePPTXTool{}.Execute(context.Background(), ictx, `{
 		"filename":"structured-only-deck",
 		"title":"Operational rollout",
@@ -261,11 +261,22 @@ func TestWritePPTXTool_RejectsStructuredOnlyDeck(t *testing.T) {
 			{"heading":"Current pressure points","type":"bullets","points":["Fragmented data across teams","Manual triage slows response","Leaders lack real-time visibility"]}
 		]
 	}`)
-	if result.Status == tools.ResultOK {
-		t.Fatalf("expected structured-only deck to fail")
+	if result.Status != tools.ResultOK {
+		t.Fatalf("expected structured fallback deck to render, got %s", result.Error)
 	}
-	if !strings.Contains(result.Error, "fully authored HTML/CSS deck") {
-		t.Fatalf("expected html deck validation error, got %q", result.Error)
+	data, err := os.ReadFile(filepath.Join(dir, "slides", "structured-only-deck.pptx"))
+	if err != nil {
+		t.Fatalf("read pptx: %v", err)
+	}
+	manifestBytes := unzipEntryData(t, data, "customXml/barq-presentation.json")
+	var manifest struct {
+		HTMLDocument string `json:"html_document"`
+	}
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
+	if !strings.Contains(manifest.HTMLDocument, "Current pressure points") || !strings.Contains(manifest.HTMLDocument, "Fragmented data across teams") {
+		t.Fatalf("expected structured slide content in fallback html document, got %s", manifest.HTMLDocument)
 	}
 }
 

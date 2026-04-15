@@ -94,6 +94,16 @@ type fakeEventEmitter struct{}
 
 func (fakeEventEmitter) Create(context.Context, *domain.Event) error { return nil }
 
+type recordingEventEmitter struct {
+	events []*domain.Event
+}
+
+func (r *recordingEventEmitter) Create(_ context.Context, event *domain.Event) error {
+	clone := *event
+	r.events = append(r.events, &clone)
+	return nil
+}
+
 type fakeWritePPTXTool struct{}
 
 func (fakeWritePPTXTool) Name() string { return "write_pptx" }
@@ -112,13 +122,14 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	registry.Register(fakeWritePPTXTool{})
 	artifacts := &fakeArtifactStore{}
 	plans := &fakePlanStore{}
+	events := &recordingEventEmitter{}
 	loop := NewAgentLoop(
 		prov,
 		provider.ProviderConfig{Model: "fake"},
 		registry,
 		plans,
 		artifacts,
-		fakeEventEmitter{},
+		events,
 		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	)
 
@@ -148,8 +159,11 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	if len(firstMessages) < 3 {
 		t.Fatalf("expected extra system prompts in first request, got %d messages", len(firstMessages))
 	}
-	if prov.requests[0].MaxTokens != 8192 {
+	if prov.requests[0].MaxTokens != 16384 {
 		t.Fatalf("expected larger max token budget for presentation tasks, got %d", prov.requests[0].MaxTokens)
+	}
+	if prov.requests[0].ForceToolName != "write_pptx" || len(prov.requests[0].Tools) != 1 || prov.requests[0].Tools[0].Name != "write_pptx" {
+		t.Fatalf("expected presentation request to force only write_pptx, got force=%q tools=%+v", prov.requests[0].ForceToolName, prov.requests[0].Tools)
 	}
 	if !strings.Contains(firstMessages[1].Content, "Active skill prompt") || !strings.Contains(firstMessages[2].Content, "Project instructions") {
 		t.Fatalf("expected injected skill and project prompts, got %+v", firstMessages)
@@ -170,6 +184,19 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	}
 	if plans.steps[3].Title != "Render PowerPoint file" || plans.steps[3].Status != domain.StepStatusCompleted {
 		t.Fatalf("expected final render step to complete, got %+v", plans.steps[3])
+	}
+	foundSlideDraft := false
+	for _, event := range events.events {
+		if event.Type != domain.EventTypePresentationSlide {
+			continue
+		}
+		foundSlideDraft = true
+		if !strings.Contains(event.Payload, "Intro") || !strings.Contains(event.Payload, "One") {
+			t.Fatalf("expected slide draft event to include fallback slide content, got %s", event.Payload)
+		}
+	}
+	if !foundSlideDraft {
+		t.Fatalf("expected a live presentation slide draft event")
 	}
 }
 

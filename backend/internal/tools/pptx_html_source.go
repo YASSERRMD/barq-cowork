@@ -33,8 +33,24 @@ func sanitizeHTMLMarkup(raw string) string {
 	raw = htmlDangerTagPattern.ReplaceAllString(raw, "")
 	raw = htmlEventAttrPattern.ReplaceAllString(raw, "")
 	raw = htmlJSHrefPattern.ReplaceAllString(raw, `$1="#"`)
+	raw = stripEmojiGlyphs(raw)
 	raw = normalizeHTMLLayoutStyles(raw)
 	return strings.TrimSpace(raw)
+}
+
+func stripEmojiGlyphs(raw string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 0x1F000 && r <= 0x1FAFF:
+			return -1
+		case r >= 0x2600 && r <= 0x27BF:
+			return -1
+		case r == 0xFE0F || r == 0x200D:
+			return -1
+		default:
+			return r
+		}
+	}, raw)
 }
 
 func sanitizeCSSMarkup(raw string) string {
@@ -80,7 +96,7 @@ func validatePlannedHTMLDeckSource(planned plannedPPTXPresentation) error {
 	}
 	for i, slide := range planned.Slides {
 		field := fmt.Sprintf("slides[%d].html", i)
-		if !htmlSlideContentReady(slide.Slide.HTML) {
+		if !htmlSlideContentReady(slide.Slide.HTML) && !plannedSlideHasFallbackHTMLContent(slide.Slide) {
 			issues = append(issues, field)
 		}
 	}
@@ -103,11 +119,39 @@ func htmlManifestAuthoringIssues(manifest pptxPreviewManifest) []string {
 	}
 	for i, slide := range manifest.Slides {
 		field := fmt.Sprintf("slides[%d].html", i)
-		if !htmlSlideContentReady(slide.HTML) {
+		if !htmlSlideContentReady(slide.HTML) && !previewSlideHasFallbackHTMLContent(slide) {
 			issues = append(issues, field)
 		}
 	}
 	return issues
+}
+
+func plannedSlideHasFallbackHTMLContent(slide pptxSlide) bool {
+	return len(slide.Points) >= 2 ||
+		len(slide.Stats) >= 2 ||
+		len(slide.Steps) >= 2 ||
+		len(slide.Cards) >= 2 ||
+		len(slide.Timeline) >= 2 ||
+		compareHasContent(slide.LeftColumn, slide.RightColumn) ||
+		tableHasContent(slide.Table)
+}
+
+func previewSlideHasFallbackHTMLContent(slide pptxPreviewSlide) bool {
+	return len(slide.Points) >= 2 ||
+		len(slide.Stats) >= 2 ||
+		len(slide.Steps) >= 2 ||
+		len(slide.Cards) >= 2 ||
+		len(slide.Timeline) >= 2 ||
+		compareHasContent(slide.LeftColumn, slide.RightColumn) ||
+		tableHasContent(slide.Table)
+}
+
+func compareHasContent(left, right *pptxCompareColumn) bool {
+	return left != nil && right != nil && len(left.Points) >= 1 && len(right.Points) >= 1
+}
+
+func tableHasContent(table *pptxTableData) bool {
+	return table != nil && len(table.Headers) > 0 && len(table.Rows) > 0
 }
 
 func cssRuleCount(raw string) int {

@@ -920,6 +920,11 @@ func auditPlannedSlide(slide pptxSlide, layout string) plannedPPTXSlideAudit {
 		audit.ContentFit = len(text) >= 24
 		audit.LayoutFit = strings.TrimSpace(slide.HTML) != ""
 		audit.VisualFit = htmlHasStructuredBlocks(slide.HTML)
+		if !audit.ContentFit && plannedSlideHasFallbackHTMLContent(slide) {
+			audit.ContentFit = true
+			audit.LayoutFit = true
+			audit.VisualFit = true
+		}
 	case "stats":
 		audit.ContentFit = len(slide.Stats) >= 2 && len(slide.Stats) <= 4
 		audit.LayoutFit = audit.ContentFit
