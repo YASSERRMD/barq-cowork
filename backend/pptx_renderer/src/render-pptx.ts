@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { chromium } from "playwright-core";
+import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 
 type PptxSlide = any;
@@ -149,6 +150,9 @@ type Bounds = {
 
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
+const HTML_EXPORT_WIDTH = 1280;
+const HTML_EXPORT_HEIGHT = 720;
+const MIN_HTML_PPTX_FONT_SIZE = 14;
 const FONT_HEAD = "Aptos";
 const FONT_BODY = "Aptos";
 
@@ -2146,11 +2150,33 @@ async function buildPresentationFromHTML(htmlDocument: string, outputPath: strin
   try {
     const context = await browser.newContext({
       acceptDownloads: true,
-      viewport: { width: 1920, height: 1080 },
+      viewport: { width: HTML_EXPORT_WIDTH, height: HTML_EXPORT_HEIGHT },
       deviceScaleFactor: 1,
     });
     const page = await context.newPage();
     await page.setContent(htmlDocument, { waitUntil: "domcontentloaded" });
+    await page.addStyleTag({
+      content: `
+        html, body {
+          width: ${HTML_EXPORT_WIDTH}px !important;
+          min-width: ${HTML_EXPORT_WIDTH}px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+        .barq-pptx-deck {
+          display: block !important;
+          gap: 0 !important;
+          align-items: stretch !important;
+        }
+        .barq-pptx-slide {
+          width: ${HTML_EXPORT_WIDTH}px !important;
+          height: ${HTML_EXPORT_HEIGHT}px !important;
+          box-shadow: none !important;
+          margin: 0 !important;
+        }
+      `,
+    });
     await page.addScriptTag({ path: domBundlePath });
     await page.waitForFunction(() => Boolean((window as any).domToPptx?.exportToPptx));
 
@@ -2169,10 +2195,43 @@ async function buildPresentationFromHTML(htmlDocument: string, outputPath: strin
 
     const download = await downloadPromise;
     await download.saveAs(outputPath);
+    await normalizeHTMLExportedPPTXReadability(outputPath);
     await context.close();
   } finally {
     await browser.close();
   }
+}
+
+async function normalizeHTMLExportedPPTXReadability(outputPath: string): Promise<void> {
+  const data = await fs.promises.readFile(outputPath);
+  const zip = await JSZip.loadAsync(data);
+  const slideFiles = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+  let changed = false;
+
+  for (const name of slideFiles) {
+    const file = zip.file(name);
+    if (!file) continue;
+    const xml = await file.async("string");
+    const updated = xml.replace(/\bsz="(\d+)"/g, (match, rawSize) => {
+      const size = Number.parseInt(rawSize, 10);
+      if (!Number.isFinite(size) || size >= MIN_HTML_PPTX_FONT_SIZE * 100) {
+        return match;
+      }
+      changed = true;
+      return `sz="${MIN_HTML_PPTX_FONT_SIZE * 100}"`;
+    });
+    if (updated !== xml) {
+      zip.file(name, updated);
+    }
+  }
+
+  if (!changed) return;
+  const output = await zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
+  await fs.promises.writeFile(outputPath, output);
 }
 
 async function buildPresentationFromStructuredManifest(manifest: Manifest, outputPath: string): Promise<void> {

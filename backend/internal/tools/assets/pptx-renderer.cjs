@@ -9724,9 +9724,9 @@ var require_load = __commonJS({
 var require_lib3 = __commonJS({
   "node_modules/jszip/lib/index.js"(exports2, module2) {
     "use strict";
-    function JSZip2() {
-      if (!(this instanceof JSZip2)) {
-        return new JSZip2();
+    function JSZip3() {
+      if (!(this instanceof JSZip3)) {
+        return new JSZip3();
       }
       if (arguments.length) {
         throw new Error("The constructor with parameters has been removed in JSZip 3.0, please check the upgrade guide.");
@@ -9735,7 +9735,7 @@ var require_lib3 = __commonJS({
       this.comment = null;
       this.root = "";
       this.clone = function() {
-        var newObj = new JSZip2();
+        var newObj = new JSZip3();
         for (var i in this) {
           if (typeof this[i] !== "function") {
             newObj[i] = this[i];
@@ -9744,16 +9744,16 @@ var require_lib3 = __commonJS({
         return newObj;
       };
     }
-    JSZip2.prototype = require_object();
-    JSZip2.prototype.loadAsync = require_load();
-    JSZip2.support = require_support();
-    JSZip2.defaults = require_defaults();
-    JSZip2.version = "3.10.1";
-    JSZip2.loadAsync = function(content, options) {
-      return new JSZip2().loadAsync(content, options);
+    JSZip3.prototype = require_object();
+    JSZip3.prototype.loadAsync = require_load();
+    JSZip3.support = require_support();
+    JSZip3.defaults = require_defaults();
+    JSZip3.version = "3.10.1";
+    JSZip3.loadAsync = function(content, options) {
+      return new JSZip3().loadAsync(content, options);
     };
-    JSZip2.external = require_external();
-    module2.exports = JSZip2;
+    JSZip3.external = require_external();
+    module2.exports = JSZip3;
   }
 });
 
@@ -9761,6 +9761,7 @@ var require_lib3 = __commonJS({
 var import_node_fs = __toESM(require("node:fs"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
 var import_playwright_core = require("playwright-core");
+var import_jszip2 = __toESM(require_lib3(), 1);
 
 // node_modules/pptxgenjs/dist/pptxgen.es.js
 var import_jszip = __toESM(require_lib3());
@@ -15085,6 +15086,9 @@ var PptxGenJS = class {
 // src/render-pptx.ts
 var SLIDE_W = 13.333;
 var SLIDE_H = 7.5;
+var HTML_EXPORT_WIDTH = 1280;
+var HTML_EXPORT_HEIGHT = 720;
+var MIN_HTML_PPTX_FONT_SIZE = 14;
 var FONT_HEAD = "Aptos";
 var FONT_BODY = "Aptos";
 var legacyEmojiIcons = {
@@ -16876,11 +16880,33 @@ async function buildPresentationFromHTML(htmlDocument, outputPath, domBundlePath
   try {
     const context = await browser.newContext({
       acceptDownloads: true,
-      viewport: { width: 1920, height: 1080 },
+      viewport: { width: HTML_EXPORT_WIDTH, height: HTML_EXPORT_HEIGHT },
       deviceScaleFactor: 1
     });
     const page = await context.newPage();
     await page.setContent(htmlDocument, { waitUntil: "domcontentloaded" });
+    await page.addStyleTag({
+      content: `
+        html, body {
+          width: ${HTML_EXPORT_WIDTH}px !important;
+          min-width: ${HTML_EXPORT_WIDTH}px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+        .barq-pptx-deck {
+          display: block !important;
+          gap: 0 !important;
+          align-items: stretch !important;
+        }
+        .barq-pptx-slide {
+          width: ${HTML_EXPORT_WIDTH}px !important;
+          height: ${HTML_EXPORT_HEIGHT}px !important;
+          box-shadow: none !important;
+          margin: 0 !important;
+        }
+      `
+    });
     await page.addScriptTag({ path: domBundlePath });
     await page.waitForFunction(() => Boolean(window.domToPptx?.exportToPptx));
     const downloadPromise = page.waitForEvent("download");
@@ -16897,10 +16923,40 @@ async function buildPresentationFromHTML(htmlDocument, outputPath, domBundlePath
     }, import_node_path.default.basename(outputPath));
     const download = await downloadPromise;
     await download.saveAs(outputPath);
+    await normalizeHTMLExportedPPTXReadability(outputPath);
     await context.close();
   } finally {
     await browser.close();
   }
+}
+async function normalizeHTMLExportedPPTXReadability(outputPath) {
+  const data = await import_node_fs.default.promises.readFile(outputPath);
+  const zip = await import_jszip2.default.loadAsync(data);
+  const slideFiles = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+  let changed = false;
+  for (const name of slideFiles) {
+    const file = zip.file(name);
+    if (!file) continue;
+    const xml = await file.async("string");
+    const updated = xml.replace(/\bsz="(\d+)"/g, (match, rawSize) => {
+      const size = Number.parseInt(rawSize, 10);
+      if (!Number.isFinite(size) || size >= MIN_HTML_PPTX_FONT_SIZE * 100) {
+        return match;
+      }
+      changed = true;
+      return `sz="${MIN_HTML_PPTX_FONT_SIZE * 100}"`;
+    });
+    if (updated !== xml) {
+      zip.file(name, updated);
+    }
+  }
+  if (!changed) return;
+  const output = await zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 }
+  });
+  await import_node_fs.default.promises.writeFile(outputPath, output);
 }
 async function buildPresentationFromStructuredManifest(manifest, outputPath) {
   const family = previewFamily(manifest);

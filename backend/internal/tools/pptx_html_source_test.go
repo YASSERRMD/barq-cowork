@@ -167,7 +167,7 @@ func TestWrapHTMLSlideShell_AddsCoverComposeClassForGenericCovers(t *testing.T) 
 	}
 }
 
-func TestPreferredHTMLCover_FallsBackForUnderstructuredCover(t *testing.T) {
+func TestPreferredHTMLCover_PreservesValidAuthoredCover(t *testing.T) {
 	manifest := pptxPreviewManifest{
 		Title: "Islamic Parenting",
 		Theme: "education",
@@ -191,11 +191,40 @@ func TestPreferredHTMLCover_FallsBackForUnderstructuredCover(t *testing.T) {
 	}
 
 	got := preferredHTMLCover(manifest)
-	if strings.Contains(got, `<div style="display:flex">`) {
-		t.Fatalf("expected weak authored cover to fall back to structured cover, got %s", got)
+	if !strings.Contains(got, `<div style="display:flex">`) {
+		t.Fatalf("expected valid authored cover to be preserved, got %s", got)
 	}
+	if strings.Contains(got, `cover-grid`) || strings.Contains(got, `Narrative`) {
+		t.Fatalf("expected authored cover, not deterministic fallback, got %s", got)
+	}
+}
+
+func TestPreferredHTMLCover_FallsBackOnlyForInvalidCover(t *testing.T) {
+	manifest := pptxPreviewManifest{
+		Title: "Islamic Parenting",
+		Theme: "education",
+		DeckPlan: pptxPreviewDeckPlan{
+			Subject:      "Islamic Parenting",
+			Audience:     "parents",
+			NarrativeArc: "trust -> guidance -> daily practice",
+			ColorStory:   "warm earth tones",
+			Kicker:       "Faith-centered guidance",
+			CoverHTML:    `<div><span>Thin</span></div>`,
+		},
+		Palette: pptxPreviewPalette{
+			Background: "F5F0E8",
+			Card:       "FFFFFF",
+			Accent:     "2D6A4F",
+			Accent2:    "C9A84C",
+			Text:       "1B1B1B",
+			Muted:      "7A7266",
+			Border:     "E0D8CC",
+		},
+	}
+
+	got := preferredHTMLCover(manifest)
 	if !strings.Contains(got, `cover-grid`) || !strings.Contains(got, `Narrative`) {
-		t.Fatalf("expected fallback cover structure, got %s", got)
+		t.Fatalf("expected invalid cover to fall back to structured cover, got %s", got)
 	}
 }
 
