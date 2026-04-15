@@ -63,12 +63,28 @@ PRIMARY RENDERING MODE
   - color treatment
   - panel geometry
   - grid behavior
-  - inline SVG styling
+  - Bootstrap-compatible component theming
 - Think of cover_html and slides[].html as the actual slide composition chosen by the model.
-- Use simple, valid HTML with inline SVG where needed. Do not use scripts or external assets.
+- Use simple, valid HTML. Do not use scripts, external assets, inline-generated icon SVG, emoji icons, or icon fonts.
+- Use the built-in modern Bootstrap-compatible deck kit as the stable layout vocabulary. This renderer supports Bootstrap-style grid/components/utilities and resolves Bootstrap Icons from the official bootstrap-icons package.
 - The write_pptx tool rejects incomplete HTML/CSS deck contracts, so do not stop at a deck brief or structured-only slide list.
 - Use the legacy structured slide types only when the user explicitly asks for a very simple internal draft.
-- Available baseline class kit for authored slides:
+- Available baseline Bootstrap-style class kit for authored slides:
+  - container-fluid
+  - row, col, col-auto, col-1 through col-12
+  - g-0, g-1, g-2, g-3, g-4, g-5
+  - d-flex, d-grid, flex-column, flex-wrap
+  - align-items-start, align-items-center, align-items-stretch
+  - justify-content-start, justify-content-center, justify-content-between, justify-content-end
+  - h-100, w-100, gap-1 through gap-5, p-0, p-2 through p-5
+  - display-1 through display-6, lead, small, fw-semibold, fw-bold, text-uppercase, text-muted
+  - card, card-body, card-title, card-subtitle, card-text
+  - badge, rounded-pill, rounded-4, border-0, border-top, border-start
+  - list-group, list-group-item
+  - icon-badge
+  - Bootstrap Icons placeholders: i.bi.bi-shield-check, i.bi.bi-graph-up-arrow, i.bi.bi-people, i.bi.bi-calendar3, i.bi.bi-diagram-3, i.bi.bi-check2-circle
+  - For icons, author placeholder elements only: <i class="bi bi-shield-check" aria-hidden="true"></i>. The renderer replaces them with official Bootstrap Icons before PPTX export.
+- Legacy Barq helper classes are also available:
   - cover-shell
   - cover-grid
   - cover-stack
@@ -94,14 +110,14 @@ PRIMARY RENDERING MODE
   - steps-flow, step-item, step-num, step-title, step-desc
   - timeline-list, timeline-row, timeline-date
   - compare-grid, compare-col
-- You may define additional classes in deck.theme_css as needed. The goal is a custom deck system, not a fixed template.
+- You may define additional classes in deck.theme_css as needed, but prefer composing Bootstrap-style rows/columns/cards/badges/lists before inventing new layout classes. The goal is a custom subject-specific deck system, not a fixed template.
 - The renderer injects a slide shell wrapper automatically. Author the inner composition of the slide instead of building a full-page browser mockup with giant outer padding wrappers.
-- Prefer targeting the cover-shell, slide-shell, cover-grid, slide-head, grid-*, panel, bullet-list, and steps-flow classes in theme_css so the actual exported deck stays dense and well-framed.
+- Prefer targeting Bootstrap-compatible classes such as .row, .card, .card-body, .list-group-item, .badge, .icon-badge, plus cover-shell/slide-shell when needed, so the actual exported deck stays dense, modern, and well-framed.
 
 HTML/CSS AUTHORING RULES
 - Design for the exported PowerPoint file, not for a browser mockup.
 - Use PowerPoint-safe typography. Prefer:
-  - sans: Aptos, Arial, Helvetica Neue
+  - sans: Helvetica Neue, Arial, Aptos
   - serif accents only when deliberate: Georgia
 - Avoid depending on niche web fonts or platform-specific UI fonts as the primary design move.
 - Keep spacing disciplined:
@@ -123,6 +139,7 @@ HTML/CSS AUTHORING RULES
 - If you place an icon or illustration area on a slide, it must support real content, not act as a blank filler panel.
 - Roadmaps, proposal pages, decision pages, capability pages, and operating-plan pages should read like designed documents with strong hierarchy and dense useful information.
 - Prefer crisp rectangular or lightly rounded geometry over oversized bubbly cards unless the topic explicitly calls for a playful treatment.
+- Avoid old Bootstrap web-page chrome. Use the Bootstrap vocabulary as a clean design system: strong display type, dense responsive-like grids, modern cards, badges, list groups, and official Bootstrap Icons.
 
 DECK BRIEF QUALITY BAR
 - Make the brief specific to the actual subject, audience, and requested tone.

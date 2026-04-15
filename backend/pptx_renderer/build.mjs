@@ -17,6 +17,7 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node20",
+  loader: { ".svg": "text" },
   external: ["playwright-core"],
   outfile: path.resolve(outDir, "pptx-renderer.cjs"),
 });

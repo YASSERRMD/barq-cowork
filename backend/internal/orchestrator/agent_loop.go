@@ -52,7 +52,7 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 5. Before you call write_pptx, mentally audit every slide: proper heading, proper content density, proper layout choice, and proper icons/visuals for that slide.
 6. The write_pptx tool validates slide fit before it renders. Do not send thin, repetitive, or underfilled slides.
 7. Use a complete "deck" object on EVERY write_pptx tool call. It is required. Fill subject, audience, narrative, theme, visual_style, cover_style, color_story, motif, kicker, a full palette, and deck.design render directives.
-7a. New PowerPoint generation is HTML-authored by default: provide deck.theme_css, deck.cover_html, and HTML markup for every content slide. Do not rely on structured fallback slides for client-facing decks.
+7a. New PowerPoint generation is HTML-authored by default: provide deck.theme_css, deck.cover_html, and HTML markup for every content slide. Use the modern Bootstrap-compatible component kit and official Bootstrap Icons placeholders. Do not rely on structured fallback slides for client-facing decks.
 8. Examples below show JSON shape only. Do not copy example palette values, repeated classroom amber tones, or the same cover layout across different decks unless the user explicitly asks for that direction.
 9. Never put internal planning metadata on the slides. The final presentation should show user-facing content only.
 10. The HTML preview and the downloaded PPTX must look like the same deck. Choose design directives that the native renderer can follow, and add slide-level design objects when a slide needs a specific composition.
@@ -120,18 +120,33 @@ HTML SLIDE MODE — required for bespoke decks and the default for new decks:
   {
     "heading":"<user-facing slide title>",
     "type":"html",
-    "html":"<self-contained slide body markup using the deck theme_css classes and inline SVG when needed>",
+    "html":"<self-contained slide body markup using Bootstrap-compatible deck classes and Bootstrap Icons placeholders when needed>",
     "speaker_notes":"<optional presenter notes>"
   }
 - Use HTML slide mode for every new deck unless the user explicitly asks for a very simple internal draft.
 - Keep markup semantic and self-contained.
 - No scripts.
 - No external assets.
-- Use inline SVG for real icons and diagrams.
+- Do not author inline SVG for icons. Use Bootstrap Icons placeholders only, for example <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>.
+- Use diagrams made from Bootstrap-style cards, rows, list groups, timelines, tables, or chart data instead of hand-authored SVG drawings unless the user explicitly asks for an SVG diagram.
 - Preview and downloaded PPTX are expected to come from the same HTML slide DOM.
 - The write_pptx tool rejects incomplete HTML/CSS deck contracts.
 - The renderer injects a slide shell wrapper automatically. Author the inner composition of the slide instead of building a giant outer page wrapper with excessive padding.
-- Baseline class kit available in the HTML slide shell:
+- Baseline modern Bootstrap-style class kit available in the HTML slide shell:
+  - container-fluid
+  - row, col, col-auto, col-1 through col-12
+  - g-0 through g-5
+  - d-flex, d-grid, flex-column, flex-wrap
+  - align-items-start, align-items-center, align-items-stretch
+  - justify-content-start, justify-content-center, justify-content-between, justify-content-end
+  - h-100, w-100, gap-1 through gap-5, p-0, p-2 through p-5
+  - display-1 through display-6, lead, small, fw-semibold, fw-bold, text-uppercase, text-muted
+  - card, card-body, card-title, card-subtitle, card-text
+  - badge, rounded-pill, rounded-4, border-0, border-top, border-start
+  - list-group, list-group-item
+  - icon-badge
+  - Bootstrap Icons placeholders such as i.bi.bi-shield-check, i.bi.bi-graph-up-arrow, i.bi.bi-kanban, i.bi.bi-calendar3, i.bi.bi-people, i.bi.bi-check2-circle
+- Legacy Barq helper classes remain available:
   - cover-shell, cover-grid, cover-stack, cover-aside
   - slide-shell, slide-head, slide-grid, slide-main, slide-side
   - eyebrow, display-title, section-title, lede, body-copy, muted-copy, rule
@@ -142,7 +157,7 @@ HTML SLIDE MODE — required for bespoke decks and the default for new decks:
   - steps-flow, step-item, step-num, step-title, step-desc
   - timeline-list, timeline-row, timeline-date
   - compare-grid, compare-col
-- Prefer these shell/grid classes over ad-hoc browser layout wrappers so the exported PPTX keeps strong framing, denser content, and cleaner hierarchy.
+- Prefer Bootstrap rows, columns, cards, list groups, badges, and icon-badges over ad-hoc browser layout wrappers so the exported PPTX keeps strong framing, denser content, and cleaner hierarchy.
 
 TYPE "chart"  → full-slide native PowerPoint chart
   "chart_type": "column" | "bar" | "line" | "pie" | "doughnut" | "area"
@@ -346,7 +361,7 @@ func (a *AgentLoop) Run(
 					requiredTool,
 				)
 				if requiredTool == "write_pptx" {
-					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup for every content slide. Do not fall back to structured-only slides."
+					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup for every content slide. Compose slides with Bootstrap-style rows, columns, cards, list groups, badges, and Bootstrap Icons placeholders. Do not fall back to structured-only slides."
 				}
 				if strings.TrimSpace(runtimeProfile.CompatibilityPrompt) != "" {
 					nudge += " If this model cannot emit native tool calls, respond with ONLY the JSON arguments object for the required tool."

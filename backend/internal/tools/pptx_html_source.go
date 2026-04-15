@@ -18,7 +18,7 @@ var (
 	htmlTagPattern          = regexp.MustCompile(`(?s)<[^>]+>`)
 	htmlWhitespacePattern   = regexp.MustCompile(`\s+`)
 	htmlStructurePattern    = regexp.MustCompile(`(?is)<(div|section|article|header|footer|ul|ol|table|svg|figure|aside|main)\b`)
-	htmlDensityBlockPattern = regexp.MustCompile(`(?is)(stat-card|bullet-item|timeline-row|compare-col|summary-chip|panel|note-card|roadmap-row|metric-band|tag-row|summary-strip|<li\b|<tr\b|<svg\b|<table\b)`)
+	htmlDensityBlockPattern = regexp.MustCompile(`(?is)(stat-card|bullet-item|timeline-row|compare-col|summary-chip|panel|note-card|roadmap-row|metric-band|tag-row|summary-strip|\bcard\b|card-body|card-title|list-group|list-group-item|\brow\b|\bcol-(?:auto|\d{1,2})\b|\bbadge\b|\bbi\b|data-bi=|data-bootstrap-icon=|<li\b|<tr\b|<i\b|<svg\b|<table\b)`)
 	cssDangerPattern        = regexp.MustCompile(`(?is)@import|expression\s*\(|javascript:|behavior\s*:`)
 	cssRuleBodyPattern      = regexp.MustCompile(`\{([^{}]+)\}`)
 	cssPXTokenPattern       = regexp.MustCompile(`(\d+(?:\.\d+)?)px`)
@@ -133,9 +133,16 @@ func htmlCoverContentReady(raw string) bool {
 		strings.Contains(lower, "section-title")
 	hasSupport := strings.Contains(lower, "<p") ||
 		strings.Contains(lower, "lede") ||
+		strings.Contains(lower, "lead") ||
 		strings.Contains(lower, "tag") ||
 		strings.Contains(lower, "panel") ||
+		strings.Contains(lower, "card") ||
+		strings.Contains(lower, "badge") ||
 		strings.Contains(lower, "summary-chip") ||
+		strings.Contains(lower, `class="bi`) ||
+		strings.Contains(lower, `class='bi`) ||
+		strings.Contains(lower, "data-bi=") ||
+		strings.Contains(lower, "data-bootstrap-icon=") ||
 		strings.Contains(lower, "<svg")
 	return hasHeading && hasSupport
 }
@@ -199,7 +206,11 @@ func htmlCoverNeedsFallback(raw string) bool {
 	lower := strings.ToLower(sanitizeHTMLMarkup(raw))
 	if strings.Contains(lower, "cover-grid") ||
 		strings.Contains(lower, "cover-stack") ||
-		strings.Contains(lower, "cover-aside") {
+		strings.Contains(lower, "cover-aside") ||
+		strings.Contains(lower, "container-fluid") ||
+		strings.Contains(lower, "list-group") ||
+		strings.Contains(lower, "card") ||
+		strings.Contains(lower, "row g-") {
 		return false
 	}
 	signals := 0
@@ -643,6 +654,88 @@ func pptxHTMLGuardrailCSS() string {
 .barq-pptx-slide .summary-strip {
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr)) !important;
 }
+.barq-pptx-slide .container-fluid {
+  display: grid !important;
+  align-content: stretch !important;
+  min-height: 100% !important;
+}
+.barq-pptx-slide .container-fluid > .row:last-child,
+.barq-pptx-slide .slide-root > .row:last-child,
+.barq-pptx-slide .slide-shell > .row:last-child,
+.barq-pptx-slide .content-shell > .row:last-child {
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+  min-height: 430px !important;
+}
+.barq-pptx-slide .row {
+  align-items: stretch !important;
+}
+.barq-pptx-slide .row > [class*="col"] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.barq-pptx-slide .card,
+.barq-pptx-slide .list-group {
+  flex: 1 1 auto !important;
+}
+.barq-pptx-slide .card {
+  min-height: 168px !important;
+  border-radius: 16px !important;
+}
+.barq-pptx-slide .card-body {
+  padding: 18px 20px !important;
+  gap: 10px !important;
+}
+.barq-pptx-slide .card-title {
+  font-size: 26px !important;
+  line-height: 1.14 !important;
+}
+.barq-pptx-slide .card-subtitle {
+  font-size: 15px !important;
+}
+.barq-pptx-slide .card-text {
+  font-size: 20px !important;
+  line-height: 1.36 !important;
+}
+.barq-pptx-slide .list-group {
+  display: grid !important;
+  grid-auto-rows: minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+.barq-pptx-slide .list-group-item {
+  display: grid !important;
+  align-content: center !important;
+  min-height: 72px !important;
+  padding: 12px 15px !important;
+  font-size: 20px !important;
+  line-height: 1.34 !important;
+}
+.barq-pptx-slide .badge {
+  min-height: 30px !important;
+  padding: 0 12px !important;
+}
+.barq-pptx-slide .icon-badge {
+  width: 58px !important;
+  height: 58px !important;
+  flex-basis: 58px !important;
+  border-radius: 16px !important;
+}
+.barq-pptx-slide .icon-badge .bi {
+  width: 32px !important;
+  height: 32px !important;
+}
+.barq-pptx-cover .container-fluid {
+  display: grid !important;
+  align-content: stretch !important;
+  min-height: 100% !important;
+}
+.barq-pptx-cover .row > [class*="col"] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.barq-pptx-cover .card {
+  min-height: 100% !important;
+}
 .barq-pptx-deck[data-density="balanced"] .barq-pptx-slide .slide-root,
 .barq-pptx-deck[data-density="compact"] .barq-pptx-slide .slide-root,
 .barq-pptx-deck[data-density="balanced"] .barq-pptx-slide .slide-shell,
@@ -677,7 +770,12 @@ func wrapHTMLSlideShell(raw string, cover bool) string {
 	classes := "slide-shell slide content-shell"
 	if cover {
 		classes = "cover-shell slide"
-		if !strings.Contains(lower, "cover-grid") && !strings.Contains(lower, "cover-stack") {
+		if !strings.Contains(lower, "cover-grid") &&
+			!strings.Contains(lower, "cover-stack") &&
+			!strings.Contains(lower, "container-fluid") &&
+			!strings.Contains(lower, "row") &&
+			!strings.Contains(lower, "card") &&
+			!strings.Contains(lower, "list-group") {
 			classes += " cover-shell--compose"
 		}
 	}
@@ -799,7 +897,7 @@ func clampLineHeightValue(raw string, max float64) string {
 func normalizeFontFamilyValue(value string) string {
 	lower := strings.ToLower(value)
 	if strings.Contains(lower, "sans-serif") {
-		return `"Aptos", "Helvetica Neue", Arial, sans-serif`
+		return `"Helvetica Neue", Arial, sans-serif`
 	}
 	serifHints := []string{"georgia", "times", "palatino", "garamond"}
 	for _, hint := range serifHints {
@@ -816,7 +914,7 @@ func normalizeFontFamilyValue(value string) string {
 	}
 	for _, hint := range sansHints {
 		if strings.Contains(lower, hint) {
-			return `"Aptos", "Helvetica Neue", Arial, sans-serif`
+			return `"Helvetica Neue", Arial, sans-serif`
 		}
 	}
 	return value
@@ -837,7 +935,7 @@ func pptxHTMLBaseCSS(pal pptxPalette) string {
   --shadow: 0 18px 42px rgba(15,23,42,0.16);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: #0b1020; color: var(--text); font-family: "Aptos", "Helvetica Neue", Arial, sans-serif; }
+html, body { margin: 0; padding: 0; background: #0b1020; color: var(--text); font-family: "Helvetica Neue", Arial, sans-serif; }
 body { padding: 24px; }
 .barq-pptx-deck { display: flex; flex-direction: column; gap: 28px; align-items: center; }
 .barq-pptx-slide {
@@ -906,7 +1004,13 @@ body { padding: 24px; }
   gap: 14px;
   align-content: start;
 }
-.barq-pptx-slide h1, .barq-pptx-slide h2, .barq-pptx-slide h3, .barq-pptx-slide p { margin: 0; }
+.barq-pptx-slide h1, .barq-pptx-slide h2, .barq-pptx-slide h3, .barq-pptx-slide h4, .barq-pptx-slide h5, .barq-pptx-slide h6, .barq-pptx-slide p {
+  margin: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+.barq-pptx-slide, .barq-pptx-slide button, .barq-pptx-slide input, .barq-pptx-slide table {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
 .barq-pptx-slide ul, .barq-pptx-slide ol { margin: 0; padding: 0; list-style: none; }
 .barq-pptx-canvas > .cover-shell, .barq-pptx-canvas > .slide-shell, .barq-pptx-canvas > .content-shell { min-height: 100%; }
 .eyebrow { font-size: 18px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
@@ -1004,6 +1108,225 @@ body { padding: 24px; }
 table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.98); color: #0f172a; }
 thead th { background: rgba(15,23,42,0.08); font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
 th, td { border: 1px solid rgba(15,23,42,0.10); padding: 10px 12px; text-align: left; vertical-align: top; font-size: 17px; line-height: 1.35; }
+.container,
+.container-fluid {
+  width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+  padding-right: 0;
+  padding-left: 0;
+}
+.row {
+  --bs-gutter-x: 16px;
+  --bs-gutter-y: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: calc(-1 * var(--bs-gutter-y));
+  margin-right: calc(-0.5 * var(--bs-gutter-x));
+  margin-left: calc(-0.5 * var(--bs-gutter-x));
+}
+.row > * {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  padding-right: calc(var(--bs-gutter-x) * 0.5);
+  padding-left: calc(var(--bs-gutter-x) * 0.5);
+  margin-top: var(--bs-gutter-y);
+  min-width: 0;
+}
+.g-0, .gx-0 { --bs-gutter-x: 0; }
+.g-0, .gy-0 { --bs-gutter-y: 0; }
+.g-1, .gx-1 { --bs-gutter-x: 8px; }
+.g-1, .gy-1 { --bs-gutter-y: 8px; }
+.g-2, .gx-2 { --bs-gutter-x: 12px; }
+.g-2, .gy-2 { --bs-gutter-y: 12px; }
+.g-3, .gx-3 { --bs-gutter-x: 16px; }
+.g-3, .gy-3 { --bs-gutter-y: 16px; }
+.g-4, .gx-4 { --bs-gutter-x: 22px; }
+.g-4, .gy-4 { --bs-gutter-y: 22px; }
+.g-5, .gx-5 { --bs-gutter-x: 28px; }
+.g-5, .gy-5 { --bs-gutter-y: 28px; }
+.col { flex: 1 0 0%; }
+.col-auto { flex: 0 0 auto; width: auto; }
+.col-1 { flex: 0 0 auto; width: 8.333333%; }
+.col-2 { flex: 0 0 auto; width: 16.666667%; }
+.col-3 { flex: 0 0 auto; width: 25%; }
+.col-4 { flex: 0 0 auto; width: 33.333333%; }
+.col-5 { flex: 0 0 auto; width: 41.666667%; }
+.col-6 { flex: 0 0 auto; width: 50%; }
+.col-7 { flex: 0 0 auto; width: 58.333333%; }
+.col-8 { flex: 0 0 auto; width: 66.666667%; }
+.col-9 { flex: 0 0 auto; width: 75%; }
+.col-10 { flex: 0 0 auto; width: 83.333333%; }
+.col-11 { flex: 0 0 auto; width: 91.666667%; }
+.col-12 { flex: 0 0 auto; width: 100%; }
+.d-flex { display: flex !important; }
+.d-grid { display: grid !important; }
+.d-inline-flex { display: inline-flex !important; }
+.flex-column { flex-direction: column !important; }
+.flex-row { flex-direction: row !important; }
+.flex-wrap { flex-wrap: wrap !important; }
+.align-items-start { align-items: flex-start !important; }
+.align-items-center { align-items: center !important; }
+.align-items-stretch { align-items: stretch !important; }
+.justify-content-start { justify-content: flex-start !important; }
+.justify-content-center { justify-content: center !important; }
+.justify-content-between { justify-content: space-between !important; }
+.justify-content-end { justify-content: flex-end !important; }
+.h-100 { height: 100% !important; }
+.w-100 { width: 100% !important; }
+.min-vh-slide { min-height: 100% !important; }
+.gap-1 { gap: 8px !important; }
+.gap-2 { gap: 12px !important; }
+.gap-3 { gap: 16px !important; }
+.gap-4 { gap: 22px !important; }
+.gap-5 { gap: 28px !important; }
+.p-0 { padding: 0 !important; }
+.p-2 { padding: 12px !important; }
+.p-3 { padding: 18px !important; }
+.p-4 { padding: 24px !important; }
+.p-5 { padding: 32px !important; }
+.m-0 { margin: 0 !important; }
+.mt-auto { margin-top: auto !important; }
+.ms-auto { margin-left: auto !important; }
+.text-start { text-align: left !important; }
+.text-center { text-align: center !important; }
+.text-end { text-align: right !important; }
+.text-uppercase { text-transform: uppercase !important; }
+.text-muted { color: var(--muted) !important; }
+.fw-semibold { font-weight: 700 !important; }
+.fw-bold { font-weight: 800 !important; }
+.small { font-size: 16px !important; line-height: 1.35 !important; }
+.lead { font-size: 28px !important; line-height: 1.28 !important; color: var(--muted); }
+.display-1 { font-size: 76px; line-height: 0.98; font-weight: 850; letter-spacing: -0.055em; }
+.display-2 { font-size: 68px; line-height: 1; font-weight: 850; letter-spacing: -0.052em; }
+.display-3 { font-size: 60px; line-height: 1.02; font-weight: 840; letter-spacing: -0.05em; }
+.display-4 { font-size: 52px; line-height: 1.04; font-weight: 830; letter-spacing: -0.045em; }
+.display-5 { font-size: 44px; line-height: 1.06; font-weight: 820; letter-spacing: -0.04em; }
+.display-6 { font-size: 38px; line-height: 1.08; font-weight: 800; letter-spacing: -0.035em; }
+.card {
+  --bs-card-spacer-y: 22px;
+  --bs-card-spacer-x: 24px;
+  --bs-card-border-radius: 22px;
+  --bs-card-border-color: color-mix(in srgb, var(--border) 78%, transparent);
+  --bs-card-bg: color-mix(in srgb, var(--card) 94%, var(--accent) 6%);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--bs-card-bg);
+  background-clip: border-box;
+  border: 1px solid var(--bs-card-border-color);
+  border-radius: var(--bs-card-border-radius);
+  box-shadow: 0 14px 34px rgba(15,23,42,0.10);
+}
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  opacity: 0.88;
+}
+.card-body {
+  flex: 1 1 auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: var(--bs-card-spacer-y) var(--bs-card-spacer-x);
+  min-width: 0;
+}
+.card-title {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.card-subtitle {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.card-text {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.34;
+  color: var(--muted);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.rounded-pill { border-radius: 999px !important; }
+.rounded-4 { border-radius: 22px !important; }
+.border-0 { border: 0 !important; }
+.border-top { border-top: 5px solid var(--accent) !important; }
+.border-start { border-left: 6px solid var(--accent) !important; }
+.list-group {
+  display: grid;
+  gap: 10px;
+  padding-left: 0;
+  margin-bottom: 0;
+  border-radius: 18px;
+}
+.list-group-item {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 94%, var(--accent) 6%);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-left: 5px solid var(--accent);
+  border-radius: 16px;
+  font-size: 20px;
+  line-height: 1.28;
+}
+.icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  flex: 0 0 62px;
+  border-radius: 20px;
+  color: var(--text);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 28%, transparent), color-mix(in srgb, var(--accent-2) 22%, transparent));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.icon-badge .bi {
+  width: 34px;
+  height: 34px;
+}
+.bi {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  fill: currentColor;
+  flex: 0 0 auto;
+}
 svg { display: block; max-width: 100%; max-height: 100%; }
 `
 }

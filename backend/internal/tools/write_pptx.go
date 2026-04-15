@@ -135,8 +135,8 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"kicker":       map[string]any{"type": "string", "description": "Short cover kicker shown above the title"},
 			"design":       deckDesignSchema,
 			"palette":      paletteSchema,
-			"theme_css":    map[string]any{"type": "string", "description": "Required self-contained CSS for the LLM-authored slide system. Use CSS variables, classes, gradients, SVG styling, and layout rules. No external assets or scripts."},
-			"cover_html":   map[string]any{"type": "string", "description": "Required HTML markup for the cover slide body. No scripts."},
+			"theme_css":    map[string]any{"type": "string", "description": "Required self-contained CSS for the LLM-authored slide system. Prefer the built-in modern Bootstrap-compatible grid/components/utilities and only add subject-specific theme overrides. No external assets or scripts."},
+			"cover_html":   map[string]any{"type": "string", "description": "Required HTML markup for the cover slide body. Compose with Bootstrap-style rows, columns, cards, badges, lists, and Bootstrap Icons placeholders such as <i class=\"bi bi-shield-check\" aria-hidden=\"true\"></i>. No scripts or generated icon SVG."},
 		},
 		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette", "theme_css", "cover_html"},
 	}
@@ -165,7 +165,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 						},
 						"speaker_notes": map[string]any{"type": "string", "description": "Optional speaker notes for this slide"},
 						"design":        slideDesignSchema,
-						"html":          map[string]any{"type": "string", "description": "[html] Required HTML markup for this slide body when creating a new deck. Preferred for unique, non-templated slide compositions. No scripts or external assets."},
+						"html":          map[string]any{"type": "string", "description": "[html] Required HTML markup for this slide body when creating a new deck. Preferred for unique, non-templated slide compositions. Use Bootstrap-compatible rows/columns/cards/list groups/badges and Bootstrap Icons placeholders; do not author generated icon SVG, scripts, or external assets."},
 
 						// bullets
 						"points": map[string]any{
