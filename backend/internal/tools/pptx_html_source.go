@@ -345,9 +345,10 @@ func pptxHTMLGuardrailCSS() string {
 }
 .barq-pptx-cover .cover-density-layout {
   display: grid !important;
-  grid-template-rows: minmax(0, 1fr) auto !important;
-  gap: 18px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.58fr) !important;
+  gap: 30px !important;
   min-height: 100% !important;
+  align-items: stretch !important;
 }
 .barq-pptx-cover .cover-density-authored {
   display: grid !important;
@@ -360,14 +361,26 @@ func pptxHTMLGuardrailCSS() string {
   min-height: 0 !important;
   padding: 0 !important;
 }
+.barq-pptx-cover .cover-density-authored .rule {
+  width: 96px !important;
+  height: 5px !important;
+  margin: 18px 0 22px !important;
+}
 .barq-pptx-cover .cover-density-strip {
   display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  gap: 12px !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-auto-rows: 1fr !important;
+  gap: 14px !important;
   align-items: stretch !important;
+  min-height: 100% !important;
 }
 .barq-pptx-cover .cover-density-strip > .panel-light {
-  min-height: 238px !important;
+  display: grid !important;
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-content: start !important;
+  min-height: 0 !important;
+  padding: 22px 24px !important;
 }
 .barq-pptx-cover .meta-row {
   display: flex !important;
@@ -1115,9 +1128,11 @@ func fallbackCoverChapterCards(manifest pptxPreviewManifest) string {
 		limit = 3
 	}
 	for i := 0; i < limit; i++ {
+		slide := manifest.Slides[i]
 		cards = append(cards, `<div class="panel-light" style="padding:16px 18px;"><div class="eyebrow">`+
-			html.EscapeString(fmt.Sprintf("%02d", i+1))+`</div><p class="body-copy" style="font-size:18px;line-height:1.34;">`+
-			html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.Slides[i].Heading), "Section"))+`</p></div>`)
+			html.EscapeString(fmt.Sprintf("%02d", i+1))+`</div><p class="body-copy" style="font-size:21px;line-height:1.25;font-weight:800;">`+
+			html.EscapeString(firstNonEmpty(strings.TrimSpace(slide.Heading), "Section"))+`</p><p class="muted-copy" style="font-size:17px;line-height:1.38;">`+
+			html.EscapeString(coverSlideSummary(slide))+`</p></div>`)
 	}
 	extraCards := []struct {
 		Label string
@@ -1141,10 +1156,50 @@ func fallbackCoverChapterCards(manifest pptxPreviewManifest) string {
 			break
 		}
 		cards = append(cards, `<div class="panel-light" style="padding:16px 18px;"><div class="eyebrow">`+
-			html.EscapeString(extra.Label)+`</div><p class="body-copy" style="font-size:18px;line-height:1.34;">`+
+			html.EscapeString(extra.Label)+`</div><p class="body-copy" style="font-size:21px;line-height:1.28;font-weight:800;">`+
 			html.EscapeString(extra.Body)+`</p></div>`)
 	}
 	return `<div class="grid-3" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:6px;">` + strings.Join(cards, "") + `</div>`
+}
+
+func coverSlideSummary(slide pptxPreviewSlide) string {
+	switch {
+	case len(slide.Points) > 0:
+		return truncateCoverSummary(slide.Points[0])
+	case len(slide.Cards) > 0:
+		card := slide.Cards[0]
+		return truncateCoverSummary(firstNonEmpty(card.Desc, card.Title))
+	case len(slide.Stats) > 0:
+		stat := slide.Stats[0]
+		return truncateCoverSummary(strings.TrimSpace(stat.Value + " " + stat.Label + " " + stat.Desc))
+	case len(slide.Steps) > 0:
+		return truncateCoverSummary(slide.Steps[0])
+	case len(slide.Timeline) > 0:
+		item := slide.Timeline[0]
+		return truncateCoverSummary(strings.TrimSpace(item.Title + " " + item.Desc))
+	case slide.LeftColumn != nil && len(slide.LeftColumn.Points) > 0:
+		return truncateCoverSummary(slide.LeftColumn.Points[0])
+	case slide.Table != nil && len(slide.Table.Rows) > 0 && len(slide.Table.Rows[0]) > 0:
+		return truncateCoverSummary(strings.Join(slide.Table.Rows[0], " "))
+	default:
+		text := htmlVisibleText(slide.HTML)
+		if heading := strings.TrimSpace(slide.Heading); heading != "" {
+			text = strings.TrimSpace(strings.Replace(text, heading, "", 1))
+		}
+		return truncateCoverSummary(firstNonEmpty(text, slide.Purpose, "A focused section in the presentation narrative."))
+	}
+}
+
+func truncateCoverSummary(value string) string {
+	value = htmlWhitespacePattern.ReplaceAllString(strings.TrimSpace(value), " ")
+	if len(value) <= 118 {
+		return value
+	}
+	cut := value[:118]
+	if idx := strings.LastIndex(cut, " "); idx >= 72 {
+		cut = cut[:idx]
+	}
+	return strings.TrimSpace(cut) + "..."
 }
 
 func fallbackHTMLSlideMarkup(slide pptxPreviewSlide) string {
