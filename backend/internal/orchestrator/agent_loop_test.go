@@ -473,6 +473,26 @@ func TestSegmentedPresentationWorkflow_RoutesSingularSlideRequests(t *testing.T)
 	}
 }
 
+func TestSegmentedPresentationHTML_DoesNotExposeDesignMetadata(t *testing.T) {
+	task := &domain.Task{Title: "3 slides about India"}
+	plan := fallbackSegmentedPPTXPlan(task, 2, 3)
+	normalizeSegmentedPPTXPlan(&plan, task, 2)
+	htmlParts := []string{plan.Deck.CoverHTML}
+	for _, slide := range plannedSegmentedSlides(plan) {
+		htmlParts = append(htmlParts, slide.HTML)
+	}
+
+	for _, raw := range htmlParts {
+		visible := strings.ToLower(segmentedHTMLTagPattern.ReplaceAllString(raw, " "))
+		forbidden := []string{"audience:", "theme:", "visual", "iconography", "layout", "motif", "template", "palette", "deck.", "cover style"}
+		for _, term := range forbidden {
+			if strings.Contains(visible, term) {
+				t.Fatalf("visible presentation text leaked design metadata %q in: %s", term, visible)
+			}
+		}
+	}
+}
+
 type testWriter struct{ t *testing.T }
 
 func (w testWriter) Write(p []byte) (int, error) {
