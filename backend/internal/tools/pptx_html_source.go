@@ -186,8 +186,11 @@ func preferredHTMLCover(manifest pptxPreviewManifest) string {
 	if cover == "" {
 		return fallbackHTMLCover(manifest)
 	}
-	if htmlCoverNeedsFallback(cover) {
+	if !htmlCoverContentReady(cover) {
 		return fallbackHTMLCover(manifest)
+	}
+	if htmlCoverNeedsFallback(cover) {
+		return densifyHTMLCover(manifest, cover)
 	}
 	return cover
 }
@@ -339,6 +342,32 @@ func pptxHTMLGuardrailCSS() string {
 }
 .barq-pptx-cover .cover-shell--compose .grid-3 > .panel-light {
   min-height: 142px !important;
+}
+.barq-pptx-cover .cover-density-layout {
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  gap: 18px !important;
+  min-height: 100% !important;
+}
+.barq-pptx-cover .cover-density-authored {
+  display: grid !important;
+  align-content: center !important;
+  min-height: 0 !important;
+}
+.barq-pptx-cover .cover-density-authored > * {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+.barq-pptx-cover .cover-density-strip {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+}
+.barq-pptx-cover .cover-density-strip > .panel-light {
+  min-height: 238px !important;
 }
 .barq-pptx-cover .meta-row {
   display: flex !important;
@@ -640,6 +669,19 @@ func wrapHTMLSlideShell(raw string, cover bool) string {
 		}
 	}
 	return `<div class="` + classes + `">` + raw + `</div>`
+}
+
+func densifyHTMLCover(manifest pptxPreviewManifest, cover string) string {
+	strip := fallbackCoverChapterCards(manifest)
+	if strip == "" {
+		strip = `<div class="grid-3" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+  <div class="panel-light"><div class="eyebrow">Subject</div><p class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Subject), manifest.Title, "Presentation")) + `</p></div>
+  <div class="panel-light"><div class="eyebrow">Audience</div><p class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.Audience), "Decision-makers")) + `</p></div>
+  <div class="panel-light"><div class="eyebrow">Need</div><p class="body-copy">` + html.EscapeString(firstNonEmpty(strings.TrimSpace(manifest.DeckPlan.DominantNeed), "Clear framing")) + `</p></div>
+</div>`
+	}
+	strip = strings.Replace(strip, `class="grid-3"`, `class="cover-density-strip"`, 1)
+	return `<div class="cover-density-layout cover-stack"><div class="cover-density-authored">` + cover + `</div>` + strip + `</div>`
 }
 
 func normalizeHTMLLayoutStyles(raw string) string {
