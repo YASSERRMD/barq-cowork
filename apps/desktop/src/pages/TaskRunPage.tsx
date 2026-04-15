@@ -736,6 +736,209 @@ function JsonPreview({ downloadUrl }: { downloadUrl: string }) {
   );
 }
 
+// ── Live presentation draft preview ──────────────────────────────
+
+interface PresentationSlideDraft {
+  index: number;
+  total: number;
+  kind: string;
+  heading: string;
+  html: string;
+  theme_css?: string;
+  palette?: Record<string, string>;
+}
+
+function parsePresentationSlideDrafts(events: TaskEvent[]): PresentationSlideDraft[] {
+  const slides: PresentationSlideDraft[] = [];
+  for (const ev of events) {
+    if (ev.type !== "presentation.slide") continue;
+    try {
+      const parsed = JSON.parse(ev.payload || "{}") as PresentationSlideDraft;
+      if (!parsed.index || !parsed.total) continue;
+      slides.push({
+        index: parsed.index,
+        total: parsed.total,
+        kind: parsed.kind || "slide",
+        heading: parsed.heading || `Slide ${parsed.index}`,
+        html: parsed.html || "",
+        theme_css: parsed.theme_css || "",
+        palette: parsed.palette || {},
+      });
+    } catch {
+      // Ignore malformed draft events.
+    }
+  }
+  const byIndex = new Map<number, PresentationSlideDraft>();
+  for (const slide of slides) byIndex.set(slide.index, slide);
+  return [...byIndex.values()].sort((a, b) => a.index - b.index);
+}
+
+function buildPresentationDraftSrcDoc(slide: PresentationSlideDraft): string {
+  const p = slide.palette || {};
+  const cssVars = `
+    --bg:#${p.background || "F6F8FB"};
+    --card:#${p.card || "FFFFFF"};
+    --accent:#${p.accent || "0EA5E9"};
+    --accent-2:#${p.accent2 || "14B8A6"};
+    --text:#${p.text || "0F172A"};
+    --muted:#${p.muted || "475569"};
+    --border:#${p.border || "CBD5E1"};
+  `;
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+:root{${cssVars}}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:var(--bg);color:var(--text);font-family:"Helvetica Neue",Arial,sans-serif}
+body{overflow:hidden}
+h1,h2,h3,h4,p{margin:0}
+.barq-live-slide{width:1280px;height:720px;overflow:hidden;background:var(--bg);transform-origin:top left;transform:scale(min(calc(100vw / 1280), calc(100vh / 720)))}
+.cover-shell,.slide-shell,.content-shell{width:100%;height:100%;padding:42px 50px;display:grid;gap:16px;align-content:start}
+.container-fluid{width:100%;height:100%}
+.row{display:flex;flex-wrap:wrap;gap:16px}
+.row>*{min-width:0}
+.col{flex:1 0 0}.col-3{width:25%}.col-4{width:33.333%}.col-5{width:41.666%}.col-6{width:50%}.col-7{width:58.333%}.col-8{width:66.666%}.col-12{width:100%}
+.d-grid{display:grid!important}.d-flex{display:flex!important}.flex-column{flex-direction:column!important}.align-items-stretch{align-items:stretch!important}.h-100{height:100%!important}.w-100{width:100%!important}
+.gap-1{gap:8px!important}.gap-2{gap:12px!important}.gap-3{gap:16px!important}.gap-4{gap:22px!important}.gap-5{gap:28px!important}
+.display-title,.display-3{font-size:58px;line-height:1;font-weight:850;letter-spacing:-.05em}
+.display-4{font-size:48px;line-height:1.04;font-weight:830;letter-spacing:-.045em}
+.display-5,.section-title{font-size:40px;line-height:1.08;font-weight:820;letter-spacing:-.035em}
+.lead,.lede{font-size:24px;line-height:1.34;color:var(--muted)}
+.eyebrow{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.card,.fun-card,.panel,.panel-light{background:var(--card);border:1px solid var(--border);border-radius:20px;min-height:100%;box-shadow:0 14px 34px rgba(15,23,42,.10)}
+.card-body,.fun-card{display:grid;gap:12px;padding:22px}
+.card-title,.fun-card h3{font-size:25px;line-height:1.15;font-weight:800}
+.card-text,.fun-card p,.body-copy,.list-group-item{font-size:20px;line-height:1.36;color:var(--muted)}
+.badge,.tag{display:inline-flex;width:max-content;align-items:center;justify-content:center;border-radius:999px;padding:8px 13px;font-size:13px;line-height:1;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:color-mix(in srgb,var(--accent) 18%,transparent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);color:var(--text)}
+.list-group,.bullet-list{display:grid;gap:10px;list-style:none;margin:0;padding:0}
+.list-group-item,.bullet-item{background:var(--card);border:1px solid var(--border);border-left:5px solid var(--accent);border-radius:15px;padding:14px 16px}
+.icon-badge,.icon-circle{display:inline-flex;align-items:center;justify-content:center;width:58px;height:58px;border-radius:16px;background:color-mix(in srgb,var(--accent) 16%,white);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,white)}
+.bi{display:inline-block;width:32px;height:32px;fill:currentColor}
+.table{border-collapse:separate;border-spacing:0 10px}.table th{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:left}.table td{font-size:19px;line-height:1.3;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:14px 16px}.table td:first-child{border-left:5px solid var(--accent);border-radius:14px 0 0 14px}.table td:last-child{border-right:1px solid var(--border);border-radius:0 14px 14px 0}
+${slide.theme_css || ""}
+.barq-live-slide :is(.lead,.lede,p,li,.card-text,.body-copy,.list-group-item,.bullet-item,td){font-size:20px!important;line-height:1.34!important}
+.barq-live-slide :is(.display-title,.display-3,h1){font-size:54px!important;line-height:1.04!important}
+.barq-live-slide :is(.display-4,.section-title,h2){font-size:42px!important;line-height:1.08!important}
+.barq-live-slide :is(.card-title,h3){font-size:25px!important;line-height:1.15!important}
+</style>
+</head>
+<body><div class="barq-live-slide">${slide.html || `<div class="slide-shell"><h2 class="display-4">${slide.heading}</h2><p class="lead">Building this slide content…</p></div>`}</div></body>
+</html>`;
+}
+
+function PresentationLivePreview({ drafts, isActive }: { drafts: PresentationSlideDraft[]; isActive: boolean }) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const visibleCount = drafts.length === 0 ? 0 : Math.max(1, Math.min(revealedCount || 1, drafts.length));
+  const visibleDrafts = drafts.slice(0, visibleCount);
+  const safeSelectedIndex = Math.min(selectedIndex, Math.max(0, visibleDrafts.length - 1));
+  const selected = visibleDrafts[safeSelectedIndex];
+
+  useEffect(() => {
+    if (drafts.length === 0) {
+      setRevealedCount(0);
+      setSelectedIndex(0);
+      return;
+    }
+    setRevealedCount((current) => {
+      if (!isActive) return drafts.length;
+      if (current <= 0) return 1;
+      return Math.min(current, drafts.length);
+    });
+  }, [drafts.length, isActive]);
+
+  useEffect(() => {
+    if (!isActive || drafts.length === 0 || revealedCount >= drafts.length) return;
+    const id = window.setTimeout(() => {
+      setRevealedCount((current) => Math.min(drafts.length, Math.max(1, current) + 1));
+    }, 750);
+    return () => window.clearTimeout(id);
+  }, [isActive, drafts.length, revealedCount]);
+
+  useEffect(() => {
+    if (isActive && revealedCount > 0) setSelectedIndex(revealedCount - 1);
+  }, [isActive, revealedCount]);
+
+  useEffect(() => {
+    if (!isActive || visibleDrafts.length <= 1 || revealedCount < drafts.length) return;
+    const id = window.setInterval(() => {
+      setSelectedIndex((current) => (current + 1) % visibleDrafts.length);
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, [isActive, drafts.length, revealedCount, visibleDrafts.length]);
+
+  if (!selected) return null;
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: "var(--surface-1)" }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "10px 16px", borderBottom: "1px solid var(--border)",
+        background: "var(--surface-2)", flexShrink: 0,
+      }}>
+        <span className={isActive ? "badge-yellow" : "badge-green"} style={{ fontSize: 10 }}>
+          {isActive ? "Live slide draft" : "Slide draft"}
+        </span>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          Slide {selected.index} of {selected.total}
+        </span>
+        {isActive && visibleDrafts.length < selected.total && (
+          <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+            Generated {visibleDrafts.length} / {selected.total}
+          </span>
+        )}
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600,
+          color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {selected.heading}
+        </span>
+        {isActive && <Loader size={13} className="animate-spin" style={{ color: "var(--yellow)" }} />}
+      </div>
+      <div style={{ display: "flex", gap: 6, padding: "8px 16px", borderBottom: "1px solid var(--border)", overflowX: "auto", flexShrink: 0 }}>
+        {visibleDrafts.map((slide, idx) => (
+          <button
+            key={`${slide.index}-${idx}`}
+            type="button"
+            onClick={() => setSelectedIndex(idx)}
+            style={{
+              border: `1px solid ${idx === safeSelectedIndex ? "var(--accent)" : "var(--border)"}`,
+              background: idx === safeSelectedIndex ? "var(--accent-dim)" : "var(--surface-2)",
+              color: idx === safeSelectedIndex ? "var(--accent)" : "var(--text-muted)",
+              borderRadius: 999,
+              padding: "4px 9px",
+              fontSize: 11,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {slide.index}
+          </button>
+        ))}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", placeItems: "center", padding: 18, background: "#0b1020" }}>
+        <div style={{
+          width: "min(100%, calc((100vh - 190px) * 1.7778))",
+          aspectRatio: "16 / 9",
+          background: "#fff",
+          borderRadius: 12,
+          overflow: "hidden",
+          boxShadow: "0 18px 60px rgba(0,0,0,.34)",
+        }}>
+          <iframe
+            title={`Draft slide ${selected.index}`}
+            srcDoc={buildPresentationDraftSrcDoc(selected)}
+            sandbox=""
+            style={{ width: "100%", height: "100%", border: 0 }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Content preview panel ─────────────────────────────────────────
 
 function ContentPreviewPanel({
@@ -1037,6 +1240,7 @@ export function TaskRunPage() {
   const completedSteps = plan?.steps.filter((s) => s.status === "completed").length ?? 0;
   const totalSteps = plan?.steps.length ?? 0;
   const progress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+  const presentationDrafts = parsePresentationSlideDrafts(events);
 
   if (taskLoading) return (
     <div style={{ padding: 24 }}>
@@ -1197,6 +1401,8 @@ export function TaskRunPage() {
               downloadsEnabled={!isActive}
               onClose={() => setPreviewArtifact(null)}
             />
+          ) : presentationDrafts.length > 0 ? (
+            <PresentationLivePreview drafts={presentationDrafts} isActive={isActive} />
           ) : (
             <ChatPanel
               events={events}

@@ -171,6 +171,7 @@ SLIDE QUALITY BAR
 - Use timelines only with actual milestones.
 - Use compare / table only when the comparison matters.
 - Use semantic icon names only. Never use emoji.
+- Do not use emoji anywhere in visible slide copy, headings, bullets, badges, or lists. Use Bootstrap Icons placeholders for visual emphasis.
 - Never expose planning metadata, internal labels, prompt scaffolding, or audit notes on the user-visible slides.
 - Avoid visible "Slide X of Y" counters unless the user explicitly asks for them.
 - Visible copy must come from the user-facing slide content only:

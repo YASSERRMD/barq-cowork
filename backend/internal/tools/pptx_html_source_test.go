@@ -73,7 +73,7 @@ func TestRenderPPTXPreviewManifest_PrefersEmbeddedHTMLDocument(t *testing.T) {
 	}
 }
 
-func TestValidatePlannedHTMLDeckSource_RejectsStructuredFallback(t *testing.T) {
+func TestValidatePlannedHTMLDeckSource_AcceptsStructuredFallbackContent(t *testing.T) {
 	planned := planPPTXPresentation(
 		"Operational rollout",
 		"",
@@ -108,8 +108,20 @@ func TestValidatePlannedHTMLDeckSource_RejectsStructuredFallback(t *testing.T) {
 		},
 	)
 
-	if err := validatePlannedHTMLDeckSource(planned); err == nil {
-		t.Fatalf("expected structured fallback to fail html deck validation")
+	if err := validatePlannedHTMLDeckSource(planned); err != nil {
+		t.Fatalf("expected structured fallback to pass html deck validation: %v", err)
+	}
+}
+
+func TestSanitizeHTMLMarkup_RemovesVisibleEmojiGlyphs(t *testing.T) {
+	got := sanitizeHTMLMarkup(`<div><h2>Kids and AI 🤖</h2><p>Use real Bootstrap icons ✅, not emoji.</p></div>`)
+	for _, blocked := range []string{"🤖", "✅"} {
+		if strings.Contains(got, blocked) {
+			t.Fatalf("expected emoji %q to be stripped, got %s", blocked, got)
+		}
+	}
+	if !strings.Contains(got, "Kids and AI") || !strings.Contains(got, "Bootstrap icons") {
+		t.Fatalf("expected non-emoji text to remain, got %s", got)
 	}
 }
 

@@ -21,19 +21,20 @@ import (
 // ─────────────────────────────────────────────
 
 type chatRequest struct {
-	Model       string          `json:"model"`
-	Messages    []wireMessage   `json:"messages"`
-	Temperature float64         `json:"temperature,omitempty"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Stream      bool            `json:"stream"`
-	Tools       []wireTool      `json:"tools,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []wireMessage `json:"messages"`
+	Temperature float64       `json:"temperature,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Stream      bool          `json:"stream"`
+	Tools       []wireTool    `json:"tools,omitempty"`
+	ToolChoice  any           `json:"tool_choice,omitempty"`
 }
 
 type wireMessage struct {
-	Role       string          `json:"role"`
-	Content    string          `json:"content"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
-	ToolCalls  []wireToolCall  `json:"tool_calls,omitempty"`
+	Role       string         `json:"role"`
+	Content    string         `json:"content"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
 }
 
 type wireToolCall struct {
@@ -373,7 +374,7 @@ func buildRequest(cfg provider.ProviderConfig, req provider.ChatCompletionReques
 		model = cfg.Model
 	}
 
-	return chatRequest{
+	out := chatRequest{
 		Model:       model,
 		Messages:    msgs,
 		Temperature: req.Temperature,
@@ -381,6 +382,15 @@ func buildRequest(cfg provider.ProviderConfig, req provider.ChatCompletionReques
 		Stream:      req.Stream,
 		Tools:       tools,
 	}
+	if req.ForceToolName != "" && len(tools) > 0 {
+		out.ToolChoice = map[string]any{
+			"type": "function",
+			"function": map[string]string{
+				"name": req.ForceToolName,
+			},
+		}
+	}
+	return out
 }
 
 // mapHTTPError converts a non-200 response to a descriptive error.

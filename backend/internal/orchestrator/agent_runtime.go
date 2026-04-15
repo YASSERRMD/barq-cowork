@@ -33,7 +33,7 @@ func buildAgentRuntimeProfile(cfg provider.ProviderConfig, task *domain.Task) ag
 	}
 
 	if requiredTool == "write_pptx" {
-		profile.MaxTokens = 8192
+		profile.MaxTokens = 16384
 		profile.Temperature = 0.7
 	}
 

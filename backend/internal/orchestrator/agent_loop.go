@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"path/filepath"
 	"regexp"
@@ -33,6 +34,7 @@ RULES:
 2. ALWAYS produce at least one output file. Never finish without writing a file.
 3. Stop after the file is written. Max 15 tool calls total.
 4. Use ask_user when you need clarification, preference, or feedback mid-task. The user will respond in real-time via the UI. Keep questions short and specific.
+5. For output tasks, plan silently inside the tool arguments. Do not send a prose-only planning response before the required output tool call.
 
 INTERACTION: Only use ask_user when you genuinely need clarification — do NOT ask questions just to be polite. If the task is clear enough, start working immediately. After completing the task, tell the user what you did and that you are available if they want changes — do NOT end the conversation abruptly. The user can ask follow-up questions at any time.
 
@@ -64,6 +66,8 @@ PLANNING ORDER — DO THIS BEFORE WRITING THE DECK:
 15a. On 3-5 slide decks and projector-first decks, prefer larger reading sizes and fewer larger panels: 20-24px body copy, 40-56px section titles, and 2-column or 2x2 compositions instead of 4-up micro-card layouts.
 16. Avoid empty hero frames, giant icon boxes, oversized rounded cards, and slides that leave large parts of the canvas unused.
 17. Do not bottom-anchor the full cover composition; the cover should occupy the canvas intentionally instead of leaving a large empty upper half.
+18. Never use emoji in visible slide headings, bullets, badges, or lists. Use Bootstrap Icons placeholders such as <i class="bi bi-stars" aria-hidden="true"></i> instead.
+19. For 8+ slide decks, keep each slide complete but concise: one strong heading, one lead sentence, and 2-4 dense cards/list items. Do not write long paragraphs that exceed the token budget and prevent the tool call.
 
 TYPE REFERENCE — choose the right type per slide:
 
@@ -298,14 +302,24 @@ func (a *AgentLoop) Run(
 		}
 
 		a.logger.Info("agent loop iteration", "task_id", task.ID, "iter", iter, "messages", len(messages))
+		requiredTool := requiredOutputTool(task)
+		activeToolDefs := toolDefs
+		forceToolName := ""
+		if requiredTool != "" && result.Completed == 0 {
+			if requiredDefs := filterToolDefinitions(toolDefs, requiredTool); len(requiredDefs) > 0 {
+				activeToolDefs = requiredDefs
+				forceToolName = requiredTool
+			}
+		}
 
 		req := provider.ChatCompletionRequest{
-			Model:       a.cfg.Model,
-			Stream:      true,
-			MaxTokens:   runtimeProfile.MaxTokens,
-			Temperature: runtimeProfile.Temperature,
-			Messages:    messages,
-			Tools:       toolDefs,
+			Model:         a.cfg.Model,
+			Stream:        true,
+			MaxTokens:     runtimeProfile.MaxTokens,
+			Temperature:   runtimeProfile.Temperature,
+			Messages:      messages,
+			Tools:         activeToolDefs,
+			ForceToolName: forceToolName,
 		}
 
 		ch, err := provider.ChatWithRetry(ctx, a.prov, a.cfg, req, runtimeProfile.Retry, a.logger)
@@ -335,19 +349,18 @@ func (a *AgentLoop) Run(
 			"content_snippet", truncate(content, 200),
 		)
 
-		// Emit agent message event if there is meaningful text content
-		if len(content) > 5 {
-			a.emitAgentEvent(ctx, task.ID, domain.EventTypeAgentMessage, map[string]any{
-				"text": content,
-			})
-		}
-
-		requiredTool := requiredOutputTool(task)
 		if len(toolCalls) == 0 && runtimeProfile.AllowRawJSONToolArgs && result.Completed == 0 {
 			if recovered, ok := recoverToolCallFromContent(content, requiredTool); ok {
 				toolCalls = []provider.ToolCall{recovered}
 				a.logger.Info("agent loop: recovered direct tool args from assistant content", "task_id", task.ID, "iter", iter, "tool", requiredTool)
 			}
+		}
+
+		// Emit meaningful assistant text only when it is not blocking a required output tool.
+		if len(content) > 5 && !(requiredTool != "" && result.Completed == 0 && len(toolCalls) == 0) {
+			a.emitAgentEvent(ctx, task.ID, domain.EventTypeAgentMessage, map[string]any{
+				"text": content,
+			})
 		}
 
 		// No tool calls → agent decided it is done
@@ -361,7 +374,7 @@ func (a *AgentLoop) Run(
 					requiredTool,
 				)
 				if requiredTool == "write_pptx" {
-					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup for every content slide. Compose slides with Bootstrap-style rows, columns, cards, list groups, badges, and Bootstrap Icons placeholders. Do not fall back to structured-only slides."
+					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup or structured content for every content slide. Compose slides with Bootstrap-style rows, columns, cards, list groups, badges, and Bootstrap Icons placeholders. For decks with 8+ total slides, keep each slide concise and complete rather than writing long prose. Do not fall back to prose planning."
 				}
 				if strings.TrimSpace(runtimeProfile.CompatibilityPrompt) != "" {
 					nudge += " If this model cannot emit native tool calls, respond with ONLY the JSON arguments object for the required tool."
@@ -400,6 +413,7 @@ func (a *AgentLoop) Run(
 				for _, seededStep := range seeded {
 					_ = a.plans.CreateStep(ctx, seededStep)
 				}
+				a.emitPresentationSlideDrafts(ctx, task.ID, tc)
 				step = seeded[len(seeded)-1]
 				stepOrder = step.Order
 			} else {
@@ -443,6 +457,259 @@ func (a *AgentLoop) Run(
 	}
 
 	return result
+}
+
+func (a *AgentLoop) emitPresentationSlideDrafts(ctx context.Context, taskID string, tc provider.ToolCall) {
+	if tc.Name != "write_pptx" {
+		return
+	}
+	var payload presentationDraftToolPayload
+	if err := json.Unmarshal([]byte(tc.Arguments), &payload); err != nil {
+		return
+	}
+	total := len(payload.Slides) + 1
+	if strings.TrimSpace(payload.Deck.CoverHTML) != "" {
+		a.emitAgentEvent(ctx, taskID, domain.EventTypePresentationSlide, map[string]any{
+			"index":     1,
+			"total":     total,
+			"kind":      "cover",
+			"heading":   firstNonEmptyString(strings.TrimSpace(payload.Title), "Cover"),
+			"html":      stripPresentationDraftEmoji(payload.Deck.CoverHTML),
+			"theme_css": payload.Deck.ThemeCSS,
+			"palette":   payload.Deck.Palette,
+		})
+	}
+	for i, slide := range payload.Slides {
+		slideHTML := presentationDraftSlideHTML(slide)
+		if strings.TrimSpace(slideHTML) == "" && strings.TrimSpace(slide.Heading) == "" {
+			continue
+		}
+		a.emitAgentEvent(ctx, taskID, domain.EventTypePresentationSlide, map[string]any{
+			"index":     i + 2,
+			"total":     total,
+			"kind":      "slide",
+			"heading":   firstNonEmptyString(strings.TrimSpace(slide.Heading), fmt.Sprintf("Slide %d", i+2)),
+			"html":      slideHTML,
+			"theme_css": payload.Deck.ThemeCSS,
+			"palette":   payload.Deck.Palette,
+		})
+	}
+}
+
+type presentationDraftToolPayload struct {
+	Title string `json:"title"`
+	Deck  struct {
+		ThemeCSS  string            `json:"theme_css"`
+		CoverHTML string            `json:"cover_html"`
+		Palette   map[string]string `json:"palette"`
+	} `json:"deck"`
+	Slides []presentationDraftSlide `json:"slides"`
+}
+
+type presentationDraftSlide struct {
+	Heading     string                          `json:"heading"`
+	Type        string                          `json:"type"`
+	Layout      string                          `json:"layout"`
+	HTML        string                          `json:"html"`
+	Points      []string                        `json:"points"`
+	Stats       []presentationDraftStat         `json:"stats"`
+	Steps       []string                        `json:"steps"`
+	Cards       []presentationDraftCard         `json:"cards"`
+	Timeline    []presentationDraftTimelineItem `json:"timeline"`
+	LeftColumn  *presentationDraftCompareColumn `json:"left_column"`
+	RightColumn *presentationDraftCompareColumn `json:"right_column"`
+	Table       *presentationDraftTableData     `json:"table"`
+}
+
+type presentationDraftStat struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Desc  string `json:"desc"`
+}
+
+type presentationDraftCard struct {
+	Icon  string `json:"icon"`
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
+}
+
+type presentationDraftTimelineItem struct {
+	Date  string `json:"date"`
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
+}
+
+type presentationDraftCompareColumn struct {
+	Heading string   `json:"heading"`
+	Points  []string `json:"points"`
+}
+
+type presentationDraftTableData struct {
+	Headers []string   `json:"headers"`
+	Rows    [][]string `json:"rows"`
+}
+
+func presentationDraftSlideHTML(slide presentationDraftSlide) string {
+	if raw := strings.TrimSpace(stripPresentationDraftEmoji(slide.HTML)); raw != "" {
+		return raw
+	}
+
+	heading := escapePresentationDraftText(firstNonEmptyString(slide.Heading, "Slide"))
+	layout := strings.ToLower(firstNonEmptyString(slide.Type, slide.Layout))
+	var body string
+	switch {
+	case len(slide.Stats) > 0:
+		body = presentationDraftStatsHTML(slide.Stats)
+	case len(slide.Cards) > 0:
+		body = presentationDraftCardsHTML(slide.Cards)
+	case len(slide.Steps) > 0:
+		body = presentationDraftListHTML(slide.Steps, "list-group", "list-group-item")
+	case len(slide.Timeline) > 0:
+		body = presentationDraftTimelineHTML(slide.Timeline)
+	case slide.LeftColumn != nil && slide.RightColumn != nil:
+		body = presentationDraftCompareHTML(slide.LeftColumn, slide.RightColumn)
+	case slide.Table != nil && len(slide.Table.Headers) > 0 && len(slide.Table.Rows) > 0:
+		body = presentationDraftTableHTML(slide.Table)
+	case len(slide.Points) > 0:
+		body = presentationDraftListHTML(slide.Points, "list-group", "list-group-item")
+	default:
+		body = `<p class="lead">Slide content is being rendered into the final deck.</p>`
+	}
+	if layout == "" {
+		layout = "content"
+	}
+	return `<div class="slide-shell content-shell" data-draft-layout="` + html.EscapeString(layout) + `"><div class="eyebrow">Slide draft</div><h2 class="display-4">` + heading + `</h2>` + body + `</div>`
+}
+
+func presentationDraftStatsHTML(stats []presentationDraftStat) string {
+	var b strings.Builder
+	b.WriteString(`<div class="row">`)
+	for _, stat := range stats {
+		value := escapePresentationDraftText(stat.Value)
+		label := escapePresentationDraftText(stat.Label)
+		desc := escapePresentationDraftText(stat.Desc)
+		if value == "" && label == "" && desc == "" {
+			continue
+		}
+		b.WriteString(`<div class="col-6"><div class="card"><div class="card-body"><span class="badge">Metric</span><h3 class="display-5">` + value + `</h3><p class="card-title">` + label + `</p><p class="card-text">` + desc + `</p></div></div></div>`)
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func presentationDraftCardsHTML(cards []presentationDraftCard) string {
+	var b strings.Builder
+	b.WriteString(`<div class="row">`)
+	for _, card := range cards {
+		title := escapePresentationDraftText(card.Title)
+		desc := escapePresentationDraftText(card.Desc)
+		if title == "" && desc == "" {
+			continue
+		}
+		icon := presentationDraftIconClass(card.Icon, "stars")
+		b.WriteString(`<div class="col-4"><div class="card"><div class="card-body"><span class="icon-badge"><i class="bi ` + icon + `" aria-hidden="true"></i></span><h3 class="card-title">` + title + `</h3><p class="card-text">` + desc + `</p></div></div></div>`)
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func presentationDraftListHTML(items []string, listClass, itemClass string) string {
+	var b strings.Builder
+	b.WriteString(`<ul class="` + listClass + `">`)
+	for _, item := range items {
+		text := escapePresentationDraftText(item)
+		if text == "" {
+			continue
+		}
+		b.WriteString(`<li class="` + itemClass + `">` + text + `</li>`)
+	}
+	b.WriteString(`</ul>`)
+	return b.String()
+}
+
+func presentationDraftTimelineHTML(items []presentationDraftTimelineItem) string {
+	var b strings.Builder
+	b.WriteString(`<div class="list-group">`)
+	for _, item := range items {
+		date := escapePresentationDraftText(item.Date)
+		title := escapePresentationDraftText(item.Title)
+		desc := escapePresentationDraftText(item.Desc)
+		if date == "" && title == "" && desc == "" {
+			continue
+		}
+		b.WriteString(`<div class="list-group-item"><span class="badge">` + date + `</span><h3 class="card-title">` + title + `</h3><p class="card-text">` + desc + `</p></div>`)
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func presentationDraftCompareHTML(left, right *presentationDraftCompareColumn) string {
+	return `<div class="row"><div class="col-6"><div class="card"><div class="card-body"><h3 class="card-title">` + escapePresentationDraftText(left.Heading) + `</h3>` + presentationDraftListHTML(left.Points, "bullet-list", "bullet-item") + `</div></div></div><div class="col-6"><div class="card"><div class="card-body"><h3 class="card-title">` + escapePresentationDraftText(right.Heading) + `</h3>` + presentationDraftListHTML(right.Points, "bullet-list", "bullet-item") + `</div></div></div></div>`
+}
+
+func presentationDraftTableHTML(table *presentationDraftTableData) string {
+	var b strings.Builder
+	b.WriteString(`<table class="table w-100"><thead><tr>`)
+	for _, header := range table.Headers {
+		b.WriteString(`<th>` + escapePresentationDraftText(header) + `</th>`)
+	}
+	b.WriteString(`</tr></thead><tbody>`)
+	for _, row := range table.Rows {
+		b.WriteString(`<tr>`)
+		for _, cell := range row {
+			b.WriteString(`<td>` + escapePresentationDraftText(cell) + `</td>`)
+		}
+		b.WriteString(`</tr>`)
+	}
+	b.WriteString(`</tbody></table>`)
+	return b.String()
+}
+
+func presentationDraftIconClass(value, fallback string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		value = fallback
+	}
+	var cleaned strings.Builder
+	lastHyphen := false
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			cleaned.WriteRune(r)
+			lastHyphen = false
+			continue
+		}
+		if !lastHyphen {
+			cleaned.WriteByte('-')
+			lastHyphen = true
+		}
+	}
+	value = strings.Trim(cleaned.String(), "-")
+	if value == "" {
+		value = fallback
+	}
+	if strings.HasPrefix(value, "bi-") {
+		return value
+	}
+	return "bi-" + value
+}
+
+func escapePresentationDraftText(value string) string {
+	return html.EscapeString(strings.TrimSpace(stripPresentationDraftEmoji(value)))
+}
+
+func stripPresentationDraftEmoji(raw string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 0x1F000 && r <= 0x1FAFF:
+			return -1
+		case r >= 0x2600 && r <= 0x27BF:
+			return -1
+		case r == 0xFE0F || r == 0x200D:
+			return -1
+		default:
+			return r
+		}
+	}, raw)
 }
 
 func createToolPlanStep(planID string, startOrder int, tc provider.ToolCall) *domain.PlanStep {
@@ -511,7 +778,7 @@ func createPresentationPlanSteps(planID string, startOrder int, tc provider.Tool
 		order++
 		heading := firstNonEmptyString(strings.TrimSpace(slide.Heading), fmt.Sprintf("Slide %d", idx+1))
 		steps = append(steps,
-			completedStep(order, fmt.Sprintf("Draft slide %d", idx+1), fmt.Sprintf(`Compose "%s" with the slide-specific HTML, layout, and visuals.`, heading)),
+			completedStep(order, fmt.Sprintf("Draft slide %d", idx+1), fmt.Sprintf(`Compose "%s" with slide-specific content, layout, and visuals.`, heading)),
 		)
 	}
 
@@ -660,6 +927,19 @@ func containsTaskKeyword(text string, keywords ...string) bool {
 		}
 	}
 	return false
+}
+
+func filterToolDefinitions(defs []provider.ToolDefinition, requiredTool string) []provider.ToolDefinition {
+	requiredTool = strings.TrimSpace(requiredTool)
+	if requiredTool == "" {
+		return defs
+	}
+	for _, def := range defs {
+		if def.Name == requiredTool {
+			return []provider.ToolDefinition{def}
+		}
+	}
+	return defs
 }
 
 var requestedSlideCountPattern = regexp.MustCompile(`(?i)\b(\d+)\s*[- ]?\s*(content\s+)?slides?\b`)

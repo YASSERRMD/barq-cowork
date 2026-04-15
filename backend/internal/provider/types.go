@@ -41,6 +41,9 @@ type ChatCompletionRequest struct {
 	MaxTokens   int
 	Stream      bool
 	Tools       []ToolDefinition
+	// ForceToolName asks compatible providers to return a specific tool call.
+	// Providers that do not support explicit tool choice may ignore it.
+	ForceToolName string
 }
 
 // ChatCompletionChunk is one streaming delta delivered via the channel.
@@ -62,7 +65,7 @@ type ChatCompletionChunk struct {
 type ProviderConfig struct {
 	ProviderName string
 	BaseURL      string
-	APIKey       string            // resolved at call-time, never persisted
+	APIKey       string // resolved at call-time, never persisted
 	Model        string
 	TimeoutSec   int
 	ExtraHeaders map[string]string
