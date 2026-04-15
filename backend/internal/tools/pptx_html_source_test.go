@@ -118,7 +118,7 @@ func TestSanitizeHTMLMarkup_NormalizesOversizedInlineStyles(t *testing.T) {
 	for _, want := range []string{
 		`padding: 78px 78px 78px`,
 		`gap: 24px`,
-		`font-family: "Aptos", "Helvetica Neue", Arial, sans-serif`,
+		`font-family: "Helvetica Neue", Arial, sans-serif`,
 		`font-size: 68px`,
 		`line-height: 1.45`,
 	} {
@@ -133,7 +133,7 @@ func TestSanitizeCSSMarkup_NormalizesThemeTypographyAndSpacing(t *testing.T) {
 	for _, want := range []string{
 		`padding: 78px 78px 78px`,
 		`gap: 24px`,
-		`font-family: "Aptos", "Helvetica Neue", Arial, sans-serif`,
+		`font-family: "Helvetica Neue", Arial, sans-serif`,
 		`font-size: 68px`,
 		`margin-top: 42px`,
 		`line-height: 1.45`,
@@ -167,6 +167,17 @@ func TestWrapHTMLSlideShell_AddsCoverComposeClassForGenericCovers(t *testing.T) 
 	}
 }
 
+func TestWrapHTMLSlideShell_PreservesBootstrapCoverLayout(t *testing.T) {
+	raw := `<div class="container-fluid"><div class="row g-3"><div class="col-6"><div class="card">left</div></div><div class="col-6"><div class="card">right</div></div></div></div>`
+	got := wrapHTMLSlideShell(raw, true)
+	if strings.Contains(got, `cover-shell--compose`) {
+		t.Fatalf("expected bootstrap cover to avoid compose wrapper, got %s", got)
+	}
+	if !strings.Contains(got, `class="cover-shell slide"`) {
+		t.Fatalf("expected cover shell wrapper without compose class, got %s", got)
+	}
+}
+
 func TestPreferredHTMLCover_PreservesValidAuthoredCover(t *testing.T) {
 	manifest := pptxPreviewManifest{
 		Title: "Islamic Parenting",
@@ -177,7 +188,7 @@ func TestPreferredHTMLCover_PreservesValidAuthoredCover(t *testing.T) {
 			NarrativeArc: "trust -> guidance -> daily practice",
 			ColorStory:   "warm earth tones",
 			Kicker:       "Faith-centered guidance",
-			CoverHTML:    `<div style="display:flex"><div><h1 class="display-title">Islamic Parenting</h1><p class="lede">Raise children with faith.</p></div><div><svg viewBox="0 0 24 24"></svg></div></div>`,
+			CoverHTML:    `<div style="display:flex"><div><h1 class="display-title">Islamic Parenting</h1><p class="lede">Raise children with faith.</p></div><div><i class="bi bi-book" aria-hidden="true"></i></div></div>`,
 		},
 		Palette: pptxPreviewPalette{
 			Background: "F5F0E8",
@@ -196,6 +207,65 @@ func TestPreferredHTMLCover_PreservesValidAuthoredCover(t *testing.T) {
 	}
 	if strings.Contains(got, `cover-grid`) || strings.Contains(got, `Narrative`) {
 		t.Fatalf("expected authored cover, not deterministic fallback, got %s", got)
+	}
+}
+
+func TestPPTXHTMLBaseCSS_IncludesModernBootstrapKit(t *testing.T) {
+	css := pptxHTMLBaseCSS(pptxPalette{
+		bg:      "F8FAFC",
+		card:    "FFFFFF",
+		accent:  "0EA5E9",
+		accent2: "67E8F9",
+		text:    "0F172A",
+		muted:   "64748B",
+		border:  "CBD5E1",
+	})
+
+	for _, want := range []string{
+		".container-fluid",
+		".row",
+		".col-6",
+		".card",
+		".card-body",
+		".list-group-item",
+		".badge",
+		".icon-badge",
+		".bi",
+		".display-4",
+	} {
+		if !strings.Contains(css, want) {
+			t.Fatalf("expected bootstrap kit selector %q in base css", want)
+		}
+	}
+}
+
+func TestHTMLSlideContentReady_AcceptsBootstrapCardsAndIcons(t *testing.T) {
+	raw := `<div class="container-fluid h-100">
+  <div class="row g-3 align-items-stretch">
+    <div class="col-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <span class="icon-badge"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
+          <h2 class="display-5">Governed rollout</h2>
+          <p class="card-text">Operational ownership, measurement, and escalation are explicit before scale-up.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-6">
+      <ul class="list-group">
+        <li class="list-group-item">Clinical workflow owners approve each deployment gate.</li>
+        <li class="list-group-item">KPI dashboards track adoption, risk, quality, and ROI.</li>
+        <li class="list-group-item">Support model moves from pilot team to production runbook.</li>
+      </ul>
+    </div>
+  </div>
+</div>`
+
+	if !htmlSlideContentReady(raw) {
+		t.Fatalf("expected bootstrap-authored slide to pass content readiness")
+	}
+	if got := htmlInformationBlockCount(raw); got < 6 {
+		t.Fatalf("expected bootstrap cards, list items, and icons to count as dense content, got %d", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
+import bootstrapIconsSprite from "bootstrap-icons/bootstrap-icons.svg";
 
 type PptxSlide = any;
 type TextOptions = Record<string, unknown>;
@@ -153,8 +154,17 @@ const SLIDE_H = 7.5;
 const HTML_EXPORT_WIDTH = 1280;
 const HTML_EXPORT_HEIGHT = 720;
 const MIN_HTML_PPTX_FONT_SIZE = 14;
-const FONT_HEAD = "Aptos";
-const FONT_BODY = "Aptos";
+const FONT_HEAD = "Arial";
+const FONT_BODY = "Arial";
+const BOOTSTRAP_ICON_FALLBACK = "stars";
+
+type BootstrapIcon = {
+  viewBox: string;
+  content: string;
+};
+
+const bootstrapIcons = parseBootstrapIconsSprite(bootstrapIconsSprite);
+const bootstrapIconPayload = Object.fromEntries(bootstrapIcons);
 
 const legacyEmojiIcons: Record<string, string> = {
   "⚡": "automation",
@@ -193,6 +203,30 @@ function normalizeHex(value: string, fallback = "000000"): string {
 
 function cssHex(value: string): string {
   return `#${normalizeHex(value)}`;
+}
+
+function parseAttributes(raw: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  for (const match of raw.matchAll(/([\w:-]+)\s*=\s*"([^"]*)"/g)) {
+    attributes[match[1].toLowerCase()] = match[2];
+  }
+  return attributes;
+}
+
+function parseBootstrapIconsSprite(sprite: string): Map<string, BootstrapIcon> {
+  const icons = new Map<string, BootstrapIcon>();
+  const symbolPattern = /<symbol\b([^>]*)>([\s\S]*?)<\/symbol>/g;
+  for (const match of sprite.matchAll(symbolPattern)) {
+    const attributes = parseAttributes(match[1] ?? "");
+    const id = (attributes.id ?? "").trim().toLowerCase();
+    const content = (match[2] ?? "").trim();
+    if (!id || !content) continue;
+    icons.set(id, {
+      viewBox: attributes.viewbox || "0 0 16 16",
+      content,
+    });
+  }
+  return icons;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -267,48 +301,52 @@ function inferIconToken(raw: string): string {
   return "";
 }
 
-function iconSvg(token: string, palette: { accent: string; accent2: string; text: string }): string {
-  const fg = cssHex(palette.text);
-  const accent = cssHex(palette.accent);
-  const soft = cssHex(palette.accent2);
-  const normalized = inferIconToken(token) || "spark";
-  let glyph = "";
-  switch (normalized) {
-    case "shield":
-      glyph = `<polygon points="32,10 48,18 48,34 32,50 16,34 16,18" fill="none" stroke="${fg}" stroke-width="4"/><path d="M24 30h16M32 22v16" stroke="${fg}" stroke-width="4" stroke-linecap="round"/>`;
-      break;
-    case "chart":
-      glyph = `<rect x="16" y="34" width="8" height="14" rx="2" fill="${fg}"/><rect x="28" y="24" width="8" height="24" rx="2" fill="${fg}"/><rect x="40" y="18" width="8" height="30" rx="2" fill="${fg}"/><path d="M14 48h36" stroke="${fg}" stroke-width="3" stroke-linecap="round"/>`;
-      break;
-    case "growth":
-      glyph = `<rect x="16" y="38" width="8" height="10" rx="2" fill="${fg}"/><rect x="28" y="30" width="8" height="18" rx="2" fill="${fg}"/><rect x="40" y="22" width="8" height="26" rx="2" fill="${fg}"/><path d="M23 26l9-7 8 5 9-7" stroke="${fg}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
-      break;
-    case "automation":
-      glyph = `<path d="M14 30h18l-6-6m6 6-6 6" stroke="${fg}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M30 30h18l-6-6m6 6-6 6" stroke="${fg}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="49" cy="30" r="5" fill="${soft}" stroke="${fg}" stroke-width="2"/>`;
-      break;
-    case "integration":
-      glyph = `<circle cx="24" cy="32" r="10" fill="none" stroke="${fg}" stroke-width="4"/><circle cx="40" cy="32" r="10" fill="none" stroke="${fg}" stroke-width="4"/><path d="M28 32h8" stroke="${fg}" stroke-width="4" stroke-linecap="round"/>`;
-      break;
-    case "people":
-      glyph = `<circle cx="25" cy="22" r="6" fill="${fg}"/><circle cx="39" cy="22" r="6" fill="${fg}"/><rect x="18" y="31" width="14" height="15" rx="5" fill="${fg}"/><rect x="32" y="31" width="14" height="15" rx="5" fill="${fg}"/>`;
-      break;
-    case "learning":
-      glyph = `<rect x="15" y="17" width="15" height="28" rx="3" fill="none" stroke="${fg}" stroke-width="3.5"/><rect x="34" y="17" width="15" height="28" rx="3" fill="none" stroke="${fg}" stroke-width="3.5"/><path d="M32 18v28" stroke="${fg}" stroke-width="3"/>`;
-      break;
-    case "health":
-      glyph = `<path d="M32 16v32M16 32h32" stroke="${fg}" stroke-width="6" stroke-linecap="round"/>`;
-      break;
-    case "leaf":
-      glyph = `<path d="M22 38c0-11 8-18 18-20 1 10-3 20-14 23-3 1-4-1-4-3Z" fill="${fg}"/><path d="M25 40c6-8 12-13 20-17" stroke="${accent}" stroke-width="3" stroke-linecap="round"/>`;
-      break;
-    case "logistics":
-      glyph = `<rect x="16" y="26" width="24" height="18" rx="3" fill="none" stroke="${fg}" stroke-width="3.5"/><path d="M28 26v18" stroke="${fg}" stroke-width="3"/><path d="M40 22h10l-4-4m4 4-4 4" stroke="${fg}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
-      break;
-    default:
-      glyph = `<path d="M32 14l5 9 9 5-9 5-5 9-5-9-9-5 9-5 5-9Z" fill="${fg}"/><path d="M15 46l3 5 5 3-5 3-3 5-3-5-5-3 5-3 3-5Z" fill="${soft}"/>`;
-      break;
+function bootstrapIconNameForToken(raw: string): string {
+  const explicit = raw
+    .trim()
+    .toLowerCase()
+    .replace(/^bi-/, "")
+    .replace(/_/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+  if (explicit && bootstrapIcons.has(explicit)) {
+    return explicit;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="${accent}"/>${glyph}</svg>`;
+
+  switch (inferIconToken(raw) || "spark") {
+    case "shield":
+      return "shield-check";
+    case "chart":
+      return "bar-chart-line";
+    case "growth":
+      return "graph-up-arrow";
+    case "automation":
+      return "lightning-charge";
+    case "integration":
+      return "diagram-3";
+    case "people":
+      return "people";
+    case "strategy":
+      return "signpost-split";
+    case "learning":
+      return "book";
+    case "health":
+      return "heart-pulse";
+    case "leaf":
+      return "leaf";
+    case "logistics":
+      return "truck";
+    default:
+      return BOOTSTRAP_ICON_FALLBACK;
+  }
+}
+
+function iconSvg(token: string, palette: { text: string }): string {
+  const iconName = bootstrapIconNameForToken(token);
+  const icon = bootstrapIcons.get(iconName) ?? bootstrapIcons.get(BOOTSTRAP_ICON_FALLBACK) ?? bootstrapIcons.values().next().value;
+  if (!icon) {
+    return "";
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${icon.viewBox}" fill="${cssHex(palette.text)}">${icon.content}</svg>`;
 }
 
 function svgDataUri(svg: string): string {
@@ -509,9 +547,6 @@ function addMiniLine(slide: PptxSlide, x: number, y: number, w: number, h: numbe
 
 function addIcon(slide: PptxSlide, token: string, x: number, y: number, size: number, pal: RenderPalette): void {
   const accent = pal.accent;
-  const soft = pal.accent2;
-  const fg = "FFFFFF";
-  const normalized = inferIconToken(token) || "spark";
 
   slide.addShape("ellipse", {
     x,
@@ -522,224 +557,16 @@ function addIcon(slide: PptxSlide, token: string, x: number, y: number, size: nu
     fill: { color: accent },
   });
 
-  const left = x + size * 0.2;
-  const top = y + size * 0.2;
-  const inner = size * 0.6;
-
-  switch (normalized) {
-    case "shield":
-      slide.addShape("hexagon", {
-        x: x + size * 0.24,
-        y: y + size * 0.17,
-        w: size * 0.52,
-        h: size * 0.6,
-        line: { color: fg, pt: 1.2 },
-        fill: { color: accent, transparency: 100 },
-      });
-      addMiniRect(slide, x + size * 0.47, y + size * 0.29, size * 0.06, size * 0.26, fg);
-      addMiniRect(slide, x + size * 0.37, y + size * 0.39, size * 0.26, size * 0.06, fg);
-      break;
-    case "chart":
-      addMiniRect(slide, x + size * 0.28, y + size * 0.52, size * 0.08, size * 0.18, fg);
-      addMiniRect(slide, x + size * 0.44, y + size * 0.4, size * 0.08, size * 0.3, fg);
-      addMiniRect(slide, x + size * 0.6, y + size * 0.28, size * 0.08, size * 0.42, fg);
-      addMiniRect(slide, x + size * 0.26, y + size * 0.72, size * 0.48, size * 0.03, fg);
-      break;
-    case "growth":
-      addMiniRect(slide, x + size * 0.28, y + size * 0.56, size * 0.08, size * 0.14, fg);
-      addMiniRect(slide, x + size * 0.44, y + size * 0.45, size * 0.08, size * 0.25, fg);
-      addMiniRect(slide, x + size * 0.6, y + size * 0.34, size * 0.08, size * 0.36, fg);
-      addMiniLine(slide, x + size * 0.29, y + size * 0.44, size * 0.18, -size * 0.1, fg, 1.2);
-      addMiniLine(slide, x + size * 0.47, y + size * 0.34, size * 0.18, -size * 0.1, fg, 1.2);
-      addMiniLine(slide, x + size * 0.61, y + size * 0.24, size * 0.08, size * 0.06, fg, 1.2);
-      addMiniLine(slide, x + size * 0.61, y + size * 0.24, -size * 0.02, size * 0.1, fg, 1.2);
-      break;
-    case "automation":
-      slide.addShape("rightArrow", {
-        x: x + size * 0.18,
-        y: y + size * 0.34,
-        w: size * 0.3,
-        h: size * 0.16,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("rightArrow", {
-        x: x + size * 0.42,
-        y: y + size * 0.34,
-        w: size * 0.26,
-        h: size * 0.16,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("ellipse", {
-        x: x + size * 0.66,
-        y: y + size * 0.3,
-        w: size * 0.16,
-        h: size * 0.16,
-        line: { color: fg, pt: 1 },
-        fill: { color: soft },
-      });
-      break;
-    case "integration":
-      slide.addShape("ellipse", {
-        x: x + size * 0.22,
-        y: y + size * 0.3,
-        w: size * 0.22,
-        h: size * 0.22,
-        line: { color: fg, pt: 1.2 },
-        fill: { color: accent, transparency: 100 },
-      });
-      slide.addShape("ellipse", {
-        x: x + size * 0.46,
-        y: y + size * 0.3,
-        w: size * 0.22,
-        h: size * 0.22,
-        line: { color: fg, pt: 1.2 },
-        fill: { color: accent, transparency: 100 },
-      });
-      addMiniRect(slide, x + size * 0.39, y + size * 0.4, size * 0.12, size * 0.03, fg);
-      break;
-    case "people":
-      slide.addShape("ellipse", {
-        x: x + size * 0.25,
-        y: y + size * 0.23,
-        w: size * 0.15,
-        h: size * 0.15,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("ellipse", {
-        x: x + size * 0.48,
-        y: y + size * 0.23,
-        w: size * 0.15,
-        h: size * 0.15,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("roundRect", {
-        x: x + size * 0.21,
-        y: y + size * 0.44,
-        w: size * 0.22,
-        h: size * 0.18,
-        rectRadius: 0.2,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("roundRect", {
-        x: x + size * 0.44,
-        y: y + size * 0.44,
-        w: size * 0.22,
-        h: size * 0.18,
-        rectRadius: 0.2,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      break;
-    case "learning":
-      slide.addShape("roundRect", {
-        x: x + size * 0.22,
-        y: y + size * 0.25,
-        w: size * 0.18,
-        h: size * 0.38,
-        rectRadius: 0.08,
-        line: { color: fg, pt: 1.1 },
-        fill: { color: accent, transparency: 100 },
-      });
-      slide.addShape("roundRect", {
-        x: x + size * 0.43,
-        y: y + size * 0.25,
-        w: size * 0.18,
-        h: size * 0.38,
-        rectRadius: 0.08,
-        line: { color: fg, pt: 1.1 },
-        fill: { color: accent, transparency: 100 },
-      });
-      addMiniRect(slide, x + size * 0.4, y + size * 0.24, size * 0.02, size * 0.41, fg);
-      break;
-    case "health":
-      addMiniRect(slide, x + size * 0.46, y + size * 0.22, size * 0.08, size * 0.46, fg);
-      addMiniRect(slide, x + size * 0.27, y + size * 0.41, size * 0.46, size * 0.08, fg);
-      break;
-    case "leaf":
-      slide.addShape("ellipse", {
-        x: x + size * 0.27,
-        y: y + size * 0.22,
-        w: size * 0.2,
-        h: size * 0.3,
-        rotate: -32,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("ellipse", {
-        x: x + size * 0.42,
-        y: y + size * 0.26,
-        w: size * 0.2,
-        h: size * 0.28,
-        rotate: 28,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      addMiniLine(slide, x + size * 0.5, y + size * 0.44, 0, size * 0.18, soft, 1.2);
-      break;
-    case "logistics":
-      slide.addShape("roundRect", {
-        x: x + size * 0.24,
-        y: y + size * 0.34,
-        w: size * 0.32,
-        h: size * 0.22,
-        rectRadius: 0.08,
-        line: { color: fg, pt: 1.1 },
-        fill: { color: accent, transparency: 100 },
-      });
-      addMiniRect(slide, x + size * 0.39, y + size * 0.34, size * 0.02, size * 0.22, fg);
-      slide.addShape("rightArrow", {
-        x: x + size * 0.58,
-        y: y + size * 0.28,
-        w: size * 0.16,
-        h: size * 0.14,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      break;
-    case "strategy":
-      slide.addShape("diamond", {
-        x: x + size * 0.39,
-        y: y + size * 0.2,
-        w: size * 0.18,
-        h: size * 0.18,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      addMiniLine(slide, x + size * 0.48, y + size * 0.38, 0, size * 0.2, fg, 1.2);
-      addMiniLine(slide, x + size * 0.48, y + size * 0.58, -size * 0.12, size * 0.1, fg, 1.2);
-      addMiniLine(slide, x + size * 0.48, y + size * 0.58, size * 0.12, size * 0.1, fg, 1.2);
-      break;
-    default:
-      slide.addShape("diamond", {
-        x: x + size * 0.37,
-        y: y + size * 0.21,
-        w: size * 0.2,
-        h: size * 0.2,
-        line: { color: fg, transparency: 100 },
-        fill: { color: fg },
-      });
-      slide.addShape("diamond", {
-        x: x + size * 0.22,
-        y: y + size * 0.46,
-        w: size * 0.12,
-        h: size * 0.12,
-        line: { color: soft, transparency: 100 },
-        fill: { color: soft },
-      });
-      slide.addShape("diamond", {
-        x: x + size * 0.56,
-        y: y + size * 0.5,
-        w: size * 0.12,
-        h: size * 0.12,
-        line: { color: soft, transparency: 100 },
-        fill: { color: soft },
-      });
-      break;
+  const svg = iconSvg(token, { text: "FFFFFF" });
+  if (svg) {
+    const inner = size * 0.54;
+    slide.addImage({
+      data: svgDataUri(svg),
+      x: x + size * 0.23,
+      y: y + size * 0.23,
+      w: inner,
+      h: inner,
+    });
   }
 }
 
@@ -2130,6 +1957,74 @@ function resolveBrowserExecutable(): string {
   return "";
 }
 
+async function hydrateBootstrapIcons(page: any): Promise<void> {
+  await page.evaluate(
+    ({ icons, fallbackName }: { icons: Record<string, BootstrapIcon>; fallbackName: string }) => {
+      const normalizeName = (value: string | null | undefined): string => {
+        return (value ?? "")
+          .trim()
+          .toLowerCase()
+          .replace(/^bi-/, "")
+          .replace(/_/g, "-")
+          .replace(/[^a-z0-9-]/g, "");
+      };
+
+      const findIconName = (element: Element): string => {
+        const explicit = normalizeName(
+          element.getAttribute("data-bi") ||
+            element.getAttribute("data-bootstrap-icon") ||
+            element.getAttribute("aria-label"),
+        );
+        if (explicit && icons[explicit]) return explicit;
+
+        for (const className of Array.from(element.classList)) {
+          if (!className.startsWith("bi-")) continue;
+          const candidate = normalizeName(className);
+          if (icons[candidate]) return candidate;
+        }
+
+        return icons[fallbackName] ? fallbackName : Object.keys(icons)[0] || "";
+      };
+
+      const replaceWithBootstrapSVG = (element: Element): void => {
+        const name = findIconName(element);
+        const icon = icons[name];
+        if (!icon) return;
+
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", icon.viewBox || "0 0 16 16");
+        svg.setAttribute("fill", "currentColor");
+        svg.setAttribute("focusable", "false");
+        svg.setAttribute("aria-hidden", element.getAttribute("aria-hidden") || "true");
+        svg.innerHTML = icon.content;
+
+        const retainedClasses = Array.from(element.classList).filter(
+          (className) => className === "bi" || !className.startsWith("bi-"),
+        );
+        if (!retainedClasses.includes("bi")) retainedClasses.unshift("bi");
+        svg.setAttribute("class", retainedClasses.join(" "));
+
+        const style = element.getAttribute("style");
+        if (style) svg.setAttribute("style", style);
+        const label = element.getAttribute("aria-label");
+        if (label) {
+          svg.setAttribute("role", "img");
+          svg.setAttribute("aria-label", label);
+          svg.removeAttribute("aria-hidden");
+        }
+
+        element.replaceWith(svg);
+      };
+
+      const selector = ".bi, [data-bi], [data-bootstrap-icon]";
+      for (const element of Array.from(document.querySelectorAll(selector))) {
+        replaceWithBootstrapSVG(element);
+      }
+    },
+    { icons: bootstrapIconPayload, fallbackName: BOOTSTRAP_ICON_FALLBACK },
+  );
+}
+
 async function buildPresentationFromHTML(htmlDocument: string, outputPath: string, domBundlePath: string): Promise<void> {
   const executablePath = resolveBrowserExecutable();
   if (!executablePath) {
@@ -2177,6 +2072,7 @@ async function buildPresentationFromHTML(htmlDocument: string, outputPath: strin
         }
       `,
     });
+    await hydrateBootstrapIcons(page);
     await page.addScriptTag({ path: domBundlePath });
     await page.waitForFunction(() => Boolean((window as any).domToPptx?.exportToPptx));
 
