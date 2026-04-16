@@ -140,11 +140,6 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 		})
 	}
 
-	if issues := htmlManifestAuthoringIssues(manifest); len(issues) > 0 {
-		return nil, fmt.Errorf("pptx html authoring contract is incomplete: %s", strings.Join(issues, ", "))
-	}
-	manifest.HTMLDocument = buildPPTXHTMLDocument(manifest)
-
 	return json.MarshalIndent(manifest, "", "  ")
 }
 
