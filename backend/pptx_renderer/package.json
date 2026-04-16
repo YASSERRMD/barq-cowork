@@ -9,9 +9,6 @@
   },
   "dependencies": {
     "bootstrap-icons": "^1.13.1",
-    "dom-to-pptx": "^1.1.6",
-    "jszip": "^3.10.1",
-    "playwright-core": "^1.56.0",
     "pptxgenjs": "^4.0.1"
   },
   "devDependencies": {

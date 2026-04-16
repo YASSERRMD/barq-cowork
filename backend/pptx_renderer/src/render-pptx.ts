@@ -1,8 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { chromium } from "playwright-core";
-import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import bootstrapIconsSprite from "bootstrap-icons/bootstrap-icons.svg";
 
@@ -20,7 +18,6 @@ type Manifest = {
   narrative?: string;
   layout_mix?: string[];
   slides: SlidePlan[];
-  html_document?: string;
 };
 
 type Palette = {
@@ -151,9 +148,6 @@ type Bounds = {
 
 const SLIDE_W = 13.333;
 const SLIDE_H = 7.5;
-const HTML_EXPORT_WIDTH = 1280;
-const HTML_EXPORT_HEIGHT = 720;
-const MIN_HTML_PPTX_FONT_SIZE = 14;
 const FONT_HEAD = "Arial";
 const FONT_BODY = "Arial";
 const BOOTSTRAP_ICON_FALLBACK = "stars";
@@ -164,7 +158,6 @@ type BootstrapIcon = {
 };
 
 const bootstrapIcons = parseBootstrapIconsSprite(bootstrapIconsSprite);
-const bootstrapIconPayload = Object.fromEntries(bootstrapIcons);
 
 const legacyEmojiIcons: Record<string, string> = {
   "⚡": "automation",
@@ -1936,200 +1929,6 @@ async function readStdin(): Promise<string> {
   });
 }
 
-function resolveBrowserExecutable(): string {
-  const candidates = [
-    process.env.PPTX_RENDER_BROWSER,
-    process.env.CHROME_PATH,
-    process.env.GOOGLE_CHROME_BIN,
-    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "",
-    process.platform === "darwin" ? "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" : "",
-    process.platform === "linux" ? "/usr/bin/google-chrome" : "",
-    process.platform === "linux" ? "/usr/bin/google-chrome-stable" : "",
-    process.platform === "linux" ? "/usr/bin/chromium-browser" : "",
-    process.platform === "linux" ? "/usr/bin/chromium" : "",
-  ].filter((value): value is string => Boolean(value && value.trim()));
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return "";
-}
-
-async function hydrateBootstrapIcons(page: any): Promise<void> {
-  await page.evaluate(
-    ({ icons, fallbackName }: { icons: Record<string, BootstrapIcon>; fallbackName: string }) => {
-      const normalizeName = (value: string | null | undefined): string => {
-        return (value ?? "")
-          .trim()
-          .toLowerCase()
-          .replace(/^bi-/, "")
-          .replace(/_/g, "-")
-          .replace(/[^a-z0-9-]/g, "");
-      };
-
-      const findIconName = (element: Element): string => {
-        const explicit = normalizeName(
-          element.getAttribute("data-bi") ||
-            element.getAttribute("data-bootstrap-icon") ||
-            element.getAttribute("aria-label"),
-        );
-        if (explicit && icons[explicit]) return explicit;
-
-        for (const className of Array.from(element.classList)) {
-          if (!className.startsWith("bi-")) continue;
-          const candidate = normalizeName(className);
-          if (icons[candidate]) return candidate;
-        }
-
-        return icons[fallbackName] ? fallbackName : Object.keys(icons)[0] || "";
-      };
-
-      const replaceWithBootstrapSVG = (element: Element): void => {
-        const name = findIconName(element);
-        const icon = icons[name];
-        if (!icon) return;
-
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("viewBox", icon.viewBox || "0 0 16 16");
-        svg.setAttribute("fill", "currentColor");
-        svg.setAttribute("focusable", "false");
-        svg.setAttribute("aria-hidden", element.getAttribute("aria-hidden") || "true");
-        svg.innerHTML = icon.content;
-
-        const retainedClasses = Array.from(element.classList).filter(
-          (className) => className === "bi" || !className.startsWith("bi-"),
-        );
-        if (!retainedClasses.includes("bi")) retainedClasses.unshift("bi");
-        svg.setAttribute("class", retainedClasses.join(" "));
-
-        const style = element.getAttribute("style");
-        if (style) svg.setAttribute("style", style);
-        const label = element.getAttribute("aria-label");
-        if (label) {
-          svg.setAttribute("role", "img");
-          svg.setAttribute("aria-label", label);
-          svg.removeAttribute("aria-hidden");
-        }
-
-        element.replaceWith(svg);
-      };
-
-      const selector = ".bi, [data-bi], [data-bootstrap-icon]";
-      for (const element of Array.from(document.querySelectorAll(selector))) {
-        replaceWithBootstrapSVG(element);
-      }
-    },
-    { icons: bootstrapIconPayload, fallbackName: BOOTSTRAP_ICON_FALLBACK },
-  );
-}
-
-async function buildPresentationFromHTML(htmlDocument: string, outputPath: string, domBundlePath: string): Promise<void> {
-  const executablePath = resolveBrowserExecutable();
-  if (!executablePath) {
-    throw new Error("no compatible Chrome/Chromium executable found for DOM-to-PPTX export");
-  }
-  if (!fs.existsSync(domBundlePath)) {
-    throw new Error(`missing dom-to-pptx browser bundle at ${domBundlePath}`);
-  }
-
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath,
-    args: ["--allow-file-access-from-files"],
-  });
-
-  try {
-    const context = await browser.newContext({
-      acceptDownloads: true,
-      viewport: { width: HTML_EXPORT_WIDTH, height: HTML_EXPORT_HEIGHT },
-      deviceScaleFactor: 1,
-    });
-    const page = await context.newPage();
-    await page.setContent(htmlDocument, { waitUntil: "domcontentloaded" });
-    await page.addStyleTag({
-      content: `
-        html, body {
-          width: ${HTML_EXPORT_WIDTH}px !important;
-          min-width: ${HTML_EXPORT_WIDTH}px !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          overflow: visible !important;
-        }
-        .barq-pptx-deck {
-          display: block !important;
-          gap: 0 !important;
-          align-items: stretch !important;
-        }
-        .barq-pptx-slide {
-          width: ${HTML_EXPORT_WIDTH}px !important;
-          height: ${HTML_EXPORT_HEIGHT}px !important;
-          box-shadow: none !important;
-          margin: 0 !important;
-        }
-      `,
-    });
-    await hydrateBootstrapIcons(page);
-    await page.addScriptTag({ path: domBundlePath });
-    await page.waitForFunction(() => Boolean((window as any).domToPptx?.exportToPptx));
-
-    const downloadPromise = page.waitForEvent("download");
-    await page.evaluate((fileName) => {
-      const slides = Array.from(document.querySelectorAll(".barq-pptx-slide"));
-      if (!slides.length) {
-        throw new Error("html deck does not contain any .barq-pptx-slide elements");
-      }
-      return (window as any).domToPptx.exportToPptx(slides, {
-        fileName,
-        layout: "LAYOUT_WIDE",
-        svgAsVector: true,
-      });
-    }, path.basename(outputPath));
-
-    const download = await downloadPromise;
-    await download.saveAs(outputPath);
-    await normalizeHTMLExportedPPTXReadability(outputPath);
-    await context.close();
-  } finally {
-    await browser.close();
-  }
-}
-
-async function normalizeHTMLExportedPPTXReadability(outputPath: string): Promise<void> {
-  const data = await fs.promises.readFile(outputPath);
-  const zip = await JSZip.loadAsync(data);
-  const slideFiles = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
-  let changed = false;
-
-  for (const name of slideFiles) {
-    const file = zip.file(name);
-    if (!file) continue;
-    const xml = await file.async("string");
-    const updated = xml.replace(/\bsz="(\d+)"/g, (match, rawSize) => {
-      const size = Number.parseInt(rawSize, 10);
-      if (!Number.isFinite(size) || size >= MIN_HTML_PPTX_FONT_SIZE * 100) {
-        return match;
-      }
-      changed = true;
-      return `sz="${MIN_HTML_PPTX_FONT_SIZE * 100}"`;
-    });
-    if (updated !== xml) {
-      zip.file(name, updated);
-    }
-  }
-
-  if (!changed) return;
-  const output = await zip.generateAsync({
-    type: "nodebuffer",
-    compression: "DEFLATE",
-    compressionOptions: { level: 6 },
-  });
-  await fs.promises.writeFile(outputPath, output);
-}
-
 async function buildPresentationFromStructuredManifest(manifest: Manifest, outputPath: string): Promise<void> {
   const family = previewFamily(manifest);
   const pal = buildPalette(manifest, family);
@@ -2164,29 +1963,19 @@ async function buildPresentationFromStructuredManifest(manifest: Manifest, outpu
   await pptx.writeFile({ fileName: outputPath, compression: true });
 }
 
-async function buildPresentation(manifest: Manifest, outputPath: string, domBundlePath: string): Promise<void> {
-  if (manifest.html_document?.trim()) {
-    await buildPresentationFromHTML(manifest.html_document, outputPath, domBundlePath);
-    return;
-  }
-  await buildPresentationFromStructuredManifest(manifest, outputPath);
-}
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const outIndex = args.indexOf("--output");
-  const bundleIndex = args.indexOf("--dom-bundle");
-  if (outIndex === -1 || outIndex === args.length - 1 || bundleIndex === -1 || bundleIndex === args.length - 1) {
-    throw new Error("missing --output <path> or --dom-bundle <path>");
+  if (outIndex === -1 || outIndex === args.length - 1) {
+    throw new Error("missing --output <path>");
   }
   const outputPath = path.resolve(args[outIndex + 1]);
-  const domBundlePath = path.resolve(args[bundleIndex + 1]);
   const payload = await readStdin();
   if (!payload.trim()) {
     throw new Error("missing manifest payload on stdin");
   }
   const manifest = validateManifest(JSON.parse(payload));
-  await buildPresentation(manifest, outputPath, domBundlePath);
+  await buildPresentationFromStructuredManifest(manifest, outputPath);
   process.stdout.write(JSON.stringify({ status: "ok", output: outputPath }) + "\n");
 }
 
