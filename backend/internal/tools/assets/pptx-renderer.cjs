@@ -9724,9 +9724,9 @@ var require_load = __commonJS({
 var require_lib3 = __commonJS({
   "node_modules/jszip/lib/index.js"(exports2, module2) {
     "use strict";
-    function JSZip3() {
-      if (!(this instanceof JSZip3)) {
-        return new JSZip3();
+    function JSZip2() {
+      if (!(this instanceof JSZip2)) {
+        return new JSZip2();
       }
       if (arguments.length) {
         throw new Error("The constructor with parameters has been removed in JSZip 3.0, please check the upgrade guide.");
@@ -9735,7 +9735,7 @@ var require_lib3 = __commonJS({
       this.comment = null;
       this.root = "";
       this.clone = function() {
-        var newObj = new JSZip3();
+        var newObj = new JSZip2();
         for (var i in this) {
           if (typeof this[i] !== "function") {
             newObj[i] = this[i];
@@ -9744,24 +9744,22 @@ var require_lib3 = __commonJS({
         return newObj;
       };
     }
-    JSZip3.prototype = require_object();
-    JSZip3.prototype.loadAsync = require_load();
-    JSZip3.support = require_support();
-    JSZip3.defaults = require_defaults();
-    JSZip3.version = "3.10.1";
-    JSZip3.loadAsync = function(content, options) {
-      return new JSZip3().loadAsync(content, options);
+    JSZip2.prototype = require_object();
+    JSZip2.prototype.loadAsync = require_load();
+    JSZip2.support = require_support();
+    JSZip2.defaults = require_defaults();
+    JSZip2.version = "3.10.1";
+    JSZip2.loadAsync = function(content, options) {
+      return new JSZip2().loadAsync(content, options);
     };
-    JSZip3.external = require_external();
-    module2.exports = JSZip3;
+    JSZip2.external = require_external();
+    module2.exports = JSZip2;
   }
 });
 
 // src/render-pptx.ts
 var import_node_fs = __toESM(require("node:fs"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
-var import_playwright_core = require("playwright-core");
-var import_jszip2 = __toESM(require_lib3(), 1);
 
 // node_modules/pptxgenjs/dist/pptxgen.es.js
 var import_jszip = __toESM(require_lib3());
@@ -15089,14 +15087,10 @@ var bootstrap_icons_default = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xli
 // src/render-pptx.ts
 var SLIDE_W = 13.333;
 var SLIDE_H = 7.5;
-var HTML_EXPORT_WIDTH = 1280;
-var HTML_EXPORT_HEIGHT = 720;
-var MIN_HTML_PPTX_FONT_SIZE = 14;
 var FONT_HEAD = "Arial";
 var FONT_BODY = "Arial";
 var BOOTSTRAP_ICON_FALLBACK = "stars";
 var bootstrapIcons = parseBootstrapIconsSprite(bootstrap_icons_default);
-var bootstrapIconPayload = Object.fromEntries(bootstrapIcons);
 var legacyEmojiIcons = {
   "\u26A1": "automation",
   "\u{1F512}": "shield",
@@ -16688,173 +16682,6 @@ async function readStdin() {
     process.stdin.on("error", reject);
   });
 }
-function resolveBrowserExecutable() {
-  const candidates = [
-    process.env.PPTX_RENDER_BROWSER,
-    process.env.CHROME_PATH,
-    process.env.GOOGLE_CHROME_BIN,
-    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "",
-    process.platform === "darwin" ? "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" : "",
-    process.platform === "linux" ? "/usr/bin/google-chrome" : "",
-    process.platform === "linux" ? "/usr/bin/google-chrome-stable" : "",
-    process.platform === "linux" ? "/usr/bin/chromium-browser" : "",
-    process.platform === "linux" ? "/usr/bin/chromium" : ""
-  ].filter((value) => Boolean(value && value.trim()));
-  for (const candidate of candidates) {
-    if (import_node_fs.default.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return "";
-}
-async function hydrateBootstrapIcons(page) {
-  await page.evaluate(
-    ({ icons, fallbackName }) => {
-      const normalizeName = (value) => {
-        return (value ?? "").trim().toLowerCase().replace(/^bi-/, "").replace(/_/g, "-").replace(/[^a-z0-9-]/g, "");
-      };
-      const findIconName = (element) => {
-        const explicit = normalizeName(
-          element.getAttribute("data-bi") || element.getAttribute("data-bootstrap-icon") || element.getAttribute("aria-label")
-        );
-        if (explicit && icons[explicit]) return explicit;
-        for (const className of Array.from(element.classList)) {
-          if (!className.startsWith("bi-")) continue;
-          const candidate = normalizeName(className);
-          if (icons[candidate]) return candidate;
-        }
-        return icons[fallbackName] ? fallbackName : Object.keys(icons)[0] || "";
-      };
-      const replaceWithBootstrapSVG = (element) => {
-        const name = findIconName(element);
-        const icon = icons[name];
-        if (!icon) return;
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("viewBox", icon.viewBox || "0 0 16 16");
-        svg.setAttribute("fill", "currentColor");
-        svg.setAttribute("focusable", "false");
-        svg.setAttribute("aria-hidden", element.getAttribute("aria-hidden") || "true");
-        svg.innerHTML = icon.content;
-        const retainedClasses = Array.from(element.classList).filter(
-          (className) => className === "bi" || !className.startsWith("bi-")
-        );
-        if (!retainedClasses.includes("bi")) retainedClasses.unshift("bi");
-        svg.setAttribute("class", retainedClasses.join(" "));
-        const style = element.getAttribute("style");
-        if (style) svg.setAttribute("style", style);
-        const label = element.getAttribute("aria-label");
-        if (label) {
-          svg.setAttribute("role", "img");
-          svg.setAttribute("aria-label", label);
-          svg.removeAttribute("aria-hidden");
-        }
-        element.replaceWith(svg);
-      };
-      const selector = ".bi, [data-bi], [data-bootstrap-icon]";
-      for (const element of Array.from(document.querySelectorAll(selector))) {
-        replaceWithBootstrapSVG(element);
-      }
-    },
-    { icons: bootstrapIconPayload, fallbackName: BOOTSTRAP_ICON_FALLBACK }
-  );
-}
-async function buildPresentationFromHTML(htmlDocument, outputPath, domBundlePath) {
-  const executablePath = resolveBrowserExecutable();
-  if (!executablePath) {
-    throw new Error("no compatible Chrome/Chromium executable found for DOM-to-PPTX export");
-  }
-  if (!import_node_fs.default.existsSync(domBundlePath)) {
-    throw new Error(`missing dom-to-pptx browser bundle at ${domBundlePath}`);
-  }
-  import_node_fs.default.mkdirSync(import_node_path.default.dirname(outputPath), { recursive: true });
-  const browser = await import_playwright_core.chromium.launch({
-    headless: true,
-    executablePath,
-    args: ["--allow-file-access-from-files"]
-  });
-  try {
-    const context = await browser.newContext({
-      acceptDownloads: true,
-      viewport: { width: HTML_EXPORT_WIDTH, height: HTML_EXPORT_HEIGHT },
-      deviceScaleFactor: 1
-    });
-    const page = await context.newPage();
-    await page.setContent(htmlDocument, { waitUntil: "domcontentloaded" });
-    await page.addStyleTag({
-      content: `
-        html, body {
-          width: ${HTML_EXPORT_WIDTH}px !important;
-          min-width: ${HTML_EXPORT_WIDTH}px !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          overflow: visible !important;
-        }
-        .barq-pptx-deck {
-          display: block !important;
-          gap: 0 !important;
-          align-items: stretch !important;
-        }
-        .barq-pptx-slide {
-          width: ${HTML_EXPORT_WIDTH}px !important;
-          height: ${HTML_EXPORT_HEIGHT}px !important;
-          box-shadow: none !important;
-          margin: 0 !important;
-        }
-      `
-    });
-    await hydrateBootstrapIcons(page);
-    await page.addScriptTag({ path: domBundlePath });
-    await page.waitForFunction(() => Boolean(window.domToPptx?.exportToPptx));
-    const downloadPromise = page.waitForEvent("download");
-    await page.evaluate((fileName) => {
-      const slides = Array.from(document.querySelectorAll(".barq-pptx-slide"));
-      if (!slides.length) {
-        throw new Error("html deck does not contain any .barq-pptx-slide elements");
-      }
-      return window.domToPptx.exportToPptx(slides, {
-        fileName,
-        layout: "LAYOUT_WIDE",
-        svgAsVector: true
-      });
-    }, import_node_path.default.basename(outputPath));
-    const download = await downloadPromise;
-    await download.saveAs(outputPath);
-    await normalizeHTMLExportedPPTXReadability(outputPath);
-    await context.close();
-  } finally {
-    await browser.close();
-  }
-}
-async function normalizeHTMLExportedPPTXReadability(outputPath) {
-  const data = await import_node_fs.default.promises.readFile(outputPath);
-  const zip = await import_jszip2.default.loadAsync(data);
-  const slideFiles = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
-  let changed = false;
-  for (const name of slideFiles) {
-    const file = zip.file(name);
-    if (!file) continue;
-    const xml = await file.async("string");
-    const updated = xml.replace(/\bsz="(\d+)"/g, (match, rawSize) => {
-      const size = Number.parseInt(rawSize, 10);
-      if (!Number.isFinite(size) || size >= MIN_HTML_PPTX_FONT_SIZE * 100) {
-        return match;
-      }
-      changed = true;
-      return `sz="${MIN_HTML_PPTX_FONT_SIZE * 100}"`;
-    });
-    if (updated !== xml) {
-      zip.file(name, updated);
-    }
-  }
-  if (!changed) return;
-  const output = await zip.generateAsync({
-    type: "nodebuffer",
-    compression: "DEFLATE",
-    compressionOptions: { level: 6 }
-  });
-  await import_node_fs.default.promises.writeFile(outputPath, output);
-}
 async function buildPresentationFromStructuredManifest(manifest, outputPath) {
   const family = previewFamily(manifest);
   const pal = buildPalette(manifest, family);
@@ -16885,28 +16712,19 @@ async function buildPresentationFromStructuredManifest(manifest, outputPath) {
   import_node_fs.default.mkdirSync(import_node_path.default.dirname(outputPath), { recursive: true });
   await pptx.writeFile({ fileName: outputPath, compression: true });
 }
-async function buildPresentation(manifest, outputPath, domBundlePath) {
-  if (manifest.html_document?.trim()) {
-    await buildPresentationFromHTML(manifest.html_document, outputPath, domBundlePath);
-    return;
-  }
-  await buildPresentationFromStructuredManifest(manifest, outputPath);
-}
 async function main() {
   const args = process.argv.slice(2);
   const outIndex = args.indexOf("--output");
-  const bundleIndex = args.indexOf("--dom-bundle");
-  if (outIndex === -1 || outIndex === args.length - 1 || bundleIndex === -1 || bundleIndex === args.length - 1) {
-    throw new Error("missing --output <path> or --dom-bundle <path>");
+  if (outIndex === -1 || outIndex === args.length - 1) {
+    throw new Error("missing --output <path>");
   }
   const outputPath = import_node_path.default.resolve(args[outIndex + 1]);
-  const domBundlePath = import_node_path.default.resolve(args[bundleIndex + 1]);
   const payload = await readStdin();
   if (!payload.trim()) {
     throw new Error("missing manifest payload on stdin");
   }
   const manifest = validateManifest(JSON.parse(payload));
-  await buildPresentation(manifest, outputPath, domBundlePath);
+  await buildPresentationFromStructuredManifest(manifest, outputPath);
   process.stdout.write(JSON.stringify({ status: "ok", output: outputPath }) + "\n");
 }
 main().catch((err) => {
