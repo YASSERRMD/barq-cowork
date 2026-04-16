@@ -890,10 +890,12 @@ func ensureSegmentedSlideRenderable(slide *presentationDraftSlide, brief segment
 
 func segmentedSlideHTML(plan segmentedPPTXPlan, slide presentationDraftSlide, brief segmentedPPTXSlideBrief, index, totalSlides int) string {
 	layout := strings.ToLower(strings.TrimSpace(firstNonEmptyString(slide.Type, slide.Layout, brief.Type, "cards")))
-	eyebrow := escapePresentationDraftText(firstNonEmptyString(brief.Purpose, brief.Visual, plan.Deck.Kicker, "Briefing"))
+	eyebrow := escapePresentationDraftText(segmentedSlideEyebrow(layout, index))
 	heading := escapePresentationDraftText(firstNonEmptyString(slide.Heading, brief.Heading, plan.Title))
 	lead := escapePresentationDraftText(segmentedSlideLead(slide, brief, plan))
 	icon := segmentedIconHTML(firstNonEmptyString(brief.Icon, plan.Deck.Motif, "stars"))
+	badge := escapePresentationDraftText(segmentedDeckBadge(plan))
+	mark := escapePresentationDraftText(segmentedSlideMark(layout))
 
 	var body string
 	switch layout {
@@ -916,18 +918,87 @@ func segmentedSlideHTML(plan segmentedPPTXPlan, slide presentationDraftSlide, br
 
 	switch segmentedCompositionVariant(layout, index) {
 	case "band":
-		return `<div class="seg-slide seg-slide-band"><div class="seg-band-copy"><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p><div class="seg-signal"><span class="seg-icon">` + icon + `</span><span>` + escapePresentationDraftText(firstNonEmptyString(brief.Visual, "Purpose-built visual system")) + `</span></div></div><div class="seg-band-body">` + body + `</div></div>`
+		return `<div class="seg-slide seg-slide-band"><div class="seg-band-copy"><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p><div class="seg-signal"><span class="seg-icon">` + icon + `</span><span>` + escapePresentationDraftText(segmentedSignalText(slide, brief)) + `</span></div></div><div class="seg-band-body">` + body + `</div></div>`
 	case "stack":
-		return `<div class="seg-slide seg-slide-stack"><div class="seg-top"><span class="badge">` + escapePresentationDraftText(plan.Deck.Kicker) + `</span><span class="seg-mark">` + escapePresentationDraftText(plan.Deck.Motif) + `</span></div><div class="seg-stack-head"><span class="seg-icon">` + icon + `</span><div><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div></div><div class="seg-stack-body">` + body + `</div></div>`
+		return `<div class="seg-slide seg-slide-stack"><div class="seg-top"><span class="badge">` + badge + `</span><span class="seg-mark">` + mark + `</span></div><div class="seg-stack-head"><span class="seg-icon">` + icon + `</span><div><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div></div><div class="seg-stack-body">` + body + `</div></div>`
 	case "canvas":
 		return `<div class="seg-slide seg-slide-canvas"><div class="seg-canvas-head"><div><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2></div><span class="seg-icon">` + icon + `</span></div><p class="seg-lead">` + lead + `</p><div class="seg-canvas-body">` + body + `</div></div>`
 	case "rail":
-		return `<div class="seg-slide seg-slide-rail"><div class="seg-rail"><span class="seg-icon">` + icon + `</span><span class="seg-mark">` + escapePresentationDraftText(plan.Deck.Motif) + `</span></div><div class="seg-rail-content"><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p><div class="seg-rail-body">` + body + `</div></div></div>`
+		return `<div class="seg-slide seg-slide-rail"><div class="seg-rail"><span class="seg-icon">` + icon + `</span><span class="seg-mark">` + mark + `</span></div><div class="seg-rail-content"><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p><div class="seg-rail-body">` + body + `</div></div></div>`
 	case "poster":
-		return `<div class="seg-slide seg-slide-poster"><div class="seg-poster-title"><span class="badge">` + escapePresentationDraftText(plan.Deck.Kicker) + `</span><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div><div class="seg-poster-body">` + body + `</div></div>`
+		return `<div class="seg-slide seg-slide-poster"><div class="seg-poster-title"><span class="badge">` + badge + `</span><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div><div class="seg-poster-body">` + body + `</div></div>`
 	default:
-		return `<div class="seg-slide seg-slide-split"><div class="seg-top"><span class="badge">` + escapePresentationDraftText(plan.Deck.Kicker) + `</span><span class="seg-mark">` + escapePresentationDraftText(plan.Deck.Motif) + `</span></div><div class="seg-split-grid"><div class="seg-hero"><span class="seg-icon">` + icon + `</span><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div><div class="seg-main-panel">` + body + `</div></div></div>`
+		return `<div class="seg-slide seg-slide-split"><div class="seg-top"><span class="badge">` + badge + `</span><span class="seg-mark">` + mark + `</span></div><div class="seg-split-grid"><div class="seg-hero"><span class="seg-icon">` + icon + `</span><div class="seg-eyebrow">` + eyebrow + `</div><h2 class="seg-title">` + heading + `</h2><p class="seg-lead">` + lead + `</p></div><div class="seg-main-panel">` + body + `</div></div></div>`
 	}
+}
+
+func segmentedDeckBadge(plan segmentedPPTXPlan) string {
+	title := strings.TrimSpace(plan.Title)
+	if title == "" || len(title) > 34 {
+		return "Overview"
+	}
+	return title
+}
+
+func segmentedSlideEyebrow(layout string, index int) string {
+	switch layout {
+	case "stats":
+		return "Key Signals"
+	case "steps":
+		return "Action Path"
+	case "timeline":
+		return "Timeline"
+	case "compare":
+		return "Comparison"
+	case "table":
+		return "Decision View"
+	}
+	labels := []string{"Context", "Insight", "Evidence", "Implication", "Focus", "Takeaway"}
+	return labels[index%len(labels)]
+}
+
+func segmentedSlideMark(layout string) string {
+	switch layout {
+	case "stats":
+		return "Signals"
+	case "steps":
+		return "Actions"
+	case "timeline":
+		return "Milestones"
+	case "compare":
+		return "Tradeoffs"
+	case "table":
+		return "Options"
+	default:
+		return "Key Point"
+	}
+}
+
+func segmentedSignalText(slide presentationDraftSlide, brief segmentedPPTXSlideBrief) string {
+	return firstNonEmptyString(
+		segmentedUserFacingText(segmentedPointAt(slide.Points, 0)),
+		segmentedUserFacingText(brief.Purpose),
+		"Key takeaway",
+	)
+}
+
+func segmentedUserFacingText(value string) string {
+	value = strings.TrimSpace(stripPresentationDraftEmoji(value))
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	metaTerms := []string{
+		"visual", "icon", "iconography", "layout", "composition", "template", "theme",
+		"palette", "color", "motif", "deck", "slide", "card", "cards", "grid",
+		"editorial", "typography", "spacing", "density", "cover style", "hero",
+	}
+	for _, term := range metaTerms {
+		if strings.Contains(lower, term) {
+			return ""
+		}
+	}
+	return value
 }
 
 func segmentedCompositionVariant(layout string, index int) string {
@@ -953,16 +1024,15 @@ func segmentedCompositionVariant(layout string, index int) string {
 }
 
 func segmentedSlideLead(slide presentationDraftSlide, brief segmentedPPTXSlideBrief, plan segmentedPPTXPlan) string {
-	if strings.TrimSpace(brief.Visual) != "" && strings.TrimSpace(brief.Purpose) != "" {
-		return brief.Purpose + " through " + brief.Visual + "."
-	}
 	if len(slide.Points) > 0 {
-		return slide.Points[0]
+		if text := segmentedUserFacingText(slide.Points[0]); text != "" {
+			return text
+		}
 	}
-	if strings.TrimSpace(brief.Purpose) != "" {
-		return brief.Purpose
+	if text := segmentedUserFacingText(brief.Purpose); text != "" {
+		return text
 	}
-	return firstNonEmptyString(plan.Deck.Narrative, plan.Subtitle, "A focused slide built from the requested subject.")
+	return firstNonEmptyString(segmentedUserFacingText(plan.Subtitle), "A concise, practical view of "+firstNonEmptyString(plan.Title, "the topic")+".")
 }
 
 func segmentedCardsHTML(slide presentationDraftSlide, brief segmentedPPTXSlideBrief, index int) string {
@@ -985,7 +1055,7 @@ func segmentedCardsHTML(slide presentationDraftSlide, brief segmentedPPTXSlideBr
 		out.WriteString(`</div><h3>`)
 		out.WriteString(escapePresentationDraftText(firstNonEmptyString(card.Title, fmt.Sprintf("Point %d", i+1))))
 		out.WriteString(`</h3><p>`)
-		out.WriteString(escapePresentationDraftText(firstNonEmptyString(card.Desc, segmentedPointAt(slide.Points, i))))
+		out.WriteString(escapePresentationDraftText(firstNonEmptyString(segmentedUserFacingText(card.Desc), segmentedUserFacingText(segmentedPointAt(slide.Points, i)), "A practical point for this topic.")))
 		out.WriteString(`</p></div>`)
 	}
 	out.WriteString(`</div>`)
@@ -1156,10 +1226,10 @@ func promoteSegmentedSlideToCards(slide *presentationDraftSlide, brief segmented
 func cardsFromSegmentedBrief(brief segmentedPPTXSlideBrief) []presentationDraftCard {
 	points := brief.Points
 	if len(points) == 0 && strings.TrimSpace(brief.Purpose) != "" {
-		points = append(points, brief.Purpose)
+		points = append(points, segmentedUserFacingText(brief.Purpose))
 	}
 	if len(points) == 0 && strings.TrimSpace(brief.Visual) != "" {
-		points = append(points, brief.Visual)
+		points = append(points, segmentedUserFacingText(brief.Visual))
 	}
 	for len(points) < 3 {
 		points = append(points, "A concrete supporting point for "+firstNonEmptyString(brief.Heading, "this slide")+".")
@@ -1169,7 +1239,7 @@ func cardsFromSegmentedBrief(brief segmentedPPTXSlideBrief) []presentationDraftC
 		cards = append(cards, presentationDraftCard{
 			Icon:  firstNonEmptyString(brief.Icon, "stars"),
 			Title: fmt.Sprintf("Point %d", i+1),
-			Desc:  points[i],
+			Desc:  firstNonEmptyString(segmentedUserFacingText(points[i]), "A practical point for this topic."),
 		})
 	}
 	return cards
@@ -1231,21 +1301,19 @@ func segmentedHTMLThemeCSS() string {
 
 func defaultSegmentedCoverHTML(plan segmentedPPTXPlan) string {
 	title := escapePresentationDraftText(plan.Title)
-	kicker := escapePresentationDraftText(plan.Deck.Kicker)
-	narrative := escapePresentationDraftText(plan.Deck.Narrative)
-	audience := escapePresentationDraftText(plan.Deck.Audience)
-	theme := escapePresentationDraftText(plan.Deck.Theme)
-	style := escapePresentationDraftText(plan.Deck.VisualStyle)
+	kicker := escapePresentationDraftText(segmentedDeckBadge(plan))
+	narrative := escapePresentationDraftText(firstNonEmptyString(segmentedUserFacingText(plan.Subtitle), "A concise overview with key context, implications, and next steps."))
 	firstHeading, firstDesc := segmentedCoverAgenda(plan, 0, "Context", firstNonEmptyString(firstStage(plan.Stages), "Frame the subject"))
 	secondHeading, secondDesc := segmentedCoverAgenda(plan, 1, "Signal", firstNonEmptyString(lastStage(plan.Stages), "Close with action"))
-	return `<div class="seg-cover"><div class="seg-cover-left"><span class="badge">` + kicker + `</span><h1 class="seg-cover-title">` + title + `</h1><p class="seg-cover-lead">` + narrative + `</p><div class="seg-cover-chips"><span>Audience: ` + audience + `</span><span>Theme: ` + theme + `</span></div></div><div class="seg-cover-right"><div class="seg-cover-panel seg-cover-panel-main"><div class="seg-card-icon">` + segmentedIconHTML(plan.Deck.Motif) + `</div><h2>` + style + `</h2><p>` + escapePresentationDraftText(plan.Deck.CoverStyle) + `</p></div><div class="seg-cover-row"><div class="seg-cover-panel"><strong>01</strong><span>` + firstHeading + `</span><p>` + firstDesc + `</p></div><div class="seg-cover-panel"><strong>02</strong><span>` + secondHeading + `</span><p>` + secondDesc + `</p></div></div></div></div>`
+	thirdHeading, thirdDesc := segmentedCoverAgenda(plan, 2, "Action", "What the audience should do next.")
+	return `<div class="seg-cover"><div class="seg-cover-left"><span class="badge">` + kicker + `</span><h1 class="seg-cover-title">` + title + `</h1><p class="seg-cover-lead">` + narrative + `</p><div class="seg-cover-chips"><span>` + firstHeading + `</span><span>` + secondHeading + `</span><span>` + thirdHeading + `</span></div></div><div class="seg-cover-right"><div class="seg-cover-panel seg-cover-panel-main"><div class="seg-card-icon">` + segmentedIconHTML(plan.Deck.Motif) + `</div><h2>` + firstHeading + `</h2><p>` + firstDesc + `</p></div><div class="seg-cover-row"><div class="seg-cover-panel"><strong>01</strong><span>` + secondHeading + `</span><p>` + secondDesc + `</p></div><div class="seg-cover-panel"><strong>02</strong><span>` + thirdHeading + `</span><p>` + thirdDesc + `</p></div></div></div></div>`
 }
 
 func segmentedCoverAgenda(plan segmentedPPTXPlan, index int, fallbackHeading, fallbackDesc string) (string, string) {
 	if index >= 0 && index < len(plan.Slides) {
 		brief := plan.Slides[index]
 		heading := escapePresentationDraftText(firstNonEmptyString(brief.Heading, fallbackHeading))
-		desc := escapePresentationDraftText(firstNonEmptyString(brief.Purpose, segmentedPointAt(brief.Points, 0), fallbackDesc))
+		desc := escapePresentationDraftText(firstNonEmptyString(segmentedUserFacingText(segmentedPointAt(brief.Points, 0)), segmentedUserFacingText(brief.Purpose), fallbackDesc))
 		return heading, desc
 	}
 	return escapePresentationDraftText(fallbackHeading), escapePresentationDraftText(fallbackDesc)
