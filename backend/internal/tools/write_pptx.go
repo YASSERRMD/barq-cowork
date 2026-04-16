@@ -121,7 +121,7 @@ func (WritePPTXTool) InputSchema() map[string]any {
 	}
 	deckSchema := map[string]any{
 		"type":        "object",
-		"description": "Required deck-level design plan chosen by the model. Fill this completely so the final presentation theme, cover treatment, and palette follow the subject instead of falling back to generic defaults. New deck generation requires theme_css and cover_html so preview and PPT export use the same authored slide DOM.",
+		"description": "Required deck-level design plan. Fill all fields completely so the final presentation theme, palette, and cover follow the subject rather than generic defaults.",
 		"properties": map[string]any{
 			"archetype":    map[string]any{"type": "string", "description": "Deck archetype such as proposal, operating plan, executive brief, policy brief, civic strategy, product narrative, technology showcase, or educational explainer"},
 			"subject":      map[string]any{"type": "string", "description": "Explicit subject framing if it should differ from the title"},
@@ -135,10 +135,8 @@ func (WritePPTXTool) InputSchema() map[string]any {
 			"kicker":       map[string]any{"type": "string", "description": "Short cover kicker shown above the title"},
 			"design":       deckDesignSchema,
 			"palette":      paletteSchema,
-			"theme_css":    map[string]any{"type": "string", "description": "Required self-contained CSS for the LLM-authored slide system. Prefer the built-in modern Bootstrap-compatible grid/components/utilities and only add subject-specific theme overrides. No external assets or scripts."},
-			"cover_html":   map[string]any{"type": "string", "description": "Required HTML markup for the cover slide body. Compose with Bootstrap-style rows, columns, cards, badges, lists, and Bootstrap Icons placeholders such as <i class=\"bi bi-shield-check\" aria-hidden=\"true\"></i>. No scripts or generated icon SVG."},
 		},
-		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette", "theme_css", "cover_html"},
+		"required": []string{"subject", "audience", "narrative", "theme", "visual_style", "cover_style", "color_story", "motif", "kicker", "palette"},
 	}
 
 	return map[string]any{
@@ -573,12 +571,6 @@ func missingDeckDesignFields(deck pptxDeckDesignInput) []string {
 	}
 	if strings.TrimSpace(deck.Kicker) == "" {
 		missing = append(missing, "deck.kicker")
-	}
-	if cssRuleCount(deck.ThemeCSS) < 4 {
-		missing = append(missing, "deck.theme_css")
-	}
-	if !htmlStructuredContentReady(deck.CoverHTML, 28) {
-		missing = append(missing, "deck.cover_html")
 	}
 	if deck.Palette == nil {
 		missing = append(missing, "deck.palette")

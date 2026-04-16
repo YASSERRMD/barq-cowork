@@ -14,8 +14,26 @@ import (
 	"github.com/google/uuid"
 )
 
-const segmentedPPTXPlanTimeout = 75 * time.Second
-const segmentedPPTXSlideTimeout = 8 * time.Second
+// Timeouts sized for real LLM content generation against rate-limited hosted
+// APIs (z.ai in particular). z.ai has strict concurrency and request-rate
+// limits; we use conservative per-slide timeouts and a generous inter-call
+// delay to stay well within quota. Plan timeout is 5 minutes; each slide gets
+// 2 minutes. Sequential calls with a 4-second pause between them mean a
+// 10-slide deck uses roughly 40 s of z.ai time spread over ~1.5 minutes.
+const segmentedPPTXPlanTimeout = 300 * time.Second
+const segmentedPPTXSlideTimeout = 120 * time.Second
+
+// segmentedSlideInterCallDelay is the pause between sequential per-slide LLM
+// calls. Raised to 4 s to respect z.ai's rate limit (the 600 ms value still
+// triggered 429s on multi-slide decks during peak load).
+const segmentedSlideInterCallDelay = 4 * time.Second
+
+// segmentedMaxConsecutiveSlideFailures controls when we give up on the LLM
+// and start filling from planned briefs for the remaining slides. Previously
+// a single slide timeout set skipSlideLLM=true and destroyed the rest of the
+// deck; now we only trip after two consecutive failures, so one flaky slide
+// no longer cascades into a fully-templated output.
+const segmentedMaxConsecutiveSlideFailures = 2
 
 var segmentedHTMLTagPattern = regexp.MustCompile(`(?s)<[^>]+>`)
 var segmentedHexColorPattern = regexp.MustCompile(`(?i)^[0-9a-f]{6}$`)
@@ -153,6 +171,7 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 	finalSlides := plannedSegmentedSlides(plan)
 	stepOrder := 1
 	skipSlideLLM := false
+	consecutiveSlideFailures := 0
 	for i, brief := range plan.Slides {
 		stepOrder++
 		stepStarted := time.Now().UTC()
@@ -170,20 +189,37 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 			"step_id": step.ID, "tool": "presentation_slide", "slide": i + 2,
 		})
 
+		// Space sequential calls out so a rate-limited provider (z.ai) does
+		// not see a tight burst after the plan call returned.
+		if i > 0 {
+			select {
+			case <-time.After(segmentedSlideInterCallDelay):
+			case <-ctx.Done():
+			}
+		}
+
 		slide := finalSlides[i]
 		var slideErr error
 		if !skipSlideLLM {
 			slide, slideErr = a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
 			slide = completeSegmentedSlide(slide, plan, brief, i, totalSlides)
 			if slideErr != nil {
-				skipSlideLLM = true
+				consecutiveSlideFailures++
 				slide = finalSlides[i]
-				a.logger.Warn("segmented pptx: slide LLM failed, using planned briefs for remaining slides", "task_id", task.ID, "slide", i+1, "error", slideErr)
+				if consecutiveSlideFailures >= segmentedMaxConsecutiveSlideFailures {
+					skipSlideLLM = true
+					a.logger.Warn("segmented pptx: too many consecutive slide LLM failures, using planned briefs for remaining slides",
+						"task_id", task.ID, "slide", i+1, "consecutive_failures", consecutiveSlideFailures, "error", slideErr)
+				} else {
+					a.logger.Warn("segmented pptx: slide LLM failed, retaining planned brief and continuing",
+						"task_id", task.ID, "slide", i+1, "consecutive_failures", consecutiveSlideFailures, "error", slideErr)
+				}
 			} else {
+				consecutiveSlideFailures = 0
 				finalSlides[i] = slide
 			}
 		} else {
-			slideErr = fmt.Errorf("skipped per-slide LLM after earlier slide timeout")
+			slideErr = fmt.Errorf("skipped per-slide LLM after %d consecutive failures", segmentedMaxConsecutiveSlideFailures)
 		}
 
 		stepDone := time.Now().UTC()
@@ -447,12 +483,17 @@ func firstJSONObjectFromJSONArray(raw string) string {
 }
 
 func segmentedPlanTokenBudget(contentSlides int) int {
-	budget := 2400 + contentSlides*420
-	if budget < 3000 {
-		return 3000
+	// Plan payload includes theme_css (~700 chars), cover_html (~900 chars), a
+	// palette, design, and N slide briefs (~400-600 tokens each with cards).
+	// Earlier floors of 3000 were being exhausted mid-JSON for short decks,
+	// which left the response truncated and unparseable. Give every deck at
+	// least 4500 tokens of headroom and raise the ceiling for bigger decks.
+	budget := 3200 + contentSlides*560
+	if budget < 4500 {
+		return 4500
 	}
-	if budget > 6200 {
-		return 6200
+	if budget > 9000 {
+		return 9000
 	}
 	return budget
 }

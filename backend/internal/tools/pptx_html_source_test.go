@@ -6,29 +6,43 @@ import (
 	"testing"
 )
 
-func TestBuildPPTXPreviewManifest_EmbedsHTMLDocument(t *testing.T) {
+// The preview renderer now composes every slide from structured fields and
+// parseComposition() — it intentionally ignores LLM-authored HTML so the
+// preview matches the final .pptx geometry. These tests assert the Reveal.js
+// shell plus a few layout branches.
+
+func TestBuildPPTXPreviewManifest_EmitsRevealDocumentFromStructuredFields(t *testing.T) {
 	planned := planPPTXPresentation(
 		"AI in Healthcare Operational Rollout",
 		"Operating plan for enterprise-scale clinical deployment",
 		[]pptxSlide{
 			{
 				Heading: "Operational imperative",
-				Type:    "html",
-				HTML:    `<div style="padding:96px;display:grid;gap:22px"><div class="eyebrow">EXECUTIVE SUMMARY</div><h2 class="section-title">Operational imperative</h2><p class="body-copy">Scale requires governance, workflow fit, measurable outcomes, accountable ownership, and one operating rhythm that leaders can trust.</p><div class="grid-2"><div class="panel-light">Governance, workflow, and KPI ownership must move together.</div><div class="panel-light">The rollout succeeds when measurement is operational, not decorative.</div></div></div>`,
+				Type:    "bullets",
+				Points: []string{
+					"Governance: clear ownership for each deployment gate.",
+					"Workflow: integration into existing clinical routines.",
+					"Measurement: KPIs that leaders can trust.",
+				},
+				Design: &pptxSlideDesign{
+					LayoutStyle: "split wide",
+					PanelStyle:  "filled",
+					AccentMode:  "band",
+					Density:     "balanced",
+				},
+				// Intentionally supply LLM HTML that should be ignored.
+				HTML: `<div class="legacy-llm-html">this must not appear in the preview</div>`,
 			},
 		},
 		pptxDeckDesignInput{
-			Subject:     "AI in Healthcare Operational Rollout",
-			Audience:    "healthcare executives",
-			Narrative:   "Imperative -> capability -> roadmap -> decision",
-			Theme:       "healthcare",
-			VisualStyle: "editorial operating proposal",
-			CoverStyle:  "editorial",
-			ColorStory:  "cool clinical depth",
-			Motif:       "health",
-			Kicker:      "From pilot to production",
-			ThemeCSS:    `.cover-grid{display:grid;grid-template-columns:1.2fr 420px;gap:42px}.cover-stack{display:grid;gap:24px}.summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.summary-chip{padding:14px;border:1px solid var(--border)}.panel{padding:24px;border:1px solid var(--border)}.tag{display:inline-flex;padding:8px 12px}`,
-			CoverHTML:   `<div class="cover-grid" style="padding:96px"><div class="cover-stack"><div class="eyebrow">FROM PILOT TO PRODUCTION</div><h1 class="display-title">AI in Healthcare Operational Rollout</h1><p class="lede">Enterprise operating plan for safe, measurable clinical scale-up across governance, workflow, and adoption.</p><div class="tag-row"><span class="tag">Clinical operations</span><span class="tag">Governance</span><span class="tag">Measurement</span></div></div><div style="display:grid;gap:16px"><div class="panel">Audience: healthcare executives and clinical operations leaders.</div><div class="summary-strip"><div class="summary-chip">Scope: rollout governance</div><div class="summary-chip">Horizon: 12 months</div><div class="summary-chip">Goal: measured scale-up</div></div></div></div>`,
+			Subject:    "AI in Healthcare Operational Rollout",
+			Audience:   "healthcare executives",
+			Narrative:  "Imperative -> capability -> roadmap -> decision",
+			Theme:      "healthcare",
+			CoverStyle: "editorial",
+			ColorStory: "cool clinical depth",
+			Motif:      "health",
+			Kicker:     "From pilot to production",
 			Palette: &pptxPaletteInput{
 				Background: "0F172A",
 				Card:       "172033",
@@ -41,7 +55,11 @@ func TestBuildPPTXPreviewManifest_EmbedsHTMLDocument(t *testing.T) {
 		},
 	)
 
-	manifestBytes, err := buildPPTXPreviewManifest("AI in Healthcare Operational Rollout", "Operating plan for enterprise-scale clinical deployment", planned)
+	manifestBytes, err := buildPPTXPreviewManifest(
+		"AI in Healthcare Operational Rollout",
+		"Operating plan for enterprise-scale clinical deployment",
+		planned,
+	)
 	if err != nil {
 		t.Fatalf("build manifest: %v", err)
 	}
@@ -51,17 +69,64 @@ func TestBuildPPTXPreviewManifest_EmbedsHTMLDocument(t *testing.T) {
 		t.Fatalf("unmarshal manifest: %v", err)
 	}
 
-	if manifest.HTMLDocument == "" {
+	doc := manifest.HTMLDocument
+	if doc == "" {
 		t.Fatalf("expected html_document to be populated")
 	}
-	if !strings.Contains(manifest.HTMLDocument, "barq-pptx-slide") || !strings.Contains(manifest.HTMLDocument, "FROM PILOT TO PRODUCTION") {
-		t.Fatalf("expected html document to contain slide markup, got %s", manifest.HTMLDocument)
+
+	// Reveal.js shell
+	for _, want := range []string{
+		`<div class="reveal">`,
+		`<div class="slides">`,
+		`reveal.js@5`,
+		`new Reveal(`,
+		`width: 1280`,
+		`height: 720`,
+		`margin: 0`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("expected reveal shell token %q, got %s", want, doc)
+		}
 	}
-	if !strings.Contains(manifest.HTMLDocument, `class="cover-shell slide"`) {
-		t.Fatalf("expected cover html to be wrapped in a shell, got %s", manifest.HTMLDocument)
+
+	// Structured content from manifest fields, not the LLM HTML payload
+	for _, want := range []string{
+		`From pilot to production`,
+		`AI in Healthcare Operational Rollout`,
+		`Governance`,
+		`Workflow`,
+		`Measurement`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("expected structured content %q in preview, got %s", want, doc)
+		}
 	}
-	if !strings.Contains(manifest.HTMLDocument, `class="slide-shell slide content-shell"`) {
-		t.Fatalf("expected content html to be wrapped in a shell, got %s", manifest.HTMLDocument)
+
+	// LLM HTML must never be rendered
+	if strings.Contains(doc, "legacy-llm-html") || strings.Contains(doc, "this must not appear") {
+		t.Fatalf("expected LLM-authored HTML to be ignored in preview, got %s", doc)
+	}
+
+	// Composition-driven classes for a split+band bullets slide
+	for _, want := range []string{
+		`class="barq-slide barq-accent-band"`,
+		`class="barq-split"`,
+		`barq-panel-filled`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("expected composition class %q for split wide + band, got %s", want, doc)
+		}
+	}
+
+	// Palette variables wired from manifest.palette
+	for _, want := range []string{
+		`--bg: #0F172A`,
+		`--accent: #14B8A6`,
+		`--text: #F8FAFC`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("expected palette variable %q, got %s", want, doc)
+		}
 	}
 }
 
@@ -85,17 +150,14 @@ func TestValidatePlannedHTMLDeckSource_AcceptsStructuredFallbackContent(t *testi
 			},
 		},
 		pptxDeckDesignInput{
-			Subject:     "Operational rollout",
-			Audience:    "operations leaders",
-			Narrative:   "Imperative -> roadmap -> decision",
-			Theme:       "healthcare",
-			VisualStyle: "editorial clinical",
-			CoverStyle:  "editorial",
-			ColorStory:  "cool clinical depth",
-			Motif:       "health",
-			Kicker:      "Operational briefing",
-			ThemeCSS:    `.deck-shell{display:grid;gap:20px}.panel{padding:24px;border:1px solid var(--border)}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.tag{display:inline-flex;padding:8px 12px}`,
-			CoverHTML:   `<div class="deck-shell" style="padding:96px"><div class="eyebrow">OPERATIONAL BRIEFING</div><h1 class="display-title">Operational rollout</h1><div class="panel">Governance, workflow design, and measurement</div></div>`,
+			Subject:    "Operational rollout",
+			Audience:   "operations leaders",
+			Narrative:  "Imperative -> roadmap -> decision",
+			Theme:      "healthcare",
+			CoverStyle: "editorial",
+			ColorStory: "cool clinical depth",
+			Motif:      "health",
+			Kicker:     "Operational briefing",
 			Palette: &pptxPaletteInput{
 				Background: "F5FAFE",
 				Card:       "FFFFFF",
@@ -163,94 +225,6 @@ func TestHTMLCoverContentReady_AcceptsConciseCover(t *testing.T) {
 	}
 }
 
-func TestWrapHTMLSlideShell_DoesNotDoubleWrapExistingShell(t *testing.T) {
-	raw := `<div class="slide-shell slide"><h2 class="section-title">Signal</h2></div>`
-	got := wrapHTMLSlideShell(raw, false)
-	if got != raw {
-		t.Fatalf("expected existing shell to remain unchanged, got %s", got)
-	}
-}
-
-func TestWrapHTMLSlideShell_AddsCoverComposeClassForGenericCovers(t *testing.T) {
-	raw := `<div style="display:flex"><div>left</div><div>right</div></div>`
-	got := wrapHTMLSlideShell(raw, true)
-	if !strings.Contains(got, `cover-shell--compose`) {
-		t.Fatalf("expected generic cover to receive compose shell, got %s", got)
-	}
-}
-
-func TestWrapHTMLSlideShell_PreservesBootstrapCoverLayout(t *testing.T) {
-	raw := `<div class="container-fluid"><div class="row g-3"><div class="col-6"><div class="card">left</div></div><div class="col-6"><div class="card">right</div></div></div></div>`
-	got := wrapHTMLSlideShell(raw, true)
-	if strings.Contains(got, `cover-shell--compose`) {
-		t.Fatalf("expected bootstrap cover to avoid compose wrapper, got %s", got)
-	}
-	if !strings.Contains(got, `class="cover-shell slide"`) {
-		t.Fatalf("expected cover shell wrapper without compose class, got %s", got)
-	}
-}
-
-func TestPreferredHTMLCover_PreservesValidAuthoredCover(t *testing.T) {
-	manifest := pptxPreviewManifest{
-		Title: "Islamic Parenting",
-		Theme: "education",
-		DeckPlan: pptxPreviewDeckPlan{
-			Subject:      "Islamic Parenting",
-			Audience:     "parents",
-			NarrativeArc: "trust -> guidance -> daily practice",
-			ColorStory:   "warm earth tones",
-			Kicker:       "Faith-centered guidance",
-			CoverHTML:    `<div style="display:flex"><div><h1 class="display-title">Islamic Parenting</h1><p class="lede">Raise children with faith.</p></div><div><i class="bi bi-book" aria-hidden="true"></i></div></div>`,
-		},
-		Palette: pptxPreviewPalette{
-			Background: "F5F0E8",
-			Card:       "FFFFFF",
-			Accent:     "2D6A4F",
-			Accent2:    "C9A84C",
-			Text:       "1B1B1B",
-			Muted:      "7A7266",
-			Border:     "E0D8CC",
-		},
-	}
-
-	got := preferredHTMLCover(manifest)
-	if !strings.Contains(got, `<div style="display:flex">`) {
-		t.Fatalf("expected valid authored cover to be preserved, got %s", got)
-	}
-	if strings.Contains(got, `cover-grid`) || strings.Contains(got, `Narrative`) {
-		t.Fatalf("expected authored cover, not deterministic fallback, got %s", got)
-	}
-}
-
-func TestPPTXHTMLBaseCSS_IncludesModernBootstrapKit(t *testing.T) {
-	css := pptxHTMLBaseCSS(pptxPalette{
-		bg:      "F8FAFC",
-		card:    "FFFFFF",
-		accent:  "0EA5E9",
-		accent2: "67E8F9",
-		text:    "0F172A",
-		muted:   "64748B",
-		border:  "CBD5E1",
-	})
-
-	for _, want := range []string{
-		".container-fluid",
-		".row",
-		".col-6",
-		".card",
-		".card-body",
-		".list-group-item",
-		".badge",
-		".icon-badge",
-		".bi",
-		".display-4",
-	} {
-		if !strings.Contains(css, want) {
-			t.Fatalf("expected bootstrap kit selector %q in base css", want)
-		}
-	}
-}
-
 func TestHTMLSlideContentReady_AcceptsBootstrapCardsAndIcons(t *testing.T) {
 	raw := `<div class="container-fluid h-100">
   <div class="row g-3 align-items-stretch">
@@ -281,52 +255,47 @@ func TestHTMLSlideContentReady_AcceptsBootstrapCardsAndIcons(t *testing.T) {
 	}
 }
 
-func TestPreferredHTMLCover_FallsBackOnlyForInvalidCover(t *testing.T) {
-	manifest := pptxPreviewManifest{
-		Title: "Islamic Parenting",
-		Theme: "education",
-		DeckPlan: pptxPreviewDeckPlan{
-			Subject:      "Islamic Parenting",
-			Audience:     "parents",
-			NarrativeArc: "trust -> guidance -> daily practice",
-			ColorStory:   "warm earth tones",
-			Kicker:       "Faith-centered guidance",
-			CoverHTML:    `<div><span>Thin</span></div>`,
+func TestParseComposition_PortsTSSemantics(t *testing.T) {
+	cases := []struct {
+		name string
+		in   pptxSlideDesign
+		want compositionParams
+	}{
+		{
+			name: "split wide + band",
+			in:   pptxSlideDesign{LayoutStyle: "split wide", AccentMode: "band"},
+			want: compositionParams{SplitRatio: 0.52, Columns: 2, AccentBand: true, PanelGlass: true, Density: 1.0},
 		},
-		Palette: pptxPreviewPalette{
-			Background: "F5F0E8",
-			Card:       "FFFFFF",
-			Accent:     "2D6A4F",
-			Accent2:    "C9A84C",
-			Text:       "1B1B1B",
-			Muted:      "7A7266",
-			Border:     "E0D8CC",
+		{
+			// NOTE: "narrow" contains the substring "row", which in the TS
+			// port matches the horizontal regex. We mirror that exactly.
+			name: "split narrow + chip + airy",
+			in:   pptxSlideDesign{LayoutStyle: "split narrow", AccentMode: "chip", Density: "airy"},
+			want: compositionParams{SplitRatio: 0.32, Columns: 2, Horizontal: true, AccentChip: true, PanelGlass: true, Density: 0.75},
 		},
-	}
-
-	got := preferredHTMLCover(manifest)
-	if !strings.Contains(got, `cover-grid`) || !strings.Contains(got, `Narrative`) {
-		t.Fatalf("expected invalid cover to fall back to structured cover, got %s", got)
-	}
-}
-
-func TestPreferredHTMLSlideMarkup_FallsBackForUnderstructuredSlide(t *testing.T) {
-	slide := pptxPreviewSlide{
-		Heading: "Operating signal",
-		Layout:  "bullets",
-		HTML:    `<div style="display:flex;flex-direction:column;gap:18px"><h2 class="section-title">Operating signal</h2><p class="body-copy">One paragraph and one heading are not enough for a client-facing slide that needs real density.</p></div>`,
-		Points: []string{
-			"Connect governance to workflow ownership.",
-			"Treat scorecards as operating controls, not decoration.",
-			"Close with one funding and accountability decision.",
+		{
+			name: "three-col + glow + dense",
+			in:   pptxSlideDesign{LayoutStyle: "3-col", AccentMode: "glow", Density: "dense"},
+			want: compositionParams{SplitRatio: 0, Columns: 3, AccentGlow: true, PanelGlass: true, Density: 1.28},
+		},
+		{
+			name: "hero banner + filled panel",
+			in:   pptxSlideDesign{LayoutStyle: "hero banner", PanelStyle: "filled"},
+			want: compositionParams{SplitRatio: 0, Columns: 1, HeroFirst: true, PanelFilled: true, AccentRail: true, Density: 1.0},
+		},
+		{
+			name: "horizontal rail + outline",
+			in:   pptxSlideDesign{LayoutStyle: "horizontal rail", PanelStyle: "outline"},
+			want: compositionParams{SplitRatio: 0, Columns: 1, Horizontal: true, PanelOutline: true, AccentRail: true, Density: 1.0},
 		},
 	}
-
-	got := preferredHTMLSlideMarkup(slide)
-	if strings.Contains(got, `display:flex`) {
-		t.Fatalf("expected weak authored slide to fall back to structured markup, got %s", got)
-	}
-	if !strings.Contains(got, `bullet-list`) || !strings.Contains(got, `Operating signal`) {
-		t.Fatalf("expected fallback bullet layout, got %s", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := tc.in
+			got := parseComposition(&d)
+			if got != tc.want {
+				t.Fatalf("parseComposition mismatch\n  want %+v\n  got  %+v", tc.want, got)
+			}
+		})
 	}
 }

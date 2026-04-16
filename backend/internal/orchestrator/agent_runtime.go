@@ -137,5 +137,127 @@ func extractJSONObject(raw string) string {
 			return blob
 		}
 	}
+	// Last resort: repair a response that was truncated mid-stream. A large JSON
+	// plan that hits the token cap loses its trailing braces/brackets and then
+	// fails json.Valid above. Closing the open tokens we saw gives back JSON
+	// that parses into a partial (but usable) object, instead of forcing the
+	// caller into a silent template fallback.
+	if start >= 0 {
+		if repaired := repairTruncatedJSONObject(raw[start:]); repaired != "" {
+			return repaired
+		}
+	}
+	return ""
+}
+
+// repairTruncatedJSONObject walks a candidate JSON string (expected to start
+// with '{'), tracks brace/bracket/string state, and appends the closers needed
+// to balance it. It returns the repaired string if it parses as valid JSON and
+// "" otherwise. Incomplete string values are terminated, trailing commas are
+// stripped, and incomplete key:value pairs are dropped so the outer object
+// remains parseable.
+func repairTruncatedJSONObject(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(raw, "{") {
+		return ""
+	}
+	var (
+		depthStack []byte // stack of '{' or '['
+		inString   bool
+		escape     bool
+		lastSafe   = 0 // index up to which we've seen complete tokens at object level
+	)
+	for i := 0; i < len(raw); i++ {
+		ch := raw[i]
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			if ch == '\\' {
+				escape = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{', '[':
+			depthStack = append(depthStack, ch)
+		case '}', ']':
+			if len(depthStack) == 0 {
+				return ""
+			}
+			depthStack = depthStack[:len(depthStack)-1]
+			if len(depthStack) == 1 {
+				// We just closed a top-level value inside the root object.
+				lastSafe = i + 1
+			} else if len(depthStack) == 0 {
+				// Root object closed cleanly — nothing to repair.
+				if json.Valid([]byte(raw[:i+1])) {
+					return raw[:i+1]
+				}
+			}
+		case ',':
+			if len(depthStack) == 1 {
+				lastSafe = i + 1
+			}
+		}
+	}
+	if len(depthStack) == 0 {
+		return ""
+	}
+	// Drop the incomplete tail (everything after the last balanced comma/close
+	// at object depth), then append the closers for the still-open containers.
+	head := strings.TrimRight(strings.TrimSpace(raw[:lastSafe]), ",")
+	// After trimming the trailing comma we may have lost the current container,
+	// so rescan depth from the retained head.
+	depthStack = depthStack[:0]
+	inString = false
+	escape = false
+	for i := 0; i < len(head); i++ {
+		ch := head[i]
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			if ch == '\\' {
+				escape = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{', '[':
+			depthStack = append(depthStack, ch)
+		case '}', ']':
+			if len(depthStack) > 0 {
+				depthStack = depthStack[:len(depthStack)-1]
+			}
+		}
+	}
+	var tail strings.Builder
+	tail.WriteString(head)
+	for i := len(depthStack) - 1; i >= 0; i-- {
+		if depthStack[i] == '{' {
+			tail.WriteByte('}')
+		} else {
+			tail.WriteByte(']')
+		}
+	}
+	candidate := tail.String()
+	if json.Valid([]byte(candidate)) {
+		return candidate
+	}
 	return ""
 }
