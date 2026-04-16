@@ -140,6 +140,7 @@ func buildPPTXPreviewManifest(title, subtitle string, planned plannedPPTXPresent
 		})
 	}
 
+	manifest.HTMLDocument = buildPPTXHTMLDocument(manifest)
 	return json.MarshalIndent(manifest, "", "  ")
 }
 
