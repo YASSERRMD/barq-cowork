@@ -41,6 +41,9 @@ type ChatCompletionRequest struct {
 	MaxTokens   int
 	Stream      bool
 	Tools       []ToolDefinition
+	// ResponseFormat asks compatible providers for a structured response mode,
+	// for example {"type":"json_object"} on OpenAI-compatible APIs.
+	ResponseFormat any
 	// ForceToolName asks compatible providers to return a specific tool call.
 	// Providers that do not support explicit tool choice may ignore it.
 	ForceToolName string
