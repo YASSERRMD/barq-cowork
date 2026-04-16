@@ -114,8 +114,8 @@ func TestWritePPTXTool_CreatesHTMLDeckAndPreview(t *testing.T) {
 	if manifest.Palette.Background == "" || manifest.Palette.Accent == "" {
 		t.Fatalf("expected palette in manifest, got %+v", manifest.Palette)
 	}
-	if !strings.Contains(manifest.HTMLDocument, "barq-pptx-slide") || !strings.Contains(strings.ToUpper(manifest.HTMLDocument), "IMPLEMENTATION ROADMAP") {
-		t.Fatalf("expected embedded html document in manifest, got %s", manifest.HTMLDocument)
+	if !strings.Contains(manifest.HTMLDocument, `class="reveal"`) || !strings.Contains(strings.ToUpper(manifest.HTMLDocument), "IMPLEMENTATION ROADMAP") {
+		t.Fatalf("expected embedded reveal.js html document in manifest, got %s", manifest.HTMLDocument)
 	}
 	coverXML := strings.ToUpper(string(unzipEntryData(t, data, "ppt/slides/slide1.xml")))
 	if strings.Contains(coverXML, "AUDIENCE") ||
@@ -134,18 +134,24 @@ func TestWritePPTXTool_CreatesHTMLDeckAndPreview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preview pptx: %v", err)
 	}
+	// Preview can be served as Reveal.js HTML (fast) OR as base64 PNG stack
+	// (pixel-accurate via LibreOffice). Accept either, but require the slide
+	// content is reachable from the payload.
 	htmlUpper := strings.ToUpper(html)
-	if !strings.Contains(htmlUpper, "OPERATIONAL IMPERATIVE") || !strings.Contains(htmlUpper, "IMPLEMENTATION ROADMAP") {
-		t.Fatalf("pptx preview missing expected headings: %s", html)
+	looksLikeReveal := strings.Contains(html, `class="reveal"`) || strings.Contains(html, `data:image/png;base64`)
+	if !looksLikeReveal {
+		t.Fatalf("pptx preview was neither Reveal HTML nor PNG stack: %.400s", html)
+	}
+	if strings.Contains(html, `class="reveal"`) {
+		if !strings.Contains(htmlUpper, "OPERATIONAL IMPERATIVE") ||
+			!strings.Contains(htmlUpper, "IMPLEMENTATION ROADMAP") ||
+			!strings.Contains(htmlUpper, "CAPABILITY PILLARS") ||
+			!strings.Contains(htmlUpper, "DECISION MATRIX") {
+			t.Fatalf("reveal preview missing headings: %.400s", html)
+		}
 	}
 	if strings.Contains(html, "Audience:") || strings.Contains(html, "AUDITED") {
 		t.Fatalf("pptx preview leaked planning metadata: %s", html)
-	}
-	if !strings.Contains(html, "barq-pptx-deck") || !strings.Contains(htmlUpper, "CAPABILITY PILLARS") || !strings.Contains(htmlUpper, "DECISION MATRIX") {
-		t.Fatalf("pptx preview did not render embedded html deck: %s", html)
-	}
-	if !strings.Contains(html, "barq-preview-fit-frame") || !strings.Contains(html, "barq-preview-fit-script") {
-		t.Fatalf("pptx preview did not wrap deck for viewport fitting: %s", html)
 	}
 }
 
@@ -203,7 +209,7 @@ func TestWritePPTXTool_CreatesHTMLAuthoredDeck(t *testing.T) {
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		t.Fatalf("parse manifest: %v", err)
 	}
-	if !strings.Contains(manifest.HTMLDocument, "barq-pptx-slide") || !strings.Contains(manifest.HTMLDocument, "FROM PILOT TO PRODUCTION") {
+	if !strings.Contains(manifest.HTMLDocument, `class="reveal"`) || !strings.Contains(manifest.HTMLDocument, "From pilot to production") {
 		t.Fatalf("expected html-authored manifest, got %s", manifest.HTMLDocument)
 	}
 

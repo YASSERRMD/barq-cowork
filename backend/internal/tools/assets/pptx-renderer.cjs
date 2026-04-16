@@ -15636,8 +15636,20 @@ function sectionKicker(plan) {
     case "title":
     case "blank":
       return "SECTION TRANSITION";
-    default:
-      return "EXECUTIVE CONTEXT";
+    default: {
+      const h = normalizeText(plan.heading || "");
+      if (containsAny(h, "overview", "introduction", "background", "about", "what")) return "OVERVIEW";
+      if (containsAny(h, "challenge", "problem", "issue", "pain", "risk")) return "KEY CHALLENGES";
+      if (containsAny(h, "solution", "approach", "strategy", "plan", "recommendation")) return "OUR APPROACH";
+      if (containsAny(h, "result", "outcome", "impact", "benefit", "value", "roi")) return "IMPACT";
+      if (containsAny(h, "next", "action", "step")) return "NEXT STEPS";
+      if (containsAny(h, "team", "people", "talent", "resource")) return "THE TEAM";
+      if (containsAny(h, "data", "insight", "finding", "analysis", "research")) return "DATA & INSIGHTS";
+      if (containsAny(h, "market", "industry", "landscape", "competitor", "trend")) return "MARKET VIEW";
+      if (containsAny(h, "product", "feature", "capability", "service")) return "CAPABILITIES";
+      if (containsAny(h, "finance", "revenue", "cost", "budget", "investment")) return "FINANCIALS";
+      return "KEY CONTEXT";
+    }
   }
 }
 function trimSentence(value, limit = 120) {
@@ -15807,12 +15819,6 @@ function renderCover(slide, manifest, family, pal) {
       accent2: mixHex(pal.accent2, pal.card, 0.16),
       text: "FFFFFF"
     });
-    addText(slide, "Confidential", { x: 11.02, y: 6.82, w: 1.2, h: 0.22 }, {
-      fontFace: FONT_BODY,
-      fontSize: 11,
-      color: pal.muted,
-      align: "right"
-    });
     return;
   }
   if (family === "tech") {
@@ -15882,24 +15888,12 @@ function renderCover(slide, manifest, family, pal) {
         charSpace: 0.3,
         fit: "shrink"
       });
-      addText(slide, index === 0 ? "Signal" : index === 1 ? "System" : "Execution", { x: 9.42, y: boxY + 0.48, w: 1.62, h: 0.14 }, {
-        fontFace: FONT_BODY,
-        fontSize: 10,
-        color: pal.darkMuted,
-        charSpace: 0.5
-      });
     });
     addIcon(slide, motif, 11.18, 5.88, 0.72, {
       ...pal,
       accent: mixHex(pal.accent, pal.card, 0.12),
       accent2: mixHex(pal.accent2, pal.card, 0.16),
       text: "FFFFFF"
-    });
-    addText(slide, "Confidential", { x: 11, y: 6.82, w: 1.2, h: 0.22 }, {
-      fontFace: FONT_BODY,
-      fontSize: 11,
-      color: pal.darkMuted,
-      align: "right"
     });
     return;
   }
@@ -16014,19 +16008,13 @@ function renderCover(slide, manifest, family, pal) {
         pal
       );
     });
-    const proposalMetaLabel = manifest.deck_plan.audience?.trim() || manifest.deck_plan.subject?.trim() || "Confidential";
+    const proposalMetaLabel = manifest.deck_plan.audience?.trim() || manifest.deck_plan.subject?.trim() || manifest.title?.trim() || "";
     addMetaPill(slide, proposalMetaLabel, 8.88, 5.86, 3.08, pal);
     const footer = manifest.deck_plan.subject.trim() || manifest.title;
     addText(slide, footer, { x: 1.08, y: 7.02, w: 7.6, h: 0.22 }, {
       fontFace: FONT_BODY,
       fontSize: 12,
       color: pal.darkMuted
-    });
-    addText(slide, "Confidential", { x: 11.05, y: 7.03, w: 1.2, h: 0.22 }, {
-      fontFace: FONT_BODY,
-      fontSize: 11,
-      color: pal.darkMuted,
-      align: "right"
     });
   } else if (meta) {
     addText(slide, meta, { x: 1.04, y: 5.02, w: 7.1, h: 0.32 }, {
