@@ -2,7 +2,9 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,7 +13,6 @@ import (
 	"github.com/barq-cowork/barq-cowork/internal/domain"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
 	"github.com/barq-cowork/barq-cowork/internal/tools"
-	"log/slog"
 )
 
 type fakeProvider struct {
@@ -200,16 +201,23 @@ func TestAgentLoop_SegmentsExplicitSlideCountPresentation(t *testing.T) {
 		t.Fatalf("expected one artifact, got %d", len(artifacts.artifacts))
 	}
 	draftEvents := 0
+	draftIndexes := map[int]bool{}
 	for _, event := range events.events {
 		if event.Type == domain.EventTypePresentationSlide {
 			draftEvents++
 			if strings.Contains(event.Payload, "Slide 1 of") {
 				t.Fatalf("draft should not include visible slide counter payload: %s", event.Payload)
 			}
+			var payload struct {
+				Index int `json:"index"`
+			}
+			if err := json.Unmarshal([]byte(event.Payload), &payload); err == nil {
+				draftIndexes[payload.Index] = true
+			}
 		}
 	}
-	if draftEvents != 3 {
-		t.Fatalf("expected cover plus two slide draft events, got %d", draftEvents)
+	if draftEvents < 3 || len(draftIndexes) != 3 {
+		t.Fatalf("expected drafts for cover plus two slides, got events=%d unique=%d", draftEvents, len(draftIndexes))
 	}
 	if len(plans.steps) != 4 {
 		t.Fatalf("expected plan, two slide drafts, and render step, got %d", len(plans.steps))
@@ -448,6 +456,20 @@ func TestRequestedPresentationDeckHint_HonorsExplicitContentSlideCount(t *testin
 	hint := requestedPresentationDeckHint(task)
 	if !strings.Contains(hint, "3 content slides") || !strings.Contains(hint, "exactly 3 entries") {
 		t.Fatalf("expected content-slide hint, got %q", hint)
+	}
+}
+
+func TestSegmentedPresentationWorkflow_RoutesSingularSlideRequests(t *testing.T) {
+	task := &domain.Task{
+		Title:       "generate 3 slide about corruption in india",
+		Description: "Use the presentation generator.",
+	}
+	if requiredOutputTool(task) != "write_pptx" {
+		t.Fatalf("expected singular slide request to route to write_pptx")
+	}
+	content, total, ok := requestedPresentationSlideTargets(task)
+	if !ok || content != 2 || total != 3 {
+		t.Fatalf("expected 3 total slides as 2 content + cover, got content=%d total=%d ok=%v", content, total, ok)
 	}
 }
 

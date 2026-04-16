@@ -14,7 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
-const segmentedPPTXCallTimeout = 90 * time.Second
+const segmentedPPTXPlanTimeout = 75 * time.Second
+const segmentedPPTXSlideTimeout = 8 * time.Second
 
 var segmentedHTMLTagPattern = regexp.MustCompile(`(?s)<[^>]+>`)
 var segmentedHexColorPattern = regexp.MustCompile(`(?i)^[0-9a-f]{6}$`)
@@ -126,31 +127,32 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 		"step_id": planStep.ID, "tool": "presentation_plan", "mode": "segmented",
 	})
 
+	provisionalPlan := fallbackSegmentedPPTXPlan(task, contentSlides, totalSlides)
+	normalizeSegmentedPPTXPlan(&provisionalPlan, task, contentSlides)
+	a.emitSegmentedPresentationDrafts(ctx, task.ID, provisionalPlan, totalSlides)
+
 	plan, err := a.generateSegmentedPPTXPlan(ctx, task, contentSlides, totalSlides, extraSystemPrompts, runtimeProfile)
 	completed := time.Now().UTC()
 	planStep.CompletedAt = &completed
 	if err != nil {
-		planStep.Status = domain.StepStatusFailed
-		planStep.ToolOutput = marshalError(err)
-		_ = a.plans.UpdateStep(ctx, planStep)
-		a.emitAgentEvent(ctx, task.ID, domain.EventTypeAgentMessage, map[string]any{
-			"text": "Presentation planning failed: " + err.Error(),
-		})
-		result.Failed++
-		return result
+		a.logger.Warn("segmented pptx: LLM planning failed, using local presentation plan", "task_id", task.ID, "error", err)
+		plan = provisionalPlan
+		planStep.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": true, "warning": err.Error(), "slides": totalSlides, "title": plan.Title})
+	} else {
+		normalizeSegmentedPPTXPlan(&plan, task, contentSlides)
+		planStep.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": false, "slides": totalSlides, "title": plan.Title})
 	}
 
-	normalizeSegmentedPPTXPlan(&plan, task, contentSlides)
 	planStep.Status = domain.StepStatusCompleted
-	planStep.ToolOutput = marshalJSON(map[string]any{"status": "ok", "slides": totalSlides, "title": plan.Title})
 	_ = a.plans.UpdateStep(ctx, planStep)
 	a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepCompleted, map[string]any{
 		"step_id": planStep.ID, "tool": "presentation_plan", "status": planStep.Status,
 	})
-	a.emitSegmentedPresentationDraft(ctx, task.ID, 1, totalSlides, "cover", plan.Title, plan.Deck.CoverHTML, plan.Deck)
+	a.emitSegmentedPresentationDrafts(ctx, task.ID, plan, totalSlides)
 
-	finalSlides := make([]presentationDraftSlide, 0, contentSlides)
+	finalSlides := plannedSegmentedSlides(plan)
 	stepOrder := 1
+	skipSlideLLM := false
 	for i, brief := range plan.Slides {
 		stepOrder++
 		stepStarted := time.Now().UTC()
@@ -168,12 +170,21 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 			"step_id": step.ID, "tool": "presentation_slide", "slide": i + 2,
 		})
 
-		slide, slideErr := a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
-		slide = completeSegmentedSlide(slide, brief)
-		if slideErr != nil {
-			a.logger.Warn("segmented pptx: slide LLM failed, using planned brief", "task_id", task.ID, "slide", i+1, "error", slideErr)
+		slide := finalSlides[i]
+		var slideErr error
+		if !skipSlideLLM {
+			slide, slideErr = a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
+			slide = completeSegmentedSlide(slide, brief)
+			if slideErr != nil {
+				skipSlideLLM = true
+				slide = finalSlides[i]
+				a.logger.Warn("segmented pptx: slide LLM failed, using planned briefs for remaining slides", "task_id", task.ID, "slide", i+1, "error", slideErr)
+			} else {
+				finalSlides[i] = slide
+			}
+		} else {
+			slideErr = fmt.Errorf("skipped per-slide LLM after earlier slide timeout")
 		}
-		finalSlides = append(finalSlides, slide)
 
 		stepDone := time.Now().UTC()
 		step.CompletedAt = &stepDone
@@ -187,7 +198,7 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 		a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepCompleted, map[string]any{
 			"step_id": step.ID, "tool": "presentation_slide", "status": step.Status, "slide": i + 2,
 		})
-		a.emitSegmentedPresentationDraft(ctx, task.ID, i+2, totalSlides, "slide", slide.Heading, presentationDraftSlideHTML(slide), plan.Deck)
+		a.emitSegmentedPresentationDraft(ctx, task.ID, i+2, totalSlides, "slide", finalSlides[i].Heading, presentationDraftSlideHTML(finalSlides[i]), plan.Deck)
 	}
 
 	args := segmentedPPTXArgs{
@@ -274,11 +285,15 @@ Return ONLY compact valid JSON with this exact shape:
     "theme_css":".row{display:flex;gap:18px}.card{border:1px solid var(--border);border-radius:20px}.card-body{padding:22px}.badge{border-radius:999px}.list-group-item{border-left:5px solid var(--accent)}",
     "cover_html":"compact inner cover HTML using Bootstrap classes and one Bootstrap Icon placeholder"
   },
-  "stages":["opening stage","explanation stage","practice/safety stage","closing stage"]
+  "stages":["opening stage","explanation stage","practice/safety stage","closing stage"],
+  "slides":[{"heading":"specific slide title","type":"cards|stats|steps|timeline|compare|table","purpose":"why this slide exists","visual":"visual composition","icon":"bootstrap-icon-name","points":["specific point","specific point","specific point"],"cards":[{"icon":"bootstrap-icon-name","title":"specific card title","desc":"specific card copy"}]}]
 }
 
 Rules:
-- Do not include per-slide content in this response. That will be generated one slide at a time.
+- Include exactly %d concise slide briefs in slides[].
+- Every slide brief must have heading, type, purpose, visual, icon, and at least 3 concrete points.
+- Prefer structured fields where useful: cards, stats, steps, timeline, left_column/right_column, or table.
+- Do not include full slide HTML in the plan; HTML enrichment is optional later.
 - stages length must be 3 to 5.
 - Keep the whole JSON compact. Do not pretty print. Do not add fields beyond the shape above.
 - Keep deck.theme_css under 700 characters and deck.cover_html under 900 characters.
@@ -286,9 +301,9 @@ Rules:
 - Use real Bootstrap Icon placeholders in HTML only: <i class="bi bi-stars" aria-hidden="true"></i>.
 - Do not include visible slide counters.
 - Keep copy readable for projector use: no tiny text, no empty decorative panels.
-- Make the design decisions from the subject, not from a fixed template.`, task.Title, task.Description, contextText, totalSlides, contentSlides)
+- Make the design decisions from the subject, not from a fixed template.`, task.Title, task.Description, contextText, totalSlides, contentSlides, contentSlides)
 
-	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3000, []provider.ChatMessage{
+	err := a.chatSegmentedJSON(ctx, runtimeProfile, segmentedPlanTokenBudget(contentSlides), segmentedPPTXPlanTimeout, []provider.ChatMessage{
 		{Role: "system", Content: segmentedPPTXSystemPrompt()},
 		{Role: "user", Content: user},
 	}, &out)
@@ -344,7 +359,7 @@ HTML requirements:
 - Body copy should be projector-readable, generally 20-24px through class/style choices.
 - Keep the HTML compact enough for one slide.`, string(deckBytes), task.Title, index+2, totalSlides, segmentedSlideRole(index, len(plan.Slides), plan.Stages), string(briefBytes))
 
-	err := a.chatSegmentedJSON(ctx, runtimeProfile, 1800, []provider.ChatMessage{
+	err := a.chatSegmentedJSON(ctx, runtimeProfile, 1800, segmentedPPTXSlideTimeout, []provider.ChatMessage{
 		{Role: "system", Content: segmentedPPTXSystemPrompt()},
 		{Role: "user", Content: user},
 	}, &out)
@@ -360,10 +375,11 @@ func (a *AgentLoop) chatSegmentedJSON(
 	ctx context.Context,
 	runtimeProfile agentRuntimeProfile,
 	maxTokens int,
+	timeout time.Duration,
 	messages []provider.ChatMessage,
 	out any,
 ) error {
-	callCtx, cancel := context.WithTimeout(ctx, segmentedPPTXCallTimeout)
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	retry := runtimeProfile.Retry
 	retry.MaxAttempts = 1
@@ -417,6 +433,195 @@ func firstJSONObjectFromJSONArray(raw string) string {
 		return ""
 	}
 	return first
+}
+
+func segmentedPlanTokenBudget(contentSlides int) int {
+	budget := 2400 + contentSlides*420
+	if budget < 3000 {
+		return 3000
+	}
+	if budget > 6200 {
+		return 6200
+	}
+	return budget
+}
+
+func plannedSegmentedSlides(plan segmentedPPTXPlan) []presentationDraftSlide {
+	slides := make([]presentationDraftSlide, 0, len(plan.Slides))
+	for _, brief := range plan.Slides {
+		slides = append(slides, completeSegmentedSlide(presentationDraftSlide{}, brief))
+	}
+	return slides
+}
+
+func (a *AgentLoop) emitSegmentedPresentationDrafts(ctx context.Context, taskID string, plan segmentedPPTXPlan, totalSlides int) {
+	a.emitSegmentedPresentationDraft(ctx, taskID, 1, totalSlides, "cover", plan.Title, plan.Deck.CoverHTML, plan.Deck)
+	for i, slide := range plannedSegmentedSlides(plan) {
+		a.emitSegmentedPresentationDraft(ctx, taskID, i+2, totalSlides, "slide", slide.Heading, presentationDraftSlideHTML(slide), plan.Deck)
+	}
+}
+
+func fallbackSegmentedPPTXPlan(task *domain.Task, contentSlides, totalSlides int) segmentedPPTXPlan {
+	subject := inferSegmentedSubject(task)
+	filename := slugifySegmentedFilename(subject)
+	if filename == "presentation" {
+		filename = slugifySegmentedFilename(task.Title)
+	}
+	plan := segmentedPPTXPlan{
+		Filename: filename,
+		Title:    subject,
+		Subtitle: "A concise presentation generated from the request",
+		Deck: segmentedPPTXDeck{
+			Archetype:   "structured briefing",
+			Subject:     subject,
+			Audience:    "the intended audience",
+			Narrative:   "context -> key ideas -> practical next steps",
+			Theme:       "modern briefing",
+			VisualStyle: "dense editorial cards with clear iconography",
+			CoverStyle:  "asymmetric title composition with compact context cards",
+			ColorStory:  "soft slate background with high-contrast accent colors",
+			Motif:       "connected insight cards",
+			Kicker:      "Presentation",
+			Design: map[string]string{
+				"composition":    "asymmetric grid",
+				"density":        "dense",
+				"shape_language": "crisp cards",
+				"accent_mode":    "rail and badge",
+				"hero_layout":    "information-led",
+			},
+			Palette: map[string]string{
+				"background": "F6F8FB",
+				"card":       "FFFFFF",
+				"accent":     "0EA5E9",
+				"accent2":    "14B8A6",
+				"text":       "0F172A",
+				"muted":      "475569",
+				"border":     "CBD5E1",
+			},
+			ThemeCSS: defaultSegmentedThemeCSS(),
+		},
+		Stages: []string{
+			"frame the subject and audience need",
+			"explain the most important ideas",
+			"make the implications practical",
+			"close with a clear action path",
+		},
+	}
+	plan.Deck.CoverHTML = defaultSegmentedCoverHTML(plan)
+	plan.Slides = fallbackSegmentedSlideBriefs(subject, contentSlides, totalSlides)
+	return plan
+}
+
+func inferSegmentedSubject(task *domain.Task) string {
+	text := strings.TrimSpace(task.Title)
+	if text == "" {
+		text = strings.TrimSpace(task.Description)
+	}
+	if text == "" {
+		return "Presentation"
+	}
+	cleaned := requestedSlideCountPattern.ReplaceAllString(text, "")
+	replacements := []string{
+		"presentation about", "presentation on", "presentation for",
+		"powerpoint about", "powerpoint on", "powerpoint for",
+		"pptx about", "pptx on", "pptx for",
+		"generate", "create", "make", "build", "deck about", "deck on", "slide about", "slide on",
+	}
+	cleaned = strings.ToLower(cleaned)
+	for _, token := range replacements {
+		cleaned = strings.ReplaceAll(cleaned, token, "")
+	}
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+	if cleaned == "" {
+		return "Presentation"
+	}
+	words := strings.Fields(cleaned)
+	for i, word := range words {
+		if len(word) == 0 {
+			continue
+		}
+		if len(word) <= 3 && word == strings.ToUpper(word) {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
+}
+
+func fallbackSegmentedSlideBriefs(subject string, contentSlides, totalSlides int) []segmentedPPTXSlideBrief {
+	roles := []struct {
+		heading string
+		kind    string
+		purpose string
+		visual  string
+		icon    string
+	}{
+		{"Why It Matters", "cards", "frame the topic and explain why the audience should care", "three context cards", "bullseye"},
+		{"Core Ideas", "cards", "break the subject into the few ideas the audience must understand", "dense concept cards", "diagram-3"},
+		{"Risks and Guardrails", "compare", "separate helpful practice from avoidable risk", "two-column comparison", "shield-check"},
+		{"Operating Playbook", "steps", "show how to apply the subject in a practical sequence", "numbered action flow", "list-check"},
+		{"Signals to Track", "stats", "give the audience concrete indicators to monitor", "metric cards", "bar-chart-line"},
+		{"Decision Framework", "table", "turn the topic into practical choices", "compact decision table", "grid-3x3-gap"},
+		{"Action Plan", "steps", "close with immediate next steps", "roadmap steps", "check2-circle"},
+	}
+	slides := make([]segmentedPPTXSlideBrief, 0, contentSlides)
+	for i := 0; i < contentSlides; i++ {
+		role := roles[i%len(roles)]
+		if i == contentSlides-1 && contentSlides > 1 {
+			role = roles[len(roles)-1]
+		}
+		heading := role.heading
+		if contentSlides <= 3 {
+			heading = fmt.Sprintf("%s: %s", subject, role.heading)
+		}
+		brief := segmentedPPTXSlideBrief{
+			Heading: heading,
+			Type:    role.kind,
+			Purpose: role.purpose,
+			Visual:  role.visual,
+			Icon:    role.icon,
+			Points: []string{
+				fmt.Sprintf("Define the specific audience problem around %s.", subject),
+				fmt.Sprintf("Show what changes when %s is handled well.", subject),
+				"Convert the idea into a concrete next action for the audience.",
+			},
+			Cards: []presentationDraftCard{
+				{Icon: role.icon, Title: "Audience need", Desc: fmt.Sprintf("The slide connects %s to a real decision the audience must make.", subject)},
+				{Icon: "lightbulb", Title: "Key insight", Desc: "A focused idea keeps the slide useful instead of decorative."},
+				{Icon: "check2-circle", Title: "Practical move", Desc: "End with an action the audience can apply after the presentation."},
+			},
+		}
+		if role.kind == "steps" {
+			brief.Steps = []string{
+				fmt.Sprintf("Map the current situation around %s.", subject),
+				"Choose the highest-impact intervention.",
+				"Assign ownership, timeline, and success measure.",
+			}
+		}
+		if role.kind == "stats" {
+			brief.Stats = []presentationDraftStat{
+				{Value: "01", Label: "Priority", Desc: "Primary decision the audience should make first."},
+				{Value: "03", Label: "Signals", Desc: "Metrics or observations worth tracking."},
+				{Value: "30d", Label: "Action window", Desc: "Near-term period to validate progress."},
+			}
+		}
+		if role.kind == "compare" {
+			brief.LeftColumn = &presentationDraftCompareColumn{Heading: "Helpful pattern", Points: []string{"Specific guidance", "Visible accountability", "Measured improvement"}}
+			brief.RightColumn = &presentationDraftCompareColumn{Heading: "Risk pattern", Points: []string{"Vague ownership", "Unverified assumptions", "No follow-through"}}
+		}
+		if role.kind == "table" {
+			brief.Table = &presentationDraftTableData{
+				Headers: []string{"Choice", "Use when", "Watch for"},
+				Rows: [][]string{
+					{"Educate", "The audience needs shared understanding", "Too much theory"},
+					{"Pilot", "The team needs proof before scale", "Weak measurement"},
+					{"Scale", "The model is already validated", "Operational gaps"},
+				},
+			}
+		}
+		slides = append(slides, brief)
+	}
+	return slides
 }
 
 func normalizeSegmentedPPTXPlan(plan *segmentedPPTXPlan, task *domain.Task, contentSlides int) {
@@ -512,6 +717,7 @@ func completeSegmentedSlide(slide presentationDraftSlide, brief segmentedPPTXSli
 		slide.Type = "cards"
 		slide.Cards = cardsFromSegmentedBrief(brief)
 	}
+	ensureSegmentedSlideRenderable(&slide, brief)
 	return slide
 }
 
@@ -591,6 +797,56 @@ func segmentedSlideHasStructuredContent(slide presentationDraftSlide) bool {
 		len(slide.Timeline) >= 2 ||
 		(slide.LeftColumn != nil && slide.RightColumn != nil && len(slide.LeftColumn.Points) > 0 && len(slide.RightColumn.Points) > 0) ||
 		(slide.Table != nil && len(slide.Table.Headers) > 0 && len(slide.Table.Rows) > 0)
+}
+
+func ensureSegmentedSlideRenderable(slide *presentationDraftSlide, brief segmentedPPTXSlideBrief) {
+	layout := strings.ToLower(strings.TrimSpace(firstNonEmptyString(slide.Type, slide.Layout)))
+	switch layout {
+	case "html":
+		if !slideHTMLLikelyReady(slide.HTML) {
+			promoteSegmentedSlideToCards(slide, brief)
+		}
+	case "stats":
+		if len(slide.Stats) < 2 {
+			promoteSegmentedSlideToCards(slide, brief)
+		}
+	case "steps":
+		if len(slide.Steps) < 3 {
+			if len(slide.Points) >= 3 {
+				slide.Steps = slide.Points
+			} else {
+				promoteSegmentedSlideToCards(slide, brief)
+			}
+		}
+	case "cards":
+		if len(slide.Cards) < 3 {
+			slide.Cards = cardsFromSegmentedBrief(brief)
+		}
+	case "timeline":
+		if len(slide.Timeline) < 3 {
+			promoteSegmentedSlideToCards(slide, brief)
+		}
+	case "compare":
+		if slide.LeftColumn == nil || slide.RightColumn == nil {
+			promoteSegmentedSlideToCards(slide, brief)
+		}
+	case "table":
+		if slide.Table == nil || len(slide.Table.Headers) < 2 || len(slide.Table.Rows) == 0 {
+			promoteSegmentedSlideToCards(slide, brief)
+		}
+	default:
+		if len(slide.Points) < 2 {
+			promoteSegmentedSlideToCards(slide, brief)
+		}
+	}
+}
+
+func promoteSegmentedSlideToCards(slide *presentationDraftSlide, brief segmentedPPTXSlideBrief) {
+	slide.Type = "cards"
+	slide.Layout = "cards"
+	if len(slide.Cards) < 3 {
+		slide.Cards = cardsFromSegmentedBrief(brief)
+	}
 }
 
 func cardsFromSegmentedBrief(brief segmentedPPTXSlideBrief) []presentationDraftCard {
