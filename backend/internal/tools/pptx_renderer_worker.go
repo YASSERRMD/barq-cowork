@@ -17,18 +17,14 @@ import (
 //go:embed assets/pptx-renderer.cjs
 var embeddedPPTXRenderer []byte
 
-//go:embed assets/dom-to-pptx.bundle.js
-var embeddedDOMToPPTXBundle []byte
-
 var (
-	pptxRendererOnce    sync.Once
-	pptxRendererPath    string
-	domToPPTXBundlePath string
-	pptxRendererErr     error
+	pptxRendererOnce sync.Once
+	pptxRendererPath string
+	pptxRendererErr  error
 )
 
 func buildPPTXWithRenderer(ctx context.Context, manifest []byte) ([]byte, error) {
-	scriptPath, domBundlePath, err := ensurePPTXRendererAssets()
+	scriptPath, err := ensurePPTXRendererAssets()
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +40,7 @@ func buildPPTXWithRenderer(ctx context.Context, manifest []byte) ([]byte, error)
 	defer os.RemoveAll(tmpDir)
 
 	outputPath := filepath.Join(tmpDir, "presentation.pptx")
-	cmd := exec.CommandContext(ctx, nodePath, scriptPath, "--output", outputPath, "--dom-bundle", domBundlePath)
+	cmd := exec.CommandContext(ctx, nodePath, scriptPath, "--output", outputPath)
 	cmd.Stdin = bytes.NewReader(manifest)
 	cmd.Env = append(os.Environ(), rendererNodePathEnv()...)
 	output, err := cmd.CombinedOutput()
@@ -59,14 +55,10 @@ func buildPPTXWithRenderer(ctx context.Context, manifest []byte) ([]byte, error)
 	return injectPPTXPreviewManifest(data, manifest)
 }
 
-func ensurePPTXRendererAssets() (string, string, error) {
+func ensurePPTXRendererAssets() (string, error) {
 	pptxRendererOnce.Do(func() {
 		if len(embeddedPPTXRenderer) == 0 {
 			pptxRendererErr = fmt.Errorf("embedded pptx renderer bundle is empty")
-			return
-		}
-		if len(embeddedDOMToPPTXBundle) == 0 {
-			pptxRendererErr = fmt.Errorf("embedded dom-to-pptx bundle is empty")
 			return
 		}
 		rendererPath, err := writeEmbeddedRendererAsset("barq-pptx-renderer", ".cjs", embeddedPPTXRenderer, 0o755)
@@ -74,15 +66,9 @@ func ensurePPTXRendererAssets() (string, string, error) {
 			pptxRendererErr = fmt.Errorf("write embedded pptx renderer: %w", err)
 			return
 		}
-		bundlePath, err := writeEmbeddedRendererAsset("barq-dom-to-pptx", ".js", embeddedDOMToPPTXBundle, 0o644)
-		if err != nil {
-			pptxRendererErr = fmt.Errorf("write embedded dom-to-pptx bundle: %w", err)
-			return
-		}
 		pptxRendererPath = rendererPath
-		domToPPTXBundlePath = bundlePath
 	})
-	return pptxRendererPath, domToPPTXBundlePath, pptxRendererErr
+	return pptxRendererPath, pptxRendererErr
 }
 
 func writeEmbeddedRendererAsset(prefix, ext string, payload []byte, mode os.FileMode) (string, error) {

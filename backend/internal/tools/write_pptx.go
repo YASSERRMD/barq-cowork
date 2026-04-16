@@ -25,10 +25,10 @@ const (
 
 func (WritePPTXTool) Name() string { return "write_pptx" }
 func (WritePPTXTool) Description() string {
-	return "Create a professional PowerPoint presentation (.pptx) powered by an HTML-to-editable-PowerPoint worker. " +
-		"Requires a complete deck design brief chosen by the model, then audits each slide for content fit, layout fit, and visual fit before rendering. " +
-		"New deck generation requires a full LLM-authored HTML/CSS slide system so preview and downloadable PPTX come from the same slide DOM instead of a fallback template. " +
-		"Use this for ALL presentation, slides, deck, or slideshow requests. " +
+	return "Create a professional PowerPoint presentation (.pptx) using PptxGenJS. " +
+		"Requires a deck design brief (theme, palette, audience) and structured slide content (bullets, stats, cards, timeline, compare, table, or steps). " +
+		"Use this whenever the user asks for a .pptx or PowerPoint file. " +
+		"For browser-only HTML slide decks use write_html_slides instead. " +
 		"Saves to slides/<filename>.pptx."
 }
 func (WritePPTXTool) InputSchema() map[string]any {
@@ -637,9 +637,6 @@ func (t WritePPTXTool) Execute(ctx context.Context, ictx InvocationContext, args
 	planned := planPPTXPresentation(args.Title, args.Subtitle, args.Slides, args.Deck)
 	if err := validatePPTXPresentation(planned); err != nil {
 		return Err("plan pptx: %v", err)
-	}
-	if err := validatePlannedHTMLDeckSource(planned); err != nil {
-		return Err("%v", err)
 	}
 	manifest, err := buildPPTXPreviewManifest(args.Title, args.Subtitle, planned)
 	if err != nil {
