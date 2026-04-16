@@ -450,16 +450,11 @@ function buildPalette(manifest: Manifest, family: RenderFamily): RenderPalette {
     case "tech":
       return {
         ...base,
-        bg: "0A1220",
-        card: "111B2B",
-        canvas: "0C1626",
-        header: "08111D",
-        footer: "111B2B",
-        text: "F8FAFC",
-        muted: "A8B6C7",
-        darkMuted: "B9C4D0",
-        lightMuted: "A8B6C7",
-        border: "223246",
+        canvas: mixHex(base.bg, base.card, 0.86),
+        header: mixHex(base.bg, "000000", 0.18),
+        footer: mixHex(base.bg, "000000", 0.14),
+        darkMuted: mixHex(base.text, "FFFFFF", 0.62),
+        lightMuted: mixHex(base.bg, base.text, 0.58),
       };
     default:
       return base;
