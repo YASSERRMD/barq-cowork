@@ -17039,16 +17039,21 @@ function systemChromePath() {
   }
   return "google-chrome";
 }
+function stripFontFaceRules(css) {
+  return css.replace(/@font-face\s*\{[^}]*\}/gi, "");
+}
 function buildSlidePageHTML(slideHTML, palette, themeCss, title) {
   const bg = palette.background || "FFFFFF";
   const text = palette.text || "111827";
+  const safeBootstrapCSS = stripFontFaceRules(bootstrap_min_default);
+  const safeIconsCSS = stripFontFaceRules(bootstrap_icons_min_default);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
-${bootstrap_min_default}
-${bootstrap_icons_min_default}
+${safeBootstrapCSS}
+${safeIconsCSS}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1280px;height:720px;overflow:hidden}
 body{background:#${bg};color:#${text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
@@ -17082,7 +17087,7 @@ async function screenshotSlides(manifest) {
     const coverHTML = manifest.deck_plan.cover_html || "";
     if (coverHTML) {
       const html = buildSlidePageHTML(coverHTML, manifest.palette, themeCss, manifest.title);
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: 3e4 });
+      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15e3 });
       const shot = await page.screenshot({ type: "png", encoding: "base64" });
       results.push(shot);
     } else {
@@ -17091,7 +17096,7 @@ async function screenshotSlides(manifest) {
     for (const plan of manifest.slides) {
       if (plan.html) {
         const html = buildSlidePageHTML(plan.html, manifest.palette, themeCss, plan.heading || manifest.title);
-        await page.setContent(html, { waitUntil: "networkidle0", timeout: 3e4 });
+        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15e3 });
         const shot = await page.screenshot({ type: "png", encoding: "base64" });
         results.push(shot);
       } else {

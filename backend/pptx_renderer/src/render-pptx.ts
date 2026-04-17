@@ -2264,16 +2264,24 @@ function systemChromePath(): string {
   return "google-chrome";
 }
 
+// Strip @font-face rules so Chrome doesn't try to fetch font files from a
+// relative URL (which hangs forever in page.setContent mode).
+function stripFontFaceRules(css: string): string {
+  return css.replace(/@font-face\s*\{[^}]*\}/gi, "");
+}
+
 function buildSlidePageHTML(slideHTML: string, palette: Palette, themeCss: string, title: string): string {
   const bg = palette.background || "FFFFFF";
   const text = palette.text || "111827";
+  const safeBootstrapCSS = stripFontFaceRules(bootstrapCSS as unknown as string);
+  const safeIconsCSS = stripFontFaceRules(bootstrapIconsCSS as unknown as string);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
-${bootstrapCSS}
-${bootstrapIconsCSS}
+${safeBootstrapCSS}
+${safeIconsCSS}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1280px;height:720px;overflow:hidden}
 body{background:#${bg};color:#${text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
@@ -2317,7 +2325,7 @@ async function screenshotSlides(
     const coverHTML = manifest.deck_plan.cover_html || "";
     if (coverHTML) {
       const html = buildSlidePageHTML(coverHTML, manifest.palette, themeCss, manifest.title);
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
       const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
       results.push(shot);
     } else {
@@ -2328,7 +2336,7 @@ async function screenshotSlides(
     for (const plan of manifest.slides) {
       if (plan.html) {
         const html = buildSlidePageHTML(plan.html, manifest.palette, themeCss, plan.heading || manifest.title);
-        await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
         const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
         results.push(shot);
       } else {
