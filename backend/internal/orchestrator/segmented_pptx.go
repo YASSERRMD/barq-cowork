@@ -138,12 +138,9 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 		"step_id": planStep.ID, "tool": "presentation_plan", "mode": "segmented",
 	})
 
-	provisionalPlan := fallbackSegmentedPPTXPlan(task, contentSlides, totalSlides)
-	normalizeSegmentedPPTXPlan(&provisionalPlan, task, contentSlides)
-	a.emitSegmentedPresentationDrafts(ctx, task.ID, provisionalPlan, totalSlides)
-
 	// ── PLAN PHASE ───────────────────────────────────────────────────────────
-	// Retry indefinitely until the LLM returns a valid plan. No cap, no fallback.
+	// NO fallback, NO provisional plan, NO templated drafts emitted to the UI.
+	// Retry indefinitely until the LLM returns a valid plan.
 	var plan segmentedPPTXPlan
 	for attempt := 0; ; attempt++ {
 		if ctx.Err() != nil {
@@ -219,6 +216,8 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 		}
 
 		// Retry this slide indefinitely — no fallback to template.
+		// If the LLM returns empty/unusable content we treat it as a failure
+		// and retry; we never synthesize content from a template.
 		var slide presentationDraftSlide
 		for attempt := 0; ; attempt++ {
 			if ctx.Err() != nil {
@@ -230,15 +229,24 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 				"heading", brief.Heading, "attempt", attempt+1,
 				"elapsed_total", time.Since(taskStart).Round(time.Second))
 
-			var slideErr error
-			slide, slideErr = a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
-			slide = completeSegmentedSlide(slide, plan, brief, i, totalSlides)
+			rawSlide, slideErr := a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
 			slideElapsed := time.Since(slideCallStart).Round(time.Millisecond)
+
+			// Validate: LLM must return usable HTML content. If not, retry.
+			if slideErr == nil && !slideHTMLLikelyReady(rawSlide.HTML) {
+				slideErr = fmt.Errorf("LLM returned slide without usable HTML body (html length=%d)", len(strings.TrimSpace(rawSlide.HTML)))
+			}
+
 			if slideErr == nil {
+				rawSlide.Heading = firstNonEmptyString(rawSlide.Heading, brief.Heading)
+				rawSlide.Type = "html"
+				rawSlide.Layout = "html"
+				slide = rawSlide
 				a.logger.Info("segmented pptx: slide LLM succeeded",
 					"task_id", task.ID, "slide", i+2, "of", totalSlides,
 					"heading", slide.Heading, "attempt", attempt+1,
 					"slide_elapsed", slideElapsed,
+					"html_bytes", len(slide.HTML),
 					"elapsed_total", time.Since(taskStart).Round(time.Second))
 				break
 			}
@@ -560,12 +568,10 @@ func segmentedPlanTokenBudget(contentSlides int) int {
 }
 
 func plannedSegmentedSlides(plan segmentedPPTXPlan) []presentationDraftSlide {
-	slides := make([]presentationDraftSlide, 0, len(plan.Slides))
-	totalSlides := len(plan.Slides) + 1
-	for i, brief := range plan.Slides {
-		slides = append(slides, completeSegmentedSlide(presentationDraftSlide{}, plan, brief, i, totalSlides))
-	}
-	return slides
+	// Pre-allocate empty slide slots for the LLM to fill. We no longer
+	// synthesize any template-driven content here; every slide must come
+	// from the per-slide LLM call.
+	return make([]presentationDraftSlide, len(plan.Slides))
 }
 
 func (a *AgentLoop) emitSegmentedPresentationDrafts(ctx context.Context, taskID string, plan segmentedPPTXPlan, totalSlides int) {
@@ -575,75 +581,10 @@ func (a *AgentLoop) emitSegmentedPresentationDrafts(ctx context.Context, taskID 
 	}
 }
 
-func fallbackSegmentedPPTXPlan(task *domain.Task, contentSlides, totalSlides int) segmentedPPTXPlan {
-	subject := inferSegmentedSubject(task)
-	filename := slugifySegmentedFilename(subject)
-	if filename == "presentation" {
-		filename = slugifySegmentedFilename(task.Title)
-	}
-	plan := segmentedPPTXPlan{
-		Filename: filename,
-		Title:    subject,
-		Subtitle: "A concise presentation generated from the request",
-		Deck: segmentedPPTXDeck{
-			Archetype:   "structured briefing",
-			Subject:     subject,
-			Audience:    "the intended audience",
-			Narrative:   "context -> key ideas -> practical next steps",
-			Theme:       "modern briefing",
-			VisualStyle: "editorial field notes with strong visual hierarchy",
-			CoverStyle:  "split hero cover with agenda panels",
-			ColorStory:  "soft slate background with high-contrast accent colors",
-			Motif:       "connected insight cards",
-			Kicker:      "Presentation",
-			Design: map[string]string{
-				"composition":    "asymmetric grid",
-				"density":        "dense",
-				"shape_language": "crisp cards",
-				"accent_mode":    "rail and badge",
-				"hero_layout":    "information-led",
-			},
-			Palette:  fallbackSegmentedPalette(subject),
-			ThemeCSS: defaultSegmentedThemeCSS(),
-		},
-		Stages: []string{
-			"frame the subject and audience need",
-			"explain the most important ideas",
-			"make the implications practical",
-			"close with a clear action path",
-		},
-	}
-	plan.Deck.CoverHTML = defaultSegmentedCoverHTML(plan)
-	plan.Slides = fallbackSegmentedSlideBriefs(subject, contentSlides, totalSlides)
-	return plan
-}
-
-func fallbackSegmentedPalette(subject string) map[string]string {
-	palettes := []map[string]string{
-		{"background": "FFF7ED", "card": "FFFBF5", "accent": "F97316", "accent2": "16A34A", "text": "111827", "muted": "57534E", "border": "FED7AA"},
-		{"background": "F8FAFC", "card": "FFFFFF", "accent": "0F766E", "accent2": "EA580C", "text": "0F172A", "muted": "475569", "border": "CBD5E1"},
-		{"background": "F5F3FF", "card": "FFFFFF", "accent": "6D28D9", "accent2": "0891B2", "text": "18181B", "muted": "52525B", "border": "DDD6FE"},
-		{"background": "ECFEFF", "card": "F8FAFC", "accent": "0369A1", "accent2": "0D9488", "text": "082F49", "muted": "475569", "border": "BAE6FD"},
-		{"background": "F7FEE7", "card": "FFFFFF", "accent": "4D7C0F", "accent2": "CA8A04", "text": "1A2E05", "muted": "4D5D2A", "border": "D9F99D"},
-	}
-	lower := strings.ToLower(subject)
-	if strings.Contains(lower, "india") {
-		return cloneSegmentedPalette(palettes[0])
-	}
-	sum := 0
-	for _, r := range lower {
-		sum += int(r)
-	}
-	return cloneSegmentedPalette(palettes[sum%len(palettes)])
-}
-
-func cloneSegmentedPalette(in map[string]string) map[string]string {
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
-}
+// NOTE: fallbackSegmentedPPTXPlan / fallbackSegmentedPalette /
+// fallbackSegmentedSlideBriefs / cloneSegmentedPalette were removed
+// deliberately. The user does not want any fallback template — if the LLM
+// cannot produce the plan or a slide, the orchestrator retries indefinitely.
 
 func inferSegmentedSubject(task *domain.Task) string {
 	text := strings.TrimSpace(task.Title)
@@ -681,92 +622,9 @@ func inferSegmentedSubject(task *domain.Task) string {
 	return strings.Join(words, " ")
 }
 
-func fallbackSegmentedSlideBriefs(subject string, contentSlides, totalSlides int) []segmentedPPTXSlideBrief {
-	roles := []struct {
-		heading string
-		kind    string
-		purpose string
-		visual  string
-		icon    string
-	}{
-		{"Why It Matters", "cards", "frame the topic and explain why the audience should care", "three context cards", "bullseye"},
-		{"Landscape and Context", "cards", "map the background forces shaping the topic", "context map cards", "compass"},
-		{"People and Stakeholders", "cards", "show who is affected and what each group needs", "stakeholder cards", "people"},
-		{"Core Ideas", "cards", "break the subject into the few ideas the audience must understand", "dense concept cards", "diagram-3"},
-		{"Risks and Guardrails", "compare", "separate helpful practice from avoidable risk", "two-column comparison", "shield-check"},
-		{"Signals to Track", "stats", "give the audience concrete indicators to monitor", "metric cards", "bar-chart-line"},
-		{"Decision Framework", "table", "turn the topic into practical choices", "compact decision table", "grid-3x3-gap"},
-		{"Operating Playbook", "steps", "show how to apply the subject in a practical sequence", "numbered action flow", "list-check"},
-		{"Opportunities and Leverage", "cards", "highlight where the audience has the most room to act", "opportunity mosaic", "lightning-charge"},
-		{"Global or External Role", "timeline", "connect the topic to external milestones, markets, or influence", "milestone strip", "globe2"},
-		{"Action Plan", "steps", "close with immediate next steps", "roadmap steps", "check2-circle"},
-	}
-	slides := make([]segmentedPPTXSlideBrief, 0, contentSlides)
-	for i := 0; i < contentSlides; i++ {
-		role := roles[i%len(roles)]
-		if i == contentSlides-1 && contentSlides > 1 {
-			role = roles[len(roles)-1]
-		}
-		heading := role.heading
-		if contentSlides <= 3 {
-			heading = fmt.Sprintf("%s: %s", subject, role.heading)
-		}
-		brief := segmentedPPTXSlideBrief{
-			Heading: heading,
-			Type:    role.kind,
-			Purpose: role.purpose,
-			Visual:  role.visual,
-			Icon:    role.icon,
-			Points: []string{
-				fmt.Sprintf("Define the specific audience problem around %s.", subject),
-				fmt.Sprintf("Show what changes when %s is handled well.", subject),
-				"Convert the idea into a concrete next action for the audience.",
-			},
-			Cards: []presentationDraftCard{
-				{Icon: role.icon, Title: "Audience need", Desc: fmt.Sprintf("The slide connects %s to a real decision the audience must make.", subject)},
-				{Icon: "lightbulb", Title: "Key insight", Desc: "A focused idea keeps the slide useful instead of decorative."},
-				{Icon: "check2-circle", Title: "Practical move", Desc: "End with an action the audience can apply after the presentation."},
-			},
-		}
-		if role.kind == "steps" {
-			brief.Steps = []string{
-				fmt.Sprintf("Map the current situation around %s.", subject),
-				"Choose the highest-impact intervention.",
-				"Assign ownership, timeline, and success measure.",
-			}
-		}
-		if role.kind == "stats" {
-			brief.Stats = []presentationDraftStat{
-				{Value: "01", Label: "Priority", Desc: "Primary decision the audience should make first."},
-				{Value: "03", Label: "Signals", Desc: "Metrics or observations worth tracking."},
-				{Value: "30d", Label: "Action window", Desc: "Near-term period to validate progress."},
-			}
-		}
-		if role.kind == "compare" {
-			brief.LeftColumn = &presentationDraftCompareColumn{Heading: "Helpful pattern", Points: []string{"Specific guidance", "Visible accountability", "Measured improvement"}}
-			brief.RightColumn = &presentationDraftCompareColumn{Heading: "Risk pattern", Points: []string{"Vague ownership", "Unverified assumptions", "No follow-through"}}
-		}
-		if role.kind == "timeline" {
-			brief.Timeline = []presentationDraftTimelineItem{
-				{Date: "Now", Title: "Current position", Desc: fmt.Sprintf("Where %s stands today.", subject)},
-				{Date: "Next", Title: "Emerging shift", Desc: "The next visible change the audience should watch."},
-				{Date: "Then", Title: "Strategic role", Desc: "How the topic can influence wider decisions or outcomes."},
-			}
-		}
-		if role.kind == "table" {
-			brief.Table = &presentationDraftTableData{
-				Headers: []string{"Choice", "Use when", "Watch for"},
-				Rows: [][]string{
-					{"Educate", "The audience needs shared understanding", "Too much theory"},
-					{"Pilot", "The team needs proof before scale", "Weak measurement"},
-					{"Scale", "The model is already validated", "Operational gaps"},
-				},
-			}
-		}
-		slides = append(slides, brief)
-	}
-	return slides
-}
+// fallbackSegmentedSlideBriefs was removed. No generic "Why It Matters" /
+// "Landscape and Context" / "Action Plan" roles, no canned "Audience need" /
+// "Key insight" cards. Every slide brief comes from the LLM plan call.
 
 func normalizeSegmentedPPTXPlan(plan *segmentedPPTXPlan, task *domain.Task, contentSlides int) {
 	plan.Filename = firstNonEmptyString(plan.Filename, slugifySegmentedFilename(task.Title))
