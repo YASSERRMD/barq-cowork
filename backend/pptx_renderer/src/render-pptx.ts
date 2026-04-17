@@ -2271,27 +2271,40 @@ function stripFontFaceRules(css: string): string {
   return css.replace(/@font-face\s*\{[^}]*\}/gi, "");
 }
 
+// Precomputed CSS strings — strip font-face once, reuse across slides.
+const _safeBootstrapCSS = stripFontFaceRules(bootstrapCSS as unknown as string);
+const _safeIconsCSS = stripFontFaceRules(bootstrapIconsCSS as unknown as string);
+const _iconsFontFace = `@font-face{font-family:"bootstrap-icons";font-display:block;src:url("${bootstrapIconsWoff2}") format("woff2");}`;
+
 function buildSlidePageHTML(slideHTML: string, palette: Palette, themeCss: string, _title: string): string {
   const bg = palette.background || "FFFFFF";
   const textColor = palette.text || "111827";
-  // Bootstrap CSS: strip @font-face (no external resources)
-  const safeBootstrapCSS = stripFontFaceRules(bootstrapCSS as unknown as string);
-  // Bootstrap Icons CSS: strip original @font-face, then inject one pointing
-  // to the woff2 that's already embedded as a base64 data URL.
-  const safeIconsCSS = stripFontFaceRules(bootstrapIconsCSS as unknown as string);
-  const iconsFontFace = `@font-face{font-family:"bootstrap-icons";font-display:block;src:url("${bootstrapIconsWoff2}") format("woff2");}`;
+  // Define CSS custom properties from the palette so seg-* classes and
+  // theme_css rules that use var(--accent), var(--bg), etc. resolve correctly.
+  const cssVars = `:root{
+    --bg:#${bg};
+    --card:#${palette.card || "FFFFFF"};
+    --accent:#${palette.accent || "4F46E5"};
+    --accent2:#${palette.accent2 || "A5B4FC"};
+    --text:#${textColor};
+    --muted:#${palette.muted || "6B7280"};
+    --border:#${palette.border || "E5E7EB"};
+  }`;
+  // .slide-page has NO height constraint — content renders at natural height.
+  // fitSlideToViewport() scales it down if it exceeds 1280×720.
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
-${safeBootstrapCSS}
-${iconsFontFace}
-${safeIconsCSS}
+${_safeBootstrapCSS}
+${_iconsFontFace}
+${_safeIconsCSS}
+${cssVars}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1280px;height:720px;overflow:hidden}
-body{background:#${bg};color:#${textColor};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
-.slide-page{width:1280px;height:720px;overflow:hidden;display:flex;flex-direction:column;padding:48px 64px}
+html{width:1280px;overflow:hidden}
+body{margin:0;background:#${bg};color:#${textColor};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
+.slide-page{width:1280px;min-height:720px;display:flex;flex-direction:column;padding:48px 64px}
 ${themeCss}
 </style>
 </head>
@@ -2301,23 +2314,39 @@ ${themeCss}
 </html>`;
 }
 
+// After rendering a slide page, scale-to-fit its content into 1280×720.
+// If the content is taller than 720px, we shrink the entire body uniformly
+// so nothing gets clipped. Content shorter than 720px is left as-is
+// (background fills the rest of the slide).
+const FIT_SCRIPT = `
+(function(){
+  var el = document.querySelector('.slide-page');
+  if (!el) return;
+  var h = el.scrollHeight;
+  var w = el.scrollWidth;
+  var maxH = 720, maxW = 1280;
+  if (h <= maxH && w <= maxW) return;
+  var scale = Math.min(maxH / h, maxW / w);
+  el.style.transform = 'scale(' + scale + ')';
+  el.style.transformOrigin = 'top left';
+  // After scaling, the rendered size of el is scale*w × scale*h.
+  // We also need to clip the html root so the screenshot sees exactly 1280×720.
+  document.documentElement.style.overflow = 'hidden';
+  document.documentElement.style.height = maxH + 'px';
+})()
+`;
+
 async function screenshotSlides(
   manifest: Manifest
 ): Promise<Array<string | null>> {
-  // Lazily require puppeteer-core so the bundle stays external
+  // Lazily require puppeteer-core — bundle stays external, resolved via NODE_PATH
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const puppeteer = require("puppeteer-core");
 
-  const chromePath = systemChromePath();
   const browser = await puppeteer.launch({
-    executablePath: chromePath,
+    executablePath: systemChromePath(),
     headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   });
 
   try {
@@ -2327,13 +2356,18 @@ async function screenshotSlides(
     const themeCss = manifest.deck_plan.theme_css || "";
     const results: Array<string | null> = [];
 
+    async function renderSlide(slideHTML: string, heading: string): Promise<string> {
+      const html = buildSlidePageHTML(slideHTML, manifest.palette, themeCss, heading);
+      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
+      // Scale-to-fit: if content taller than 720px, shrink it uniformly
+      await page.evaluate(FIT_SCRIPT);
+      return await page.screenshot({ type: "png", encoding: "base64" }) as string;
+    }
+
     // Cover slide
     const coverHTML = manifest.deck_plan.cover_html || "";
     if (coverHTML) {
-      const html = buildSlidePageHTML(coverHTML, manifest.palette, themeCss, manifest.title);
-      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
-      const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
-      results.push(shot);
+      results.push(await renderSlide(coverHTML, manifest.title));
     } else {
       results.push(null);
     }
@@ -2341,10 +2375,7 @@ async function screenshotSlides(
     // Content slides
     for (const plan of manifest.slides) {
       if (plan.html) {
-        const html = buildSlidePageHTML(plan.html, manifest.palette, themeCss, plan.heading || manifest.title);
-        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
-        const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
-        results.push(shot);
+        results.push(await renderSlide(plan.html, plan.heading || manifest.title));
       } else {
         results.push(null);
       }

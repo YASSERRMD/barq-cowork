@@ -17045,24 +17045,34 @@ function systemChromePath() {
 function stripFontFaceRules(css) {
   return css.replace(/@font-face\s*\{[^}]*\}/gi, "");
 }
+var _safeBootstrapCSS = stripFontFaceRules(bootstrap_min_default);
+var _safeIconsCSS = stripFontFaceRules(bootstrap_icons_min_default);
+var _iconsFontFace = `@font-face{font-family:"bootstrap-icons";font-display:block;src:url("${bootstrap_icons_default2}") format("woff2");}`;
 function buildSlidePageHTML(slideHTML, palette, themeCss, _title) {
   const bg = palette.background || "FFFFFF";
   const textColor = palette.text || "111827";
-  const safeBootstrapCSS = stripFontFaceRules(bootstrap_min_default);
-  const safeIconsCSS = stripFontFaceRules(bootstrap_icons_min_default);
-  const iconsFontFace = `@font-face{font-family:"bootstrap-icons";font-display:block;src:url("${bootstrap_icons_default2}") format("woff2");}`;
+  const cssVars = `:root{
+    --bg:#${bg};
+    --card:#${palette.card || "FFFFFF"};
+    --accent:#${palette.accent || "4F46E5"};
+    --accent2:#${palette.accent2 || "A5B4FC"};
+    --text:#${textColor};
+    --muted:#${palette.muted || "6B7280"};
+    --border:#${palette.border || "E5E7EB"};
+  }`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
-${safeBootstrapCSS}
-${iconsFontFace}
-${safeIconsCSS}
+${_safeBootstrapCSS}
+${_iconsFontFace}
+${_safeIconsCSS}
+${cssVars}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1280px;height:720px;overflow:hidden}
-body{background:#${bg};color:#${textColor};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
-.slide-page{width:1280px;height:720px;overflow:hidden;display:flex;flex-direction:column;padding:48px 64px}
+html{width:1280px;overflow:hidden}
+body{margin:0;background:#${bg};color:#${textColor};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
+.slide-page{width:1280px;min-height:720px;display:flex;flex-direction:column;padding:48px 64px}
 ${themeCss}
 </style>
 </head>
@@ -17071,39 +17081,50 @@ ${themeCss}
 </body>
 </html>`;
 }
+var FIT_SCRIPT = `
+(function(){
+  var el = document.querySelector('.slide-page');
+  if (!el) return;
+  var h = el.scrollHeight;
+  var w = el.scrollWidth;
+  var maxH = 720, maxW = 1280;
+  if (h <= maxH && w <= maxW) return;
+  var scale = Math.min(maxH / h, maxW / w);
+  el.style.transform = 'scale(' + scale + ')';
+  el.style.transformOrigin = 'top left';
+  // After scaling, the rendered size of el is scale*w \xD7 scale*h.
+  // We also need to clip the html root so the screenshot sees exactly 1280\xD7720.
+  document.documentElement.style.overflow = 'hidden';
+  document.documentElement.style.height = maxH + 'px';
+})()
+`;
 async function screenshotSlides(manifest) {
   const puppeteer = require("puppeteer-core");
-  const chromePath = systemChromePath();
   const browser = await puppeteer.launch({
-    executablePath: chromePath,
+    executablePath: systemChromePath(),
     headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu"
-    ]
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
   });
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
     const themeCss = manifest.deck_plan.theme_css || "";
     const results = [];
+    async function renderSlide(slideHTML, heading) {
+      const html = buildSlidePageHTML(slideHTML, manifest.palette, themeCss, heading);
+      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15e3 });
+      await page.evaluate(FIT_SCRIPT);
+      return await page.screenshot({ type: "png", encoding: "base64" });
+    }
     const coverHTML = manifest.deck_plan.cover_html || "";
     if (coverHTML) {
-      const html = buildSlidePageHTML(coverHTML, manifest.palette, themeCss, manifest.title);
-      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15e3 });
-      const shot = await page.screenshot({ type: "png", encoding: "base64" });
-      results.push(shot);
+      results.push(await renderSlide(coverHTML, manifest.title));
     } else {
       results.push(null);
     }
     for (const plan of manifest.slides) {
       if (plan.html) {
-        const html = buildSlidePageHTML(plan.html, manifest.palette, themeCss, plan.heading || manifest.title);
-        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15e3 });
-        const shot = await page.screenshot({ type: "png", encoding: "base64" });
-        results.push(shot);
+        results.push(await renderSlide(plan.html, plan.heading || manifest.title));
       } else {
         results.push(null);
       }
