@@ -1,8 +1,11 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import PptxGenJS from "pptxgenjs";
 import bootstrapIconsSprite from "bootstrap-icons/bootstrap-icons.svg";
+import bootstrapCSS from "bootstrap/dist/css/bootstrap.min.css";
+import bootstrapIconsCSS from "bootstrap-icons/font/bootstrap-icons.min.css";
 
 type PptxSlide = any;
 type TextOptions = Record<string, unknown>;
@@ -2236,9 +2239,110 @@ async function readStdin(): Promise<string> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Chrome screenshot pipeline — renders each slide's LLM HTML exactly as-is
+// using headless Chrome. The PPTX slide images match the UI preview 1:1.
+// ---------------------------------------------------------------------------
+
+function systemChromePath(): string {
+  const platform = os.platform();
+  if (platform === "darwin") {
+    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  }
+  if (platform === "win32") {
+    return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+  }
+  // Linux
+  for (const p of [
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/snap/bin/chromium",
+  ]) {
+    if (fs.existsSync(p)) return p;
+  }
+  return "google-chrome";
+}
+
+function buildSlidePageHTML(slideHTML: string, palette: Palette, themeCss: string, title: string): string {
+  const bg = palette.background || "FFFFFF";
+  const text = palette.text || "111827";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+${bootstrapCSS}
+${bootstrapIconsCSS}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden}
+body{background:#${bg};color:#${text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
+.slide-page{width:1280px;height:720px;overflow:hidden;display:flex;flex-direction:column;padding:48px 64px}
+${themeCss}
+</style>
+</head>
+<body>
+<div class="slide-page">${slideHTML}</div>
+</body>
+</html>`;
+}
+
+async function screenshotSlides(
+  manifest: Manifest
+): Promise<Array<string | null>> {
+  // Lazily require puppeteer-core so the bundle stays external
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const puppeteer = require("puppeteer-core");
+
+  const chromePath = systemChromePath();
+  const browser = await puppeteer.launch({
+    executablePath: chromePath,
+    headless: "new",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
+
+    const themeCss = manifest.deck_plan.theme_css || "";
+    const results: Array<string | null> = [];
+
+    // Cover slide
+    const coverHTML = manifest.deck_plan.cover_html || "";
+    if (coverHTML) {
+      const html = buildSlidePageHTML(coverHTML, manifest.palette, themeCss, manifest.title);
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+      const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
+      results.push(shot);
+    } else {
+      results.push(null);
+    }
+
+    // Content slides
+    for (const plan of manifest.slides) {
+      if (plan.html) {
+        const html = buildSlidePageHTML(plan.html, manifest.palette, themeCss, plan.heading || manifest.title);
+        await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+        const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
+        results.push(shot);
+      } else {
+        results.push(null);
+      }
+    }
+
+    return results;
+  } finally {
+    await browser.close();
+  }
+}
+
 async function buildPresentationFromStructuredManifest(manifest: Manifest, outputPath: string): Promise<void> {
-  const family = previewFamily(manifest);
-  const pal = buildPalette(manifest, family);
   const PPTXRuntime = PptxGenJS as unknown as new () => any;
   const pptx = new PPTXRuntime();
   pptx.layout = "LAYOUT_WIDE";
@@ -2247,44 +2351,64 @@ async function buildPresentationFromStructuredManifest(manifest: Manifest, outpu
   pptx.subject = manifest.deck_plan.subject || manifest.title;
   pptx.title = manifest.title;
   pptx.lang = "en-US";
-  pptx.theme = {
-    headFontFace: FONT_HEAD,
-    bodyFontFace: FONT_BODY,
-  };
 
-  const cover = pptx.addSlide();
-  const coverHTML = manifest.deck_plan.cover_html || "";
-  if (llmHTMLHasSubstance(coverHTML)) {
-    addFullRect(cover, pal.canvas);
-    const coverPlan: SlidePlan = {
-      number: 0,
-      heading: manifest.title,
-      layout: "title",
-      variant: 0,
-      html: coverHTML,
-    };
-    const bounds: Bounds = { x: 0.32, y: 0.32, w: SLIDE_W - 0.64, h: SLIDE_H - 0.64 };
-    renderFromLLMHTML(cover, coverPlan, bounds, family, pal);
-  } else {
-    renderCover(cover, manifest, family, pal);
-  }
-  cover.addNotes(manifest.narrative || manifest.deck_plan.narrative_arc || manifest.title);
+  // Determine if we should use the Chrome screenshot path.
+  // Any slide with LLM-authored HTML triggers screenshot mode for the whole deck
+  // so the .pptx exactly matches the Reveal.js preview.
+  const hasAnyHTML =
+    llmHTMLHasSubstance(manifest.deck_plan.cover_html) ||
+    manifest.slides.some((s) => llmHTMLHasSubstance(s.html));
 
-  const totalSlides = manifest.slides.length + 1;
-  for (const plan of manifest.slides) {
-    const slide = pptx.addSlide();
-    if (llmHTMLHasSubstance(plan.html)) {
-      // No hardcoded chrome — paint canvas only and hand the full slide to
-      // the LLM-HTML renderer.
-      addFullRect(slide, pal.canvas);
-      const bounds: Bounds = { x: 0.32, y: 0.32, w: SLIDE_W - 0.64, h: SLIDE_H - 0.64 };
-      renderSlideBody(slide, plan, bounds, family, pal);
+  if (hasAnyHTML) {
+    // ── Chrome screenshot path ───────────────────────────────────────────────
+    // One Chrome instance, one page.setContent() per slide — no template chrome.
+    const shots = await screenshotSlides(manifest);
+    const family = previewFamily(manifest);
+    const pal = buildPalette(manifest, family);
+
+    // shots[0] = cover, shots[1..n] = content slides
+    const coverShot = shots[0];
+    const cover = pptx.addSlide();
+    if (coverShot) {
+      cover.addImage({ data: `data:image/png;base64,${coverShot}`, x: 0, y: 0, w: SLIDE_W, h: SLIDE_H });
     } else {
+      renderCover(cover, manifest, family, pal);
+    }
+    cover.addNotes(manifest.narrative || manifest.deck_plan.narrative_arc || manifest.title);
+
+    for (let i = 0; i < manifest.slides.length; i++) {
+      const plan = manifest.slides[i];
+      const slide = pptx.addSlide();
+      const shot = shots[i + 1];
+      if (shot) {
+        slide.addImage({ data: `data:image/png;base64,${shot}`, x: 0, y: 0, w: SLIDE_W, h: SLIDE_H });
+      } else {
+        // Fallback for slides that had no HTML: use structured renderer
+        const bounds = renderSlideChrome(slide, plan, manifest.slides.length + 1, family, pal);
+        renderSlideBody(slide, plan, bounds, family, pal);
+      }
+      if (plan.speaker_notes?.trim()) {
+        slide.addNotes(plan.speaker_notes.trim());
+      }
+    }
+  } else {
+    // ── Structured renderer path (no HTML authored by LLM) ──────────────────
+    const family = previewFamily(manifest);
+    const pal = buildPalette(manifest, family);
+    pptx.theme = { headFontFace: FONT_HEAD, bodyFontFace: FONT_BODY };
+
+    const cover = pptx.addSlide();
+    renderCover(cover, manifest, family, pal);
+    cover.addNotes(manifest.narrative || manifest.deck_plan.narrative_arc || manifest.title);
+
+    const totalSlides = manifest.slides.length + 1;
+    for (const plan of manifest.slides) {
+      const slide = pptx.addSlide();
       const bounds = renderSlideChrome(slide, plan, totalSlides, family, pal);
       renderSlideBody(slide, plan, bounds, family, pal);
-    }
-    if (plan.speaker_notes?.trim()) {
-      slide.addNotes(plan.speaker_notes.trim());
+      if (plan.speaker_notes?.trim()) {
+        slide.addNotes(plan.speaker_notes.trim());
+      }
     }
   }
 

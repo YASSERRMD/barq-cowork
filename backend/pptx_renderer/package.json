@@ -8,8 +8,10 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
-    "pptxgenjs": "^4.0.1"
+    "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^24.41.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
