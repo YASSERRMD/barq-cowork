@@ -14,20 +14,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// No per-call timeouts: the LLM calls run until the parent task context is
-// cancelled. z.ai is slow under load; cutting it off causes the fallback
-// template to kick in, which the user sees as "all templated". Instead we
-// retry indefinitely with a back-off pause between attempts.
+// No per-call timeouts and no cap on retry delay: every LLM call runs until
+// the parent task context is cancelled. z.ai can take 3-20 minutes per slide
+// under load; we wait as long as it takes and retry on failure with a flat
+// pause (no exponential cap). Dense INFO logs are emitted at every stage so
+// you can tail /tmp/barq-coworkd.log and see exactly where time is spent.
 
-// segmentedSlideInterCallDelay is the pause between sequential per-slide LLM
-// calls to stay under z.ai's request-rate limit.
+// segmentedSlideInterCallDelay is the pause injected between consecutive
+// per-slide LLM calls to stay under z.ai's request-rate limit.
 const segmentedSlideInterCallDelay = 4 * time.Second
 
-// segmentedSlideRetryDelay is how long we wait before retrying a failed plan
-// or slide LLM call. Exponential back-off is applied (delay * 2^attempt,
-// capped at segmentedSlideRetryMax).
-const segmentedSlideRetryDelay = 6 * time.Second
-const segmentedSlideRetryMax = 60 * time.Second
+// segmentedSlideRetryDelay is the flat wait before retrying a failed plan or
+// slide LLM call. No exponential back-off, no cap — keep it simple.
+const segmentedSlideRetryDelay = 10 * time.Second
 
 var segmentedHTMLTagPattern = regexp.MustCompile(`(?s)<[^>]+>`)
 var segmentedHexColorPattern = regexp.MustCompile(`(?i)^[0-9a-f]{6}$`)
@@ -143,28 +142,34 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 	normalizeSegmentedPPTXPlan(&provisionalPlan, task, contentSlides)
 	a.emitSegmentedPresentationDrafts(ctx, task.ID, provisionalPlan, totalSlides)
 
-	// Retry the plan LLM call indefinitely until it succeeds or the task
-	// context is cancelled. No internal timeout: z.ai may be slow under load
-	// and the caller holds a long-lived task context.
+	// ── PLAN PHASE ───────────────────────────────────────────────────────────
+	// Retry indefinitely until the LLM returns a valid plan. No cap, no fallback.
 	var plan segmentedPPTXPlan
 	for attempt := 0; ; attempt++ {
 		if ctx.Err() != nil {
 			return result
 		}
+		planStart := time.Now()
+		a.logger.Info("segmented pptx: calling plan LLM",
+			"task_id", task.ID, "attempt", attempt+1,
+			"provider", a.prov.Name(), "model", a.cfg.Model,
+			"content_slides", contentSlides, "total_slides", totalSlides)
+
 		var planErr error
 		plan, planErr = a.generateSegmentedPPTXPlan(ctx, task, contentSlides, totalSlides, extraSystemPrompts, runtimeProfile)
+		elapsed := time.Since(planStart).Round(time.Millisecond)
 		if planErr == nil {
 			normalizeSegmentedPPTXPlan(&plan, task, contentSlides)
+			a.logger.Info("segmented pptx: plan LLM succeeded",
+				"task_id", task.ID, "attempt", attempt+1, "elapsed", elapsed,
+				"title", plan.Title, "slides_planned", len(plan.Slides))
 			break
 		}
-		delay := segmentedSlideRetryDelay * (1 << uint(attempt))
-		if delay > segmentedSlideRetryMax {
-			delay = segmentedSlideRetryMax
-		}
-		a.logger.Warn("segmented pptx: plan LLM failed, retrying",
-			"task_id", task.ID, "attempt", attempt+1, "delay", delay, "error", planErr)
+		a.logger.Warn("segmented pptx: plan LLM failed — waiting before retry",
+			"task_id", task.ID, "attempt", attempt+1, "elapsed", elapsed,
+			"retry_delay", segmentedSlideRetryDelay, "error", planErr)
 		select {
-		case <-time.After(delay):
+		case <-time.After(segmentedSlideRetryDelay):
 		case <-ctx.Done():
 			return result
 		}
@@ -180,8 +185,11 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 	})
 	a.emitSegmentedPresentationDrafts(ctx, task.ID, plan, totalSlides)
 
+	// ── SLIDE PHASE ───────────────────────────────────────────────────────────
+	// Each slide retries indefinitely. No skipSlideLLM, no fallback to template.
 	finalSlides := plannedSegmentedSlides(plan)
 	stepOrder := 1
+	taskStart := time.Now()
 	for i, brief := range plan.Slides {
 		stepOrder++
 		stepStarted := time.Now().UTC()
@@ -199,34 +207,50 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 			"step_id": step.ID, "tool": "presentation_slide", "slide": i + 2,
 		})
 
-		// Space sequential calls to stay under z.ai's rate limit.
+		// Rate-limit pause between consecutive z.ai calls.
 		if i > 0 {
+			a.logger.Info("segmented pptx: inter-slide delay",
+				"task_id", task.ID, "next_slide", i+2, "delay", segmentedSlideInterCallDelay,
+				"elapsed_total", time.Since(taskStart).Round(time.Second))
 			select {
 			case <-time.After(segmentedSlideInterCallDelay):
 			case <-ctx.Done():
 			}
 		}
 
-		// Retry each slide indefinitely — no fallback to template.
+		// Retry this slide indefinitely — no fallback to template.
 		var slide presentationDraftSlide
 		for attempt := 0; ; attempt++ {
 			if ctx.Err() != nil {
 				goto doneSlideDrain
 			}
+			slideCallStart := time.Now()
+			a.logger.Info("segmented pptx: calling slide LLM",
+				"task_id", task.ID, "slide", i+2, "of", totalSlides,
+				"heading", brief.Heading, "attempt", attempt+1,
+				"elapsed_total", time.Since(taskStart).Round(time.Second))
+
 			var slideErr error
 			slide, slideErr = a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
 			slide = completeSegmentedSlide(slide, plan, brief, i, totalSlides)
+			slideElapsed := time.Since(slideCallStart).Round(time.Millisecond)
 			if slideErr == nil {
+				a.logger.Info("segmented pptx: slide LLM succeeded",
+					"task_id", task.ID, "slide", i+2, "of", totalSlides,
+					"heading", slide.Heading, "attempt", attempt+1,
+					"slide_elapsed", slideElapsed,
+					"elapsed_total", time.Since(taskStart).Round(time.Second))
 				break
 			}
-			delay := segmentedSlideRetryDelay * (1 << uint(attempt))
-			if delay > segmentedSlideRetryMax {
-				delay = segmentedSlideRetryMax
-			}
-			a.logger.Warn("segmented pptx: slide LLM failed, retrying",
-				"task_id", task.ID, "slide", i+1, "attempt", attempt+1, "delay", delay, "error", slideErr)
+			a.logger.Warn("segmented pptx: slide LLM failed — waiting before retry",
+				"task_id", task.ID, "slide", i+2, "of", totalSlides,
+				"heading", brief.Heading, "attempt", attempt+1,
+				"slide_elapsed", slideElapsed,
+				"retry_delay", segmentedSlideRetryDelay,
+				"elapsed_total", time.Since(taskStart).Round(time.Second),
+				"error", slideErr)
 			select {
-			case <-time.After(delay):
+			case <-time.After(segmentedSlideRetryDelay):
 			case <-ctx.Done():
 				goto doneSlideDrain
 			}
@@ -434,35 +458,67 @@ func (a *AgentLoop) chatSegmentedJSON(
 	if segmentedProviderSupportsFastJSONMode(a.prov.Name()) {
 		req.ResponseFormat = map[string]any{"type": "json_object"}
 	}
+
+	t0 := time.Now()
+	a.logger.Info("chatSegmentedJSON: opening stream",
+		"provider", a.prov.Name(), "model", a.cfg.Model,
+		"max_tokens", maxTokens, "json_mode", req.ResponseFormat != nil)
+
 	ch, err := provider.ChatWithRetry(ctx, a.prov, a.cfg, req, retry, a.logger)
 	if err != nil {
 		if !strings.Contains(strings.ToLower(err.Error()), "response_format") && !strings.Contains(err.Error(), "400") {
+			a.logger.Warn("chatSegmentedJSON: stream open failed",
+				"elapsed", time.Since(t0).Round(time.Millisecond), "error", err)
 			return err
 		}
+		a.logger.Info("chatSegmentedJSON: json_mode rejected, retrying without it",
+			"elapsed", time.Since(t0).Round(time.Millisecond))
 		req.ResponseFormat = nil
 		ch, err = provider.ChatWithRetry(ctx, a.prov, a.cfg, req, retry, a.logger)
 		if err != nil {
+			a.logger.Warn("chatSegmentedJSON: stream open failed (no json_mode)",
+				"elapsed", time.Since(t0).Round(time.Millisecond), "error", err)
 			return err
 		}
 	}
+
+	a.logger.Info("chatSegmentedJSON: stream open, draining tokens",
+		"time_to_first_token", time.Since(t0).Round(time.Millisecond))
+
 	var content strings.Builder
+	chunks := 0
 	for chunk := range ch {
 		if chunk.Done {
 			break
 		}
 		content.WriteString(chunk.ContentDelta)
+		chunks++
 	}
+
+	a.logger.Info("chatSegmentedJSON: stream drained",
+		"elapsed", time.Since(t0).Round(time.Millisecond),
+		"chunks", chunks, "response_bytes", content.Len())
+
 	raw := strings.TrimSpace(content.String())
 	candidate := extractJSONObject(raw)
 	if candidate == "" {
 		candidate = firstJSONObjectFromJSONArray(raw)
 	}
 	if candidate == "" {
+		a.logger.Warn("chatSegmentedJSON: no JSON object found in response",
+			"elapsed", time.Since(t0).Round(time.Millisecond),
+			"response_snippet", truncate(raw, 400))
 		return fmt.Errorf("provider did not return valid JSON; response snippet: %s", truncate(raw, 300))
 	}
 	if err := json.Unmarshal([]byte(candidate), out); err != nil {
+		a.logger.Warn("chatSegmentedJSON: JSON parse failed",
+			"elapsed", time.Since(t0).Round(time.Millisecond), "error", err,
+			"candidate_snippet", truncate(candidate, 200))
 		return fmt.Errorf("parse provider JSON: %w", err)
 	}
+
+	a.logger.Info("chatSegmentedJSON: done",
+		"elapsed", time.Since(t0).Round(time.Millisecond))
 	return nil
 }
 
