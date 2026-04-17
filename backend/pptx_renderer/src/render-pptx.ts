@@ -2314,10 +2314,10 @@ ${themeCss}
 </html>`;
 }
 
-// After rendering a slide page, scale-to-fit its content into 1280×720.
-// If the content is taller than 720px, we shrink the entire body uniformly
-// so nothing gets clipped. Content shorter than 720px is left as-is
-// (background fills the rest of the slide).
+// After rendering a slide page, scale-to-fit its content into 1280×720 and
+// center it within the frame. If content exceeds the 1280×720 viewport, it is
+// scaled down uniformly; the remaining space is distributed equally on all
+// sides so the slide appears centered (not left-/top-anchored).
 const FIT_SCRIPT = `
 (function(){
   var el = document.querySelector('.slide-page');
@@ -2327,10 +2327,20 @@ const FIT_SCRIPT = `
   var maxH = 720, maxW = 1280;
   if (h <= maxH && w <= maxW) return;
   var scale = Math.min(maxH / h, maxW / w);
-  el.style.transform = 'scale(' + scale + ')';
-  el.style.transformOrigin = 'top left';
-  // After scaling, the rendered size of el is scale*w × scale*h.
-  // We also need to clip the html root so the screenshot sees exactly 1280×720.
+  var scaledW = w * scale;
+  var scaledH = h * scale;
+  var offsetX = Math.round((maxW - scaledW) / 2);
+  var offsetY = Math.round((maxH - scaledH) / 2);
+  // translate(offsetX, offsetY) then scale — with transform-origin 0 0 this
+  // places the scaled element so it is centred inside the 1280×720 frame.
+  el.style.transformOrigin = '0 0';
+  el.style.transform = 'translate(' + offsetX + 'px,' + offsetY + 'px) scale(' + scale + ')';
+  el.style.position = 'absolute';
+  // Lock the viewport to exactly 1280×720 so the screenshot clips correctly.
+  document.body.style.position = 'relative';
+  document.body.style.width = maxW + 'px';
+  document.body.style.height = maxH + 'px';
+  document.body.style.overflow = 'hidden';
   document.documentElement.style.overflow = 'hidden';
   document.documentElement.style.height = maxH + 'px';
 })()

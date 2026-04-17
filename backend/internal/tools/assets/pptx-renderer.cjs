@@ -17090,10 +17090,20 @@ var FIT_SCRIPT = `
   var maxH = 720, maxW = 1280;
   if (h <= maxH && w <= maxW) return;
   var scale = Math.min(maxH / h, maxW / w);
-  el.style.transform = 'scale(' + scale + ')';
-  el.style.transformOrigin = 'top left';
-  // After scaling, the rendered size of el is scale*w \xD7 scale*h.
-  // We also need to clip the html root so the screenshot sees exactly 1280\xD7720.
+  var scaledW = w * scale;
+  var scaledH = h * scale;
+  var offsetX = Math.round((maxW - scaledW) / 2);
+  var offsetY = Math.round((maxH - scaledH) / 2);
+  // translate(offsetX, offsetY) then scale \u2014 with transform-origin 0 0 this
+  // places the scaled element so it is centred inside the 1280\xD7720 frame.
+  el.style.transformOrigin = '0 0';
+  el.style.transform = 'translate(' + offsetX + 'px,' + offsetY + 'px) scale(' + scale + ')';
+  el.style.position = 'absolute';
+  // Lock the viewport to exactly 1280\xD7720 so the screenshot clips correctly.
+  document.body.style.position = 'relative';
+  document.body.style.width = maxW + 'px';
+  document.body.style.height = maxH + 'px';
+  document.body.style.overflow = 'hidden';
   document.documentElement.style.overflow = 'hidden';
   document.documentElement.style.height = maxH + 'px';
 })()
