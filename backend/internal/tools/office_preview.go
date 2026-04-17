@@ -141,11 +141,14 @@ func previewPPTX(path string) (string, error) {
 		return "", err
 	}
 
-	// Prefer the pixel-perfect PNG stack produced by LibreOffice + pdftoppm so
-	// the preview matches the final .pptx geometry exactly. If the binaries
-	// aren't installed this returns (_, false, nil) and we fall through to the
-	// Reveal.js manifest preview, which renders from the same structured
-	// fields as the .pptx itself.
+	// Fast path: if the PPTX was built with the Chrome screenshot renderer, it
+	// already contains full-slide PNG images. Extract them directly — no
+	// LibreOffice, no pdftoppm, no delay.
+	if doc, ok := previewPPTXFromEmbeddedImages(data); ok {
+		return doc, nil
+	}
+
+	// Structured-renderer PPTX: use LibreOffice + pdftoppm if available.
 	if doc, ok, err := previewPPTXAsPNGStack(path, defaultPPTXPreviewCacheRoot()); err != nil {
 		return "", err
 	} else if ok {

@@ -6,6 +6,7 @@ import PptxGenJS from "pptxgenjs";
 import bootstrapIconsSprite from "bootstrap-icons/bootstrap-icons.svg";
 import bootstrapCSS from "bootstrap/dist/css/bootstrap.min.css";
 import bootstrapIconsCSS from "bootstrap-icons/font/bootstrap-icons.min.css";
+import bootstrapIconsWoff2 from "bootstrap-icons/font/fonts/bootstrap-icons.woff2";
 
 type PptxSlide = any;
 type TextOptions = Record<string, unknown>;
@@ -2264,27 +2265,32 @@ function systemChromePath(): string {
   return "google-chrome";
 }
 
-// Strip @font-face rules so Chrome doesn't try to fetch font files from a
-// relative URL (which hangs forever in page.setContent mode).
+// Strip @font-face rules from vendor CSS — we replace them with an embedded
+// base64 font so Chrome can render icons without any network requests.
 function stripFontFaceRules(css: string): string {
   return css.replace(/@font-face\s*\{[^}]*\}/gi, "");
 }
 
-function buildSlidePageHTML(slideHTML: string, palette: Palette, themeCss: string, title: string): string {
+function buildSlidePageHTML(slideHTML: string, palette: Palette, themeCss: string, _title: string): string {
   const bg = palette.background || "FFFFFF";
-  const text = palette.text || "111827";
+  const textColor = palette.text || "111827";
+  // Bootstrap CSS: strip @font-face (no external resources)
   const safeBootstrapCSS = stripFontFaceRules(bootstrapCSS as unknown as string);
+  // Bootstrap Icons CSS: strip original @font-face, then inject one pointing
+  // to the woff2 that's already embedded as a base64 data URL.
   const safeIconsCSS = stripFontFaceRules(bootstrapIconsCSS as unknown as string);
+  const iconsFontFace = `@font-face{font-family:"bootstrap-icons";font-display:block;src:url("${bootstrapIconsWoff2}") format("woff2");}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
 ${safeBootstrapCSS}
+${iconsFontFace}
 ${safeIconsCSS}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1280px;height:720px;overflow:hidden}
-body{background:#${bg};color:#${text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
+body{background:#${bg};color:#${textColor};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
 .slide-page{width:1280px;height:720px;overflow:hidden;display:flex;flex-direction:column;padding:48px 64px}
 ${themeCss}
 </style>
