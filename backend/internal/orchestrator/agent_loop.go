@@ -24,7 +24,7 @@ Complete the user's task by calling tools. Pick the right tool, fill it out comp
 
 TOOL ROUTING
 - presentation, slides, deck, slideshow, pptx, powerpoint → write_pptx
-- document, report, doc, word, brief, proposal, writeup, paper → write_docx
+- document, report, doc, word, brief, proposal, writeup, paper → write_html_docx
 - summary, notes, markdown → write_markdown_report
 - data, spreadsheet, export → export_json
 - everything else → write_file
@@ -212,12 +212,19 @@ PICKING THE RIGHT SLIDE TYPE
 - Add "speaker_notes" when it helps the presenter.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WRITE_DOCX — WORD DOCUMENT
+WRITE_HTML_DOCX — WORD DOCUMENT (HTML-driven)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Required: "filename", "title", "sections" (array).
-Each section: "heading", "level" (1 or 2), "content" (text; prefix lines with "• " for bullets),
-optional "table": {"headers":[], "rows":[[]]}.
-Include: executive summary, 4-6 body sections, conclusion.`
+Required: "filename", "title", "html".
+Optional: "author", "css" (leave empty for UAE AI Safety print profile).
+
+AUTHORING RULES:
+- Ship a complete HTML body fragment — <h1> for major sections, <h2> for sub-sections, <p> for prose,
+  <ul>/<ol> for lists, <table><thead>…</thead><tbody>…</tbody></table> for tables, <blockquote> for pull quotes.
+- Wrap the opening page in <div class="cover-page">…</div> — it renders as a full cover and forces a page break.
+- Use <div class="info-box"> and <div class="warning-box"> for styled callouts.
+- Links: <a href="https://…">.
+- Include an executive summary, 4–6 body sections, and a conclusion for document tasks.
+- Do NOT include <html>, <head>, <body>, or <style> tags — just the body fragment.`
 
 // AgentLoop implements a ReAct-style agent that iterates LLM → tool → LLM until done.
 type AgentLoop struct {
@@ -919,7 +926,7 @@ func requiredOutputTool(task *domain.Task) string {
 	case containsTaskKeyword(text, "presentation", "slide", "slides", "deck", "slideshow", "pptx", "powerpoint"):
 		return "write_pptx"
 	case containsTaskKeyword(text, "document", "report", "doc", "word", "brief", "proposal", "writeup", "paper"):
-		return "write_docx"
+		return "write_html_docx"
 	case containsTaskKeyword(text, "summary", "notes", "markdown"):
 		return "write_markdown_report"
 	case containsTaskKeyword(text, "data", "spreadsheet", "export", "json"):

@@ -36,6 +36,10 @@ func buildAgentRuntimeProfile(cfg provider.ProviderConfig, task *domain.Task) ag
 		profile.MaxTokens = 16384
 		profile.Temperature = 0.7
 	}
+	if requiredTool == "write_html_docx" || requiredTool == "write_html_pdf" || requiredTool == "write_docx" {
+		profile.MaxTokens = 16384
+		profile.Temperature = 0.5
+	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.ProviderName)) {
 	case "zai":
