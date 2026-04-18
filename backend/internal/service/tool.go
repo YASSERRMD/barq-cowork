@@ -169,6 +169,7 @@ func BuildRegistry(userInput *tools.UserInputStore, emitFn func(taskID, pendingI
 	r.Register(tools.DocxTool{})
 	r.Register(tools.WriteHTMLDocxTool{})
 	r.Register(tools.WriteHTMLPDFTool{})
+	r.Register(tools.WriteXlsxTool{})
 	if userInput != nil {
 		r.Register(tools.AskUserTool{Store: userInput, Emitter: emitFn})
 	}
