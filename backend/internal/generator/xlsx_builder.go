@@ -23,13 +23,23 @@ type XlsxWorkbook struct {
 // ColumnOverrides lets the LLM pin a specific semantic role for a column
 // (e.g. force "year" integers to render as ColumnText so Excel doesn't add
 // thousand separators). An empty string means "let the builder infer".
+//
+// Formulas is a free-form "cell → formula" map for arbitrary spreadsheet
+// math — "=SUM(B2:B10)", "=AVERAGE(C2:C10)", "=B2*C2", etc. Cells targeted
+// here skip the value-coercion path; whatever excelize calculates wins.
+//
+// TotalsFormulas is an array aligned with Headers. Non-empty entries are
+// rendered as formulas in the totals row instead of the literal values from
+// Totals — so "=SUM(B2:B4)" in slot 1 becomes a real, recalculating total.
 type XlsxSheet struct {
-	Name            string       `json:"name"`
-	Headers         []string     `json:"headers"`
-	Rows            [][]any      `json:"rows"`
-	ColumnOverrides []ColumnKind `json:"column_overrides,omitempty"`
-	Totals          []any        `json:"totals,omitempty"`
-	Charts          []XlsxChart  `json:"charts,omitempty"` // populated in phase 3
+	Name            string            `json:"name"`
+	Headers         []string          `json:"headers"`
+	Rows            [][]any           `json:"rows"`
+	ColumnOverrides []ColumnKind      `json:"column_overrides,omitempty"`
+	Totals          []any             `json:"totals,omitempty"`
+	TotalsFormulas  []string          `json:"totals_formulas,omitempty"`
+	Formulas        map[string]string `json:"formulas,omitempty"`
+	Charts          []XlsxChart       `json:"charts,omitempty"` // populated in phase 3
 }
 
 // BuildWorkbook renders a workbook in-memory and returns the bytes. It is the
@@ -138,21 +148,43 @@ func writeSheet(f *excelize.File, m *XlsxStyleMapper, sheet string, s XlsxSheet)
 		}
 	}
 
-	// Optional totals row.
-	if len(s.Totals) > 0 {
+	// Optional totals row. TotalsFormulas beats Totals on a per-column basis,
+	// so "=SUM(B2:B4)" in slot 1 renders as a live formula while slot 0 still
+	// says the literal "Total".
+	if len(s.Totals) > 0 || len(s.TotalsFormulas) > 0 {
 		totalsRow := len(s.Rows) + 2
 		totalsID, err := m.ID(StyleTotals)
 		if err != nil {
 			return err
 		}
-		for c := 0; c < len(s.Headers) && c < len(s.Totals); c++ {
+		for c := 0; c < len(s.Headers); c++ {
 			cell, _ := excelize.CoordinatesToCellName(c+1, totalsRow)
-			if err := f.SetCellValue(sheet, cell, coerceValue(s.Totals[c], kinds[c])); err != nil {
-				return err
+			if c < len(s.TotalsFormulas) && s.TotalsFormulas[c] != "" {
+				if err := f.SetCellFormula(sheet, cell, normaliseFormula(s.TotalsFormulas[c])); err != nil {
+					return fmt.Errorf("totals formula %s: %w", cell, err)
+				}
+			} else if c < len(s.Totals) && s.Totals[c] != nil {
+				if err := f.SetCellValue(sheet, cell, coerceValue(s.Totals[c], kinds[c])); err != nil {
+					return err
+				}
+			} else {
+				continue // skip styling for cells we didn't touch
 			}
 			if err := f.SetCellStyle(sheet, cell, cell, totalsID); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Cell-level formulas take priority over any value that was laid down at
+	// the same coordinate. Styling on those cells is left as-is (the body /
+	// zebra style picked by column kind still applies).
+	for cell, formula := range s.Formulas {
+		if strings.TrimSpace(formula) == "" {
+			continue
+		}
+		if err := f.SetCellFormula(sheet, cell, normaliseFormula(formula)); err != nil {
+			return fmt.Errorf("formula %s: %w", cell, err)
 		}
 	}
 
@@ -267,6 +299,15 @@ func stripCurrencyChrome(s string) string {
 	}
 	out = strings.ReplaceAll(out, ",", "")
 	return strings.TrimSpace(out)
+}
+
+// normaliseFormula strips a leading '=' if present — excelize's
+// SetCellFormula expects the bare expression ("SUM(B2:B4)"), but the LLM (and
+// humans) naturally write "=SUM(B2:B4)". Tolerating both keeps the API kind
+// to callers who forget which convention this library uses.
+func normaliseFormula(f string) string {
+	f = strings.TrimSpace(f)
+	return strings.TrimPrefix(f, "=")
 }
 
 // sanitizeSheetName enforces Excel's sheet-name constraints: non-empty, at

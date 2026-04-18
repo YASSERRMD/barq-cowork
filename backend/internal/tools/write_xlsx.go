@@ -86,6 +86,16 @@ func (WriteXlsxTool) InputSchema() map[string]any {
 							"type":        "array",
 							"description": "Optional totals row. Array aligned with headers; use null for skipped columns.",
 						},
+						"totals_formulas": map[string]any{
+							"type":        "array",
+							"description": "Optional: array aligned with headers. Non-empty entries render as live formulas in the totals row, overriding the matching 'totals' slot. Example: ['', '=SUM(B2:B10)', '=AVERAGE(C2:C10)']. Leading '=' is optional.",
+							"items":       map[string]any{"type": "string"},
+						},
+						"formulas": map[string]any{
+							"type":                 "object",
+							"description":          "Optional: cell-address -> formula map for arbitrary spreadsheet math. Example: {\"D2\": \"=B2*C2\", \"E10\": \"=AVERAGE(E2:E9)\"}. Evaluated by Excel when the workbook opens; leading '=' optional. Use for derived columns, cross-sheet refs, IF/VLOOKUP, etc.",
+							"additionalProperties": map[string]any{"type": "string"},
+						},
 						"charts": map[string]any{
 							"type":        "array",
 							"description": "Optional chart descriptors; rendered after data is laid out.",
