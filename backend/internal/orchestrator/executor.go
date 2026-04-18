@@ -187,6 +187,8 @@ var artifactTools = map[string]domain.ArtifactType{
 	"write_html_slides":     domain.ArtifactTypeHTML,
 	"write_pptx":            domain.ArtifactTypeFile,
 	"write_docx":            domain.ArtifactTypeFile,
+	"write_html_docx":       domain.ArtifactTypeFile,
+	"write_html_pdf":        domain.ArtifactTypeFile,
 }
 
 func (e *Executor) maybeRecordArtifact(ctx context.Context, step *domain.PlanStep, task *domain.Task, workspaceRoot string) {
