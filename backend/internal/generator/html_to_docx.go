@@ -23,7 +23,7 @@ import (
 // list items, hyperlinks, and embedded images directly, inheriting the UAE
 // AI Safety paragraph and character styles from styles.xml.
 func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
-	doc, err := html.Parse(strings.NewReader(req.HTML))
+	doc, err := html.Parse(strings.NewReader(stripUnresolvedPlaceholders(req.HTML)))
 	if err != nil {
 		return nil, fmt.Errorf("parse html: %w", err)
 	}
@@ -904,6 +904,19 @@ func normalizeWhitespace(s string) string {
 		prevSpace = false
 	}
 	return b.String()
+}
+
+// unresolvedPlaceholderPattern matches interpolation/template syntax the LLM
+// sometimes hallucinates into output HTML (JS template literals, Handlebars,
+// short PHP tags, strftime codes). The renderer cannot evaluate these; left
+// in place they surface as literal garbage on the page (e.g. the string
+// "${new Date().getFullYear()}" appearing in a footer). We strip them.
+var unresolvedPlaceholderPattern = regexp.MustCompile(
+	`\$\{[^{}]*\}|\{\{[^{}]+\}\}|<\?=[^?]*\?>|<\?php[\s\S]*?\?>`,
+)
+
+func stripUnresolvedPlaceholders(s string) string {
+	return unresolvedPlaceholderPattern.ReplaceAllString(s, "")
 }
 
 func xmlEscape(s string) string {
