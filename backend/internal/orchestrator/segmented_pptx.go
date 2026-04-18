@@ -14,26 +14,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// Timeouts sized for real LLM content generation against rate-limited hosted
-// APIs (z.ai in particular). z.ai has strict concurrency and request-rate
-// limits; we use conservative per-slide timeouts and a generous inter-call
-// delay to stay well within quota. Plan timeout is 5 minutes; each slide gets
-// 2 minutes. Sequential calls with a 4-second pause between them mean a
-// 10-slide deck uses roughly 40 s of z.ai time spread over ~1.5 minutes.
-const segmentedPPTXPlanTimeout = 300 * time.Second
-const segmentedPPTXSlideTimeout = 120 * time.Second
+// No per-call timeouts and no cap on retry delay: every LLM call runs until
+// the parent task context is cancelled. z.ai can take 3-20 minutes per slide
+// under load; we wait as long as it takes and retry on failure with a flat
+// pause (no exponential cap). Dense INFO logs are emitted at every stage so
+// you can tail /tmp/barq-coworkd.log and see exactly where time is spent.
 
-// segmentedSlideInterCallDelay is the pause between sequential per-slide LLM
-// calls. Raised to 4 s to respect z.ai's rate limit (the 600 ms value still
-// triggered 429s on multi-slide decks during peak load).
+// segmentedSlideInterCallDelay is the pause injected between consecutive
+// per-slide LLM calls to stay under z.ai's request-rate limit.
 const segmentedSlideInterCallDelay = 4 * time.Second
 
-// segmentedMaxConsecutiveSlideFailures controls when we give up on the LLM
-// and start filling from planned briefs for the remaining slides. Previously
-// a single slide timeout set skipSlideLLM=true and destroyed the rest of the
-// deck; now we only trip after two consecutive failures, so one flaky slide
-// no longer cascades into a fully-templated output.
-const segmentedMaxConsecutiveSlideFailures = 2
+// segmentedSlideRetryDelay is the flat wait before retrying a failed plan or
+// slide LLM call. No exponential back-off, no cap — keep it simple.
+const segmentedSlideRetryDelay = 10 * time.Second
 
 var segmentedHTMLTagPattern = regexp.MustCompile(`(?s)<[^>]+>`)
 var segmentedHexColorPattern = regexp.MustCompile(`(?i)^[0-9a-f]{6}$`)
@@ -145,33 +138,55 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 		"step_id": planStep.ID, "tool": "presentation_plan", "mode": "segmented",
 	})
 
-	provisionalPlan := fallbackSegmentedPPTXPlan(task, contentSlides, totalSlides)
-	normalizeSegmentedPPTXPlan(&provisionalPlan, task, contentSlides)
-	a.emitSegmentedPresentationDrafts(ctx, task.ID, provisionalPlan, totalSlides)
+	// ── PLAN PHASE ───────────────────────────────────────────────────────────
+	// NO fallback, NO provisional plan, NO templated drafts emitted to the UI.
+	// Retry indefinitely until the LLM returns a valid plan.
+	var plan segmentedPPTXPlan
+	for attempt := 0; ; attempt++ {
+		if ctx.Err() != nil {
+			return result
+		}
+		planStart := time.Now()
+		a.logger.Info("segmented pptx: calling plan LLM",
+			"task_id", task.ID, "attempt", attempt+1,
+			"provider", a.prov.Name(), "model", a.cfg.Model,
+			"content_slides", contentSlides, "total_slides", totalSlides)
 
-	plan, err := a.generateSegmentedPPTXPlan(ctx, task, contentSlides, totalSlides, extraSystemPrompts, runtimeProfile)
-	completed := time.Now().UTC()
-	planStep.CompletedAt = &completed
-	if err != nil {
-		a.logger.Warn("segmented pptx: LLM planning failed, using local presentation plan", "task_id", task.ID, "error", err)
-		plan = provisionalPlan
-		planStep.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": true, "warning": err.Error(), "slides": totalSlides, "title": plan.Title})
-	} else {
-		normalizeSegmentedPPTXPlan(&plan, task, contentSlides)
-		planStep.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": false, "slides": totalSlides, "title": plan.Title})
+		var planErr error
+		plan, planErr = a.generateSegmentedPPTXPlan(ctx, task, contentSlides, totalSlides, extraSystemPrompts, runtimeProfile)
+		elapsed := time.Since(planStart).Round(time.Millisecond)
+		if planErr == nil {
+			normalizeSegmentedPPTXPlan(&plan, task, contentSlides)
+			a.logger.Info("segmented pptx: plan LLM succeeded",
+				"task_id", task.ID, "attempt", attempt+1, "elapsed", elapsed,
+				"title", plan.Title, "slides_planned", len(plan.Slides))
+			break
+		}
+		a.logger.Warn("segmented pptx: plan LLM failed — waiting before retry",
+			"task_id", task.ID, "attempt", attempt+1, "elapsed", elapsed,
+			"retry_delay", segmentedSlideRetryDelay, "error", planErr)
+		select {
+		case <-time.After(segmentedSlideRetryDelay):
+		case <-ctx.Done():
+			return result
+		}
 	}
 
+	completed := time.Now().UTC()
+	planStep.CompletedAt = &completed
 	planStep.Status = domain.StepStatusCompleted
+	planStep.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": false, "slides": totalSlides, "title": plan.Title})
 	_ = a.plans.UpdateStep(ctx, planStep)
 	a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepCompleted, map[string]any{
 		"step_id": planStep.ID, "tool": "presentation_plan", "status": planStep.Status,
 	})
 	a.emitSegmentedPresentationDrafts(ctx, task.ID, plan, totalSlides)
 
+	// ── SLIDE PHASE ───────────────────────────────────────────────────────────
+	// Each slide retries indefinitely. No skipSlideLLM, no fallback to template.
 	finalSlides := plannedSegmentedSlides(plan)
 	stepOrder := 1
-	skipSlideLLM := false
-	consecutiveSlideFailures := 0
+	taskStart := time.Now()
 	for i, brief := range plan.Slides {
 		stepOrder++
 		stepStarted := time.Now().UTC()
@@ -189,53 +204,78 @@ func (a *AgentLoop) runSegmentedPresentationWorkflow(
 			"step_id": step.ID, "tool": "presentation_slide", "slide": i + 2,
 		})
 
-		// Space sequential calls out so a rate-limited provider (z.ai) does
-		// not see a tight burst after the plan call returned.
+		// Rate-limit pause between consecutive z.ai calls.
 		if i > 0 {
+			a.logger.Info("segmented pptx: inter-slide delay",
+				"task_id", task.ID, "next_slide", i+2, "delay", segmentedSlideInterCallDelay,
+				"elapsed_total", time.Since(taskStart).Round(time.Second))
 			select {
 			case <-time.After(segmentedSlideInterCallDelay):
 			case <-ctx.Done():
 			}
 		}
 
-		slide := finalSlides[i]
-		var slideErr error
-		if !skipSlideLLM {
-			slide, slideErr = a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
-			slide = completeSegmentedSlide(slide, plan, brief, i, totalSlides)
-			if slideErr != nil {
-				consecutiveSlideFailures++
-				slide = finalSlides[i]
-				if consecutiveSlideFailures >= segmentedMaxConsecutiveSlideFailures {
-					skipSlideLLM = true
-					a.logger.Warn("segmented pptx: too many consecutive slide LLM failures, using planned briefs for remaining slides",
-						"task_id", task.ID, "slide", i+1, "consecutive_failures", consecutiveSlideFailures, "error", slideErr)
-				} else {
-					a.logger.Warn("segmented pptx: slide LLM failed, retaining planned brief and continuing",
-						"task_id", task.ID, "slide", i+1, "consecutive_failures", consecutiveSlideFailures, "error", slideErr)
-				}
-			} else {
-				consecutiveSlideFailures = 0
-				finalSlides[i] = slide
+		// Retry this slide indefinitely — no fallback to template.
+		// If the LLM returns empty/unusable content we treat it as a failure
+		// and retry; we never synthesize content from a template.
+		var slide presentationDraftSlide
+		for attempt := 0; ; attempt++ {
+			if ctx.Err() != nil {
+				goto doneSlideDrain
 			}
-		} else {
-			slideErr = fmt.Errorf("skipped per-slide LLM after %d consecutive failures", segmentedMaxConsecutiveSlideFailures)
+			slideCallStart := time.Now()
+			a.logger.Info("segmented pptx: calling slide LLM",
+				"task_id", task.ID, "slide", i+2, "of", totalSlides,
+				"heading", brief.Heading, "attempt", attempt+1,
+				"elapsed_total", time.Since(taskStart).Round(time.Second))
+
+			rawSlide, slideErr := a.generateSegmentedPPTXSlide(ctx, task, plan, brief, i, totalSlides, runtimeProfile)
+			slideElapsed := time.Since(slideCallStart).Round(time.Millisecond)
+
+			// Validate: LLM must return usable HTML content. If not, retry.
+			if slideErr == nil && !slideHTMLLikelyReady(rawSlide.HTML) {
+				slideErr = fmt.Errorf("LLM returned slide without usable HTML body (html length=%d)", len(strings.TrimSpace(rawSlide.HTML)))
+			}
+
+			if slideErr == nil {
+				rawSlide.Heading = firstNonEmptyString(rawSlide.Heading, brief.Heading)
+				rawSlide.Type = "html"
+				rawSlide.Layout = "html"
+				slide = rawSlide
+				a.logger.Info("segmented pptx: slide LLM succeeded",
+					"task_id", task.ID, "slide", i+2, "of", totalSlides,
+					"heading", slide.Heading, "attempt", attempt+1,
+					"slide_elapsed", slideElapsed,
+					"html_bytes", len(slide.HTML),
+					"elapsed_total", time.Since(taskStart).Round(time.Second))
+				break
+			}
+			a.logger.Warn("segmented pptx: slide LLM failed — waiting before retry",
+				"task_id", task.ID, "slide", i+2, "of", totalSlides,
+				"heading", brief.Heading, "attempt", attempt+1,
+				"slide_elapsed", slideElapsed,
+				"retry_delay", segmentedSlideRetryDelay,
+				"elapsed_total", time.Since(taskStart).Round(time.Second),
+				"error", slideErr)
+			select {
+			case <-time.After(segmentedSlideRetryDelay):
+			case <-ctx.Done():
+				goto doneSlideDrain
+			}
 		}
+		finalSlides[i] = slide
 
 		stepDone := time.Now().UTC()
 		step.CompletedAt = &stepDone
 		step.Status = domain.StepStatusCompleted
-		if slideErr != nil {
-			step.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": true, "warning": slideErr.Error()})
-		} else {
-			step.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": false})
-		}
+		step.ToolOutput = marshalJSON(map[string]any{"status": "ok", "fallback": false})
 		_ = a.plans.UpdateStep(ctx, step)
 		a.emitAgentEvent(ctx, task.ID, domain.EventTypeStepCompleted, map[string]any{
 			"step_id": step.ID, "tool": "presentation_slide", "status": step.Status, "slide": i + 2,
 		})
 		a.emitSegmentedPresentationDraft(ctx, task.ID, i+2, totalSlides, "slide", finalSlides[i].Heading, presentationDraftSlideHTML(finalSlides[i]), plan.Deck)
 	}
+doneSlideDrain:
 
 	args := segmentedPPTXArgs{
 		Filename: firstNonEmptyString(plan.Filename, slugifySegmentedFilename(task.Title)),
@@ -339,7 +379,7 @@ Rules:
 - Keep copy readable for projector use: no tiny text, no empty decorative panels.
 - Make the design decisions from the subject, not from a fixed template.`, task.Title, task.Description, contextText, totalSlides, contentSlides, contentSlides)
 
-	err := a.chatSegmentedJSON(ctx, runtimeProfile, segmentedPlanTokenBudget(contentSlides), segmentedPPTXPlanTimeout, []provider.ChatMessage{
+	err := a.chatSegmentedJSON(ctx, runtimeProfile, segmentedPlanTokenBudget(contentSlides), []provider.ChatMessage{
 		{Role: "system", Content: segmentedPPTXSystemPrompt()},
 		{Role: "user", Content: user},
 	}, &out)
@@ -395,7 +435,7 @@ HTML requirements:
 - Body copy should be projector-readable, generally 20-24px through class/style choices.
 - Keep the HTML compact enough for one slide.`, string(deckBytes), task.Title, index+2, totalSlides, segmentedSlideRole(index, len(plan.Slides), plan.Stages), string(briefBytes))
 
-	err := a.chatSegmentedJSON(ctx, runtimeProfile, 1800, segmentedPPTXSlideTimeout, []provider.ChatMessage{
+	err := a.chatSegmentedJSON(ctx, runtimeProfile, 1800, []provider.ChatMessage{
 		{Role: "system", Content: segmentedPPTXSystemPrompt()},
 		{Role: "user", Content: user},
 	}, &out)
@@ -411,14 +451,11 @@ func (a *AgentLoop) chatSegmentedJSON(
 	ctx context.Context,
 	runtimeProfile agentRuntimeProfile,
 	maxTokens int,
-	timeout time.Duration,
 	messages []provider.ChatMessage,
 	out any,
 ) error {
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	retry := runtimeProfile.Retry
-	retry.MaxAttempts = 1
+	retry.MaxAttempts = 3
 	req := provider.ChatCompletionRequest{
 		Model:       a.cfg.Model,
 		Stream:      false,
@@ -429,35 +466,67 @@ func (a *AgentLoop) chatSegmentedJSON(
 	if segmentedProviderSupportsFastJSONMode(a.prov.Name()) {
 		req.ResponseFormat = map[string]any{"type": "json_object"}
 	}
-	ch, err := provider.ChatWithRetry(callCtx, a.prov, a.cfg, req, retry, a.logger)
+
+	t0 := time.Now()
+	a.logger.Info("chatSegmentedJSON: opening stream",
+		"provider", a.prov.Name(), "model", a.cfg.Model,
+		"max_tokens", maxTokens, "json_mode", req.ResponseFormat != nil)
+
+	ch, err := provider.ChatWithRetry(ctx, a.prov, a.cfg, req, retry, a.logger)
 	if err != nil {
 		if !strings.Contains(strings.ToLower(err.Error()), "response_format") && !strings.Contains(err.Error(), "400") {
+			a.logger.Warn("chatSegmentedJSON: stream open failed",
+				"elapsed", time.Since(t0).Round(time.Millisecond), "error", err)
 			return err
 		}
+		a.logger.Info("chatSegmentedJSON: json_mode rejected, retrying without it",
+			"elapsed", time.Since(t0).Round(time.Millisecond))
 		req.ResponseFormat = nil
-		ch, err = provider.ChatWithRetry(callCtx, a.prov, a.cfg, req, retry, a.logger)
+		ch, err = provider.ChatWithRetry(ctx, a.prov, a.cfg, req, retry, a.logger)
 		if err != nil {
+			a.logger.Warn("chatSegmentedJSON: stream open failed (no json_mode)",
+				"elapsed", time.Since(t0).Round(time.Millisecond), "error", err)
 			return err
 		}
 	}
+
+	a.logger.Info("chatSegmentedJSON: stream open, draining tokens",
+		"time_to_first_token", time.Since(t0).Round(time.Millisecond))
+
 	var content strings.Builder
+	chunks := 0
 	for chunk := range ch {
 		if chunk.Done {
 			break
 		}
 		content.WriteString(chunk.ContentDelta)
+		chunks++
 	}
+
+	a.logger.Info("chatSegmentedJSON: stream drained",
+		"elapsed", time.Since(t0).Round(time.Millisecond),
+		"chunks", chunks, "response_bytes", content.Len())
+
 	raw := strings.TrimSpace(content.String())
 	candidate := extractJSONObject(raw)
 	if candidate == "" {
 		candidate = firstJSONObjectFromJSONArray(raw)
 	}
 	if candidate == "" {
+		a.logger.Warn("chatSegmentedJSON: no JSON object found in response",
+			"elapsed", time.Since(t0).Round(time.Millisecond),
+			"response_snippet", truncate(raw, 400))
 		return fmt.Errorf("provider did not return valid JSON; response snippet: %s", truncate(raw, 300))
 	}
 	if err := json.Unmarshal([]byte(candidate), out); err != nil {
+		a.logger.Warn("chatSegmentedJSON: JSON parse failed",
+			"elapsed", time.Since(t0).Round(time.Millisecond), "error", err,
+			"candidate_snippet", truncate(candidate, 200))
 		return fmt.Errorf("parse provider JSON: %w", err)
 	}
+
+	a.logger.Info("chatSegmentedJSON: done",
+		"elapsed", time.Since(t0).Round(time.Millisecond))
 	return nil
 }
 
@@ -499,12 +568,10 @@ func segmentedPlanTokenBudget(contentSlides int) int {
 }
 
 func plannedSegmentedSlides(plan segmentedPPTXPlan) []presentationDraftSlide {
-	slides := make([]presentationDraftSlide, 0, len(plan.Slides))
-	totalSlides := len(plan.Slides) + 1
-	for i, brief := range plan.Slides {
-		slides = append(slides, completeSegmentedSlide(presentationDraftSlide{}, plan, brief, i, totalSlides))
-	}
-	return slides
+	// Pre-allocate empty slide slots for the LLM to fill. We no longer
+	// synthesize any template-driven content here; every slide must come
+	// from the per-slide LLM call.
+	return make([]presentationDraftSlide, len(plan.Slides))
 }
 
 func (a *AgentLoop) emitSegmentedPresentationDrafts(ctx context.Context, taskID string, plan segmentedPPTXPlan, totalSlides int) {
@@ -514,75 +581,10 @@ func (a *AgentLoop) emitSegmentedPresentationDrafts(ctx context.Context, taskID 
 	}
 }
 
-func fallbackSegmentedPPTXPlan(task *domain.Task, contentSlides, totalSlides int) segmentedPPTXPlan {
-	subject := inferSegmentedSubject(task)
-	filename := slugifySegmentedFilename(subject)
-	if filename == "presentation" {
-		filename = slugifySegmentedFilename(task.Title)
-	}
-	plan := segmentedPPTXPlan{
-		Filename: filename,
-		Title:    subject,
-		Subtitle: "A concise presentation generated from the request",
-		Deck: segmentedPPTXDeck{
-			Archetype:   "structured briefing",
-			Subject:     subject,
-			Audience:    "the intended audience",
-			Narrative:   "context -> key ideas -> practical next steps",
-			Theme:       "modern briefing",
-			VisualStyle: "editorial field notes with strong visual hierarchy",
-			CoverStyle:  "split hero cover with agenda panels",
-			ColorStory:  "soft slate background with high-contrast accent colors",
-			Motif:       "connected insight cards",
-			Kicker:      "Presentation",
-			Design: map[string]string{
-				"composition":    "asymmetric grid",
-				"density":        "dense",
-				"shape_language": "crisp cards",
-				"accent_mode":    "rail and badge",
-				"hero_layout":    "information-led",
-			},
-			Palette:  fallbackSegmentedPalette(subject),
-			ThemeCSS: defaultSegmentedThemeCSS(),
-		},
-		Stages: []string{
-			"frame the subject and audience need",
-			"explain the most important ideas",
-			"make the implications practical",
-			"close with a clear action path",
-		},
-	}
-	plan.Deck.CoverHTML = defaultSegmentedCoverHTML(plan)
-	plan.Slides = fallbackSegmentedSlideBriefs(subject, contentSlides, totalSlides)
-	return plan
-}
-
-func fallbackSegmentedPalette(subject string) map[string]string {
-	palettes := []map[string]string{
-		{"background": "FFF7ED", "card": "FFFBF5", "accent": "F97316", "accent2": "16A34A", "text": "111827", "muted": "57534E", "border": "FED7AA"},
-		{"background": "F8FAFC", "card": "FFFFFF", "accent": "0F766E", "accent2": "EA580C", "text": "0F172A", "muted": "475569", "border": "CBD5E1"},
-		{"background": "F5F3FF", "card": "FFFFFF", "accent": "6D28D9", "accent2": "0891B2", "text": "18181B", "muted": "52525B", "border": "DDD6FE"},
-		{"background": "ECFEFF", "card": "F8FAFC", "accent": "0369A1", "accent2": "0D9488", "text": "082F49", "muted": "475569", "border": "BAE6FD"},
-		{"background": "F7FEE7", "card": "FFFFFF", "accent": "4D7C0F", "accent2": "CA8A04", "text": "1A2E05", "muted": "4D5D2A", "border": "D9F99D"},
-	}
-	lower := strings.ToLower(subject)
-	if strings.Contains(lower, "india") {
-		return cloneSegmentedPalette(palettes[0])
-	}
-	sum := 0
-	for _, r := range lower {
-		sum += int(r)
-	}
-	return cloneSegmentedPalette(palettes[sum%len(palettes)])
-}
-
-func cloneSegmentedPalette(in map[string]string) map[string]string {
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
-}
+// NOTE: fallbackSegmentedPPTXPlan / fallbackSegmentedPalette /
+// fallbackSegmentedSlideBriefs / cloneSegmentedPalette were removed
+// deliberately. The user does not want any fallback template — if the LLM
+// cannot produce the plan or a slide, the orchestrator retries indefinitely.
 
 func inferSegmentedSubject(task *domain.Task) string {
 	text := strings.TrimSpace(task.Title)
@@ -620,92 +622,9 @@ func inferSegmentedSubject(task *domain.Task) string {
 	return strings.Join(words, " ")
 }
 
-func fallbackSegmentedSlideBriefs(subject string, contentSlides, totalSlides int) []segmentedPPTXSlideBrief {
-	roles := []struct {
-		heading string
-		kind    string
-		purpose string
-		visual  string
-		icon    string
-	}{
-		{"Why It Matters", "cards", "frame the topic and explain why the audience should care", "three context cards", "bullseye"},
-		{"Landscape and Context", "cards", "map the background forces shaping the topic", "context map cards", "compass"},
-		{"People and Stakeholders", "cards", "show who is affected and what each group needs", "stakeholder cards", "people"},
-		{"Core Ideas", "cards", "break the subject into the few ideas the audience must understand", "dense concept cards", "diagram-3"},
-		{"Risks and Guardrails", "compare", "separate helpful practice from avoidable risk", "two-column comparison", "shield-check"},
-		{"Signals to Track", "stats", "give the audience concrete indicators to monitor", "metric cards", "bar-chart-line"},
-		{"Decision Framework", "table", "turn the topic into practical choices", "compact decision table", "grid-3x3-gap"},
-		{"Operating Playbook", "steps", "show how to apply the subject in a practical sequence", "numbered action flow", "list-check"},
-		{"Opportunities and Leverage", "cards", "highlight where the audience has the most room to act", "opportunity mosaic", "lightning-charge"},
-		{"Global or External Role", "timeline", "connect the topic to external milestones, markets, or influence", "milestone strip", "globe2"},
-		{"Action Plan", "steps", "close with immediate next steps", "roadmap steps", "check2-circle"},
-	}
-	slides := make([]segmentedPPTXSlideBrief, 0, contentSlides)
-	for i := 0; i < contentSlides; i++ {
-		role := roles[i%len(roles)]
-		if i == contentSlides-1 && contentSlides > 1 {
-			role = roles[len(roles)-1]
-		}
-		heading := role.heading
-		if contentSlides <= 3 {
-			heading = fmt.Sprintf("%s: %s", subject, role.heading)
-		}
-		brief := segmentedPPTXSlideBrief{
-			Heading: heading,
-			Type:    role.kind,
-			Purpose: role.purpose,
-			Visual:  role.visual,
-			Icon:    role.icon,
-			Points: []string{
-				fmt.Sprintf("Define the specific audience problem around %s.", subject),
-				fmt.Sprintf("Show what changes when %s is handled well.", subject),
-				"Convert the idea into a concrete next action for the audience.",
-			},
-			Cards: []presentationDraftCard{
-				{Icon: role.icon, Title: "Audience need", Desc: fmt.Sprintf("The slide connects %s to a real decision the audience must make.", subject)},
-				{Icon: "lightbulb", Title: "Key insight", Desc: "A focused idea keeps the slide useful instead of decorative."},
-				{Icon: "check2-circle", Title: "Practical move", Desc: "End with an action the audience can apply after the presentation."},
-			},
-		}
-		if role.kind == "steps" {
-			brief.Steps = []string{
-				fmt.Sprintf("Map the current situation around %s.", subject),
-				"Choose the highest-impact intervention.",
-				"Assign ownership, timeline, and success measure.",
-			}
-		}
-		if role.kind == "stats" {
-			brief.Stats = []presentationDraftStat{
-				{Value: "01", Label: "Priority", Desc: "Primary decision the audience should make first."},
-				{Value: "03", Label: "Signals", Desc: "Metrics or observations worth tracking."},
-				{Value: "30d", Label: "Action window", Desc: "Near-term period to validate progress."},
-			}
-		}
-		if role.kind == "compare" {
-			brief.LeftColumn = &presentationDraftCompareColumn{Heading: "Helpful pattern", Points: []string{"Specific guidance", "Visible accountability", "Measured improvement"}}
-			brief.RightColumn = &presentationDraftCompareColumn{Heading: "Risk pattern", Points: []string{"Vague ownership", "Unverified assumptions", "No follow-through"}}
-		}
-		if role.kind == "timeline" {
-			brief.Timeline = []presentationDraftTimelineItem{
-				{Date: "Now", Title: "Current position", Desc: fmt.Sprintf("Where %s stands today.", subject)},
-				{Date: "Next", Title: "Emerging shift", Desc: "The next visible change the audience should watch."},
-				{Date: "Then", Title: "Strategic role", Desc: "How the topic can influence wider decisions or outcomes."},
-			}
-		}
-		if role.kind == "table" {
-			brief.Table = &presentationDraftTableData{
-				Headers: []string{"Choice", "Use when", "Watch for"},
-				Rows: [][]string{
-					{"Educate", "The audience needs shared understanding", "Too much theory"},
-					{"Pilot", "The team needs proof before scale", "Weak measurement"},
-					{"Scale", "The model is already validated", "Operational gaps"},
-				},
-			}
-		}
-		slides = append(slides, brief)
-	}
-	return slides
-}
+// fallbackSegmentedSlideBriefs was removed. No generic "Why It Matters" /
+// "Landscape and Context" / "Action Plan" roles, no canned "Audience need" /
+// "Key insight" cards. Every slide brief comes from the LLM plan call.
 
 func normalizeSegmentedPPTXPlan(plan *segmentedPPTXPlan, task *domain.Task, contentSlides int) {
 	plan.Filename = firstNonEmptyString(plan.Filename, slugifySegmentedFilename(task.Title))

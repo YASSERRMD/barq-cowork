@@ -1,8 +1,12 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import PptxGenJS from "pptxgenjs";
 import bootstrapIconsSprite from "bootstrap-icons/bootstrap-icons.svg";
+import bootstrapCSS from "bootstrap/dist/css/bootstrap.min.css";
+import bootstrapIconsCSS from "bootstrap-icons/font/bootstrap-icons.min.css";
+import bootstrapIconsWoff2 from "bootstrap-icons/font/fonts/bootstrap-icons.woff2";
 
 type PptxSlide = any;
 type TextOptions = Record<string, unknown>;
@@ -2003,7 +2007,185 @@ function renderSection(slide: PptxSlide, plan: SlidePlan, bounds: Bounds, family
   });
 }
 
+// -----------------------------------------------------------------------------
+// LLM-HTML rendering path. When the LLM provides slide.html, we render the
+// authored content directly via PptxGenJS — no hardcoded section labels,
+// no fixed "WHY IT MATTERS" / "KEY POINTS" / "OVERVIEW" chrome. This is
+// what the user sees in the main UI; the .pptx must mirror it.
+// -----------------------------------------------------------------------------
+
+type ExtractedHTMLBlock =
+  | { kind: "heading"; level: number; text: string }
+  | { kind: "paragraph"; text: string }
+  | { kind: "list"; items: string[] };
+
+function decodeHTMLEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&hellip;/gi, "…")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+function stripTagsToText(s: string): string {
+  return decodeHTMLEntities(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function extractHTMLBlocks(html: string): ExtractedHTMLBlock[] {
+  const blocks: ExtractedHTMLBlock[] = [];
+  if (!html) return blocks;
+  // strip script/style entirely
+  let h = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
+
+  // Pull out headings, paragraphs, and lists in document order.
+  const tagRe = /<(h[1-6]|p|ul|ol)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(h)) !== null) {
+    const tag = m[1].toLowerCase();
+    const inner = m[2];
+    if (tag === "ul" || tag === "ol") {
+      const items: string[] = [];
+      const liRe = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+      let li: RegExpExecArray | null;
+      while ((li = liRe.exec(inner)) !== null) {
+        const t = stripTagsToText(li[1]);
+        if (t) items.push(t);
+      }
+      if (items.length > 0) blocks.push({ kind: "list", items });
+    } else if (tag.startsWith("h")) {
+      const text = stripTagsToText(inner);
+      if (text) blocks.push({ kind: "heading", level: Number(tag[1]), text });
+    } else {
+      const text = stripTagsToText(inner);
+      if (text) blocks.push({ kind: "paragraph", text });
+    }
+  }
+
+  if (blocks.length === 0) {
+    const fallback = stripTagsToText(h);
+    if (fallback) blocks.push({ kind: "paragraph", text: fallback });
+  }
+  return blocks;
+}
+
+function llmHTMLHasSubstance(html: string | undefined): boolean {
+  if (!html) return false;
+  const text = stripTagsToText(html);
+  return text.length >= 56;
+}
+
+function renderFromLLMHTML(slide: PptxSlide, plan: SlidePlan, bounds: Bounds, _family: RenderFamily, pal: RenderPalette): void {
+  const blocks = extractHTMLBlocks(plan.html || "");
+
+  // Extract leading heading (if any) and remaining body blocks.
+  let leadingHeading = "";
+  const bodyBlocks: ExtractedHTMLBlock[] = [];
+  for (const b of blocks) {
+    if (!leadingHeading && b.kind === "heading") {
+      leadingHeading = b.text;
+    } else {
+      bodyBlocks.push(b);
+    }
+  }
+
+  let cursorY = bounds.y;
+  const innerX = bounds.x + 0.32;
+  const innerW = bounds.w - 0.64;
+
+  if (leadingHeading) {
+    addText(slide, leadingHeading, { x: innerX, y: cursorY, w: innerW, h: 0.7 }, {
+      fontFace: FONT_HEAD,
+      fontSize: 28,
+      bold: true,
+      color: pal.text,
+      breakLine: true,
+      valign: "top",
+      fit: "shrink",
+    });
+    cursorY += 0.78;
+    // Subtle accent rule under the heading
+    addPanel(slide, { x: innerX, y: cursorY - 0.06, w: 1.4, h: 0.04 }, pal.accent, pal.accent, 0);
+    cursorY += 0.16;
+  }
+
+  const remainingH = Math.max(bounds.h - (cursorY - bounds.y) - 0.1, 0.5);
+
+  // Build a single rich-text block from body blocks so PptxGenJS can flow them.
+  const runs: any[] = [];
+  for (const b of bodyBlocks) {
+    if (b.kind === "heading") {
+      runs.push({
+        text: b.text,
+        options: {
+          fontFace: FONT_HEAD,
+          fontSize: b.level <= 2 ? 22 : 18,
+          bold: true,
+          color: pal.text,
+          breakLine: true,
+          paraSpaceBefore: 6,
+          paraSpaceAfter: 4,
+        },
+      });
+    } else if (b.kind === "paragraph") {
+      runs.push({
+        text: b.text,
+        options: {
+          fontFace: FONT_BODY,
+          fontSize: 16,
+          color: pal.text,
+          breakLine: true,
+          paraSpaceAfter: 8,
+        },
+      });
+    } else {
+      // list
+      for (const item of b.items) {
+        runs.push({
+          text: item,
+          options: {
+            fontFace: FONT_BODY,
+            fontSize: 15,
+            color: pal.text,
+            bullet: { code: "25CF" },
+            breakLine: true,
+            paraSpaceAfter: 4,
+            indentLevel: 0,
+          },
+        });
+      }
+    }
+  }
+
+  if (runs.length > 0) {
+    slide.addText(runs, {
+      x: innerX,
+      y: cursorY,
+      w: innerW,
+      h: remainingH,
+      margin: 0,
+      valign: "top",
+      fit: "shrink",
+    });
+  }
+}
+
 function renderSlideBody(slide: PptxSlide, plan: SlidePlan, bounds: Bounds, family: RenderFamily, pal: RenderPalette): void {
+  // PRIMARY PATH: when the LLM authored HTML for this slide, render it directly.
+  // The .pptx must reflect what the LLM actually produced — not hardcoded chrome.
+  if (llmHTMLHasSubstance(plan.html)) {
+    renderFromLLMHTML(slide, plan, bounds, family, pal);
+    return;
+  }
+
   switch (plan.layout) {
     case "stats":
       renderStats(slide, plan, bounds, family, pal);
@@ -2058,9 +2240,123 @@ async function readStdin(): Promise<string> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Chrome screenshot pipeline — renders each slide's LLM HTML exactly as-is
+// using headless Chrome. The PPTX slide images match the UI preview 1:1.
+// ---------------------------------------------------------------------------
+
+function systemChromePath(): string {
+  const platform = os.platform();
+  if (platform === "darwin") {
+    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  }
+  if (platform === "win32") {
+    return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+  }
+  // Linux
+  for (const p of [
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/snap/bin/chromium",
+  ]) {
+    if (fs.existsSync(p)) return p;
+  }
+  return "google-chrome";
+}
+
+// Strip @font-face rules from vendor CSS — we replace them with an embedded
+// base64 font so Chrome can render icons without any network requests.
+function stripFontFaceRules(css: string): string {
+  return css.replace(/@font-face\s*\{[^}]*\}/gi, "");
+}
+
+function buildSlidePageHTML(slideHTML: string, palette: Palette, themeCss: string, _title: string): string {
+  const bg = palette.background || "FFFFFF";
+  const textColor = palette.text || "111827";
+  // Bootstrap CSS: strip @font-face (no external resources)
+  const safeBootstrapCSS = stripFontFaceRules(bootstrapCSS as unknown as string);
+  // Bootstrap Icons CSS: strip original @font-face, then inject one pointing
+  // to the woff2 that's already embedded as a base64 data URL.
+  const safeIconsCSS = stripFontFaceRules(bootstrapIconsCSS as unknown as string);
+  const iconsFontFace = `@font-face{font-family:"bootstrap-icons";font-display:block;src:url("${bootstrapIconsWoff2}") format("woff2");}`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+${safeBootstrapCSS}
+${iconsFontFace}
+${safeIconsCSS}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden}
+body{background:#${bg};color:#${textColor};font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5}
+.slide-page{width:1280px;height:720px;overflow:hidden;display:flex;flex-direction:column;padding:48px 64px}
+${themeCss}
+</style>
+</head>
+<body>
+<div class="slide-page">${slideHTML}</div>
+</body>
+</html>`;
+}
+
+async function screenshotSlides(
+  manifest: Manifest
+): Promise<Array<string | null>> {
+  // Lazily require puppeteer-core so the bundle stays external
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const puppeteer = require("puppeteer-core");
+
+  const chromePath = systemChromePath();
+  const browser = await puppeteer.launch({
+    executablePath: chromePath,
+    headless: "new",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
+
+    const themeCss = manifest.deck_plan.theme_css || "";
+    const results: Array<string | null> = [];
+
+    // Cover slide
+    const coverHTML = manifest.deck_plan.cover_html || "";
+    if (coverHTML) {
+      const html = buildSlidePageHTML(coverHTML, manifest.palette, themeCss, manifest.title);
+      await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
+      const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
+      results.push(shot);
+    } else {
+      results.push(null);
+    }
+
+    // Content slides
+    for (const plan of manifest.slides) {
+      if (plan.html) {
+        const html = buildSlidePageHTML(plan.html, manifest.palette, themeCss, plan.heading || manifest.title);
+        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
+        const shot = await page.screenshot({ type: "png", encoding: "base64" }) as string;
+        results.push(shot);
+      } else {
+        results.push(null);
+      }
+    }
+
+    return results;
+  } finally {
+    await browser.close();
+  }
+}
+
 async function buildPresentationFromStructuredManifest(manifest: Manifest, outputPath: string): Promise<void> {
-  const family = previewFamily(manifest);
-  const pal = buildPalette(manifest, family);
   const PPTXRuntime = PptxGenJS as unknown as new () => any;
   const pptx = new PPTXRuntime();
   pptx.layout = "LAYOUT_WIDE";
@@ -2069,22 +2365,64 @@ async function buildPresentationFromStructuredManifest(manifest: Manifest, outpu
   pptx.subject = manifest.deck_plan.subject || manifest.title;
   pptx.title = manifest.title;
   pptx.lang = "en-US";
-  pptx.theme = {
-    headFontFace: FONT_HEAD,
-    bodyFontFace: FONT_BODY,
-  };
 
-  const cover = pptx.addSlide();
-  renderCover(cover, manifest, family, pal);
-  cover.addNotes(manifest.narrative || manifest.deck_plan.narrative_arc || manifest.title);
+  // Determine if we should use the Chrome screenshot path.
+  // Any slide with LLM-authored HTML triggers screenshot mode for the whole deck
+  // so the .pptx exactly matches the Reveal.js preview.
+  const hasAnyHTML =
+    llmHTMLHasSubstance(manifest.deck_plan.cover_html) ||
+    manifest.slides.some((s) => llmHTMLHasSubstance(s.html));
 
-  const totalSlides = manifest.slides.length + 1;
-  for (const plan of manifest.slides) {
-    const slide = pptx.addSlide();
-    const bounds = renderSlideChrome(slide, plan, totalSlides, family, pal);
-    renderSlideBody(slide, plan, bounds, family, pal);
-    if (plan.speaker_notes?.trim()) {
-      slide.addNotes(plan.speaker_notes.trim());
+  if (hasAnyHTML) {
+    // ── Chrome screenshot path ───────────────────────────────────────────────
+    // One Chrome instance, one page.setContent() per slide — no template chrome.
+    const shots = await screenshotSlides(manifest);
+    const family = previewFamily(manifest);
+    const pal = buildPalette(manifest, family);
+
+    // shots[0] = cover, shots[1..n] = content slides
+    const coverShot = shots[0];
+    const cover = pptx.addSlide();
+    if (coverShot) {
+      cover.addImage({ data: `data:image/png;base64,${coverShot}`, x: 0, y: 0, w: SLIDE_W, h: SLIDE_H });
+    } else {
+      renderCover(cover, manifest, family, pal);
+    }
+    cover.addNotes(manifest.narrative || manifest.deck_plan.narrative_arc || manifest.title);
+
+    for (let i = 0; i < manifest.slides.length; i++) {
+      const plan = manifest.slides[i];
+      const slide = pptx.addSlide();
+      const shot = shots[i + 1];
+      if (shot) {
+        slide.addImage({ data: `data:image/png;base64,${shot}`, x: 0, y: 0, w: SLIDE_W, h: SLIDE_H });
+      } else {
+        // Fallback for slides that had no HTML: use structured renderer
+        const bounds = renderSlideChrome(slide, plan, manifest.slides.length + 1, family, pal);
+        renderSlideBody(slide, plan, bounds, family, pal);
+      }
+      if (plan.speaker_notes?.trim()) {
+        slide.addNotes(plan.speaker_notes.trim());
+      }
+    }
+  } else {
+    // ── Structured renderer path (no HTML authored by LLM) ──────────────────
+    const family = previewFamily(manifest);
+    const pal = buildPalette(manifest, family);
+    pptx.theme = { headFontFace: FONT_HEAD, bodyFontFace: FONT_BODY };
+
+    const cover = pptx.addSlide();
+    renderCover(cover, manifest, family, pal);
+    cover.addNotes(manifest.narrative || manifest.deck_plan.narrative_arc || manifest.title);
+
+    const totalSlides = manifest.slides.length + 1;
+    for (const plan of manifest.slides) {
+      const slide = pptx.addSlide();
+      const bounds = renderSlideChrome(slide, plan, totalSlides, family, pal);
+      renderSlideBody(slide, plan, bounds, family, pal);
+      if (plan.speaker_notes?.trim()) {
+        slide.addNotes(plan.speaker_notes.trim());
+      }
     }
   }
 

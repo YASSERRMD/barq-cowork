@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -163,6 +165,69 @@ func findSofficeBinary() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("libreoffice (soffice) not found on PATH or standard install locations")
+}
+
+// previewPPTXFromEmbeddedImages checks if the PPTX was built with the Chrome
+// screenshot renderer. Such a PPTX has one large PNG per slide stored in
+// ppt/media/. If all slides carry a full-slide image (>30 KB), extract those
+// images and return a preview HTML directly — no LibreOffice needed.
+func previewPPTXFromEmbeddedImages(data []byte) (string, bool) {
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", false
+	}
+
+	// Collect ppt/media/image-*.png entries, sorted by name so slide order is
+	// preserved (PptxGenJS names them image-1-1.png, image-2-1.png, …).
+	type imgEntry struct {
+		name string
+		idx  int
+	}
+	var imgs []imgEntry
+	for _, f := range reader.File {
+		name := f.Name
+		if !strings.HasPrefix(name, "ppt/media/image-") || !strings.HasSuffix(name, ".png") {
+			continue
+		}
+		// Only accept images that are large enough to be a full-slide screenshot
+		// (≥30 KB). Small icons or logo images are not slides.
+		if f.UncompressedSize64 < 30_000 {
+			continue
+		}
+		// Parse the first numeric segment after "image-" for ordering.
+		base := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(name), "image-"), ".png")
+		parts := strings.SplitN(base, "-", 2)
+		n := 0
+		fmt.Sscanf(parts[0], "%d", &n)
+		imgs = append(imgs, imgEntry{name: name, idx: n})
+	}
+	if len(imgs) == 0 {
+		return "", false
+	}
+	sort.Slice(imgs, func(i, j int) bool { return imgs[i].idx < imgs[j].idx })
+
+	var sections strings.Builder
+	for i, img := range imgs {
+		f, err := reader.Open(img.name)
+		if err != nil {
+			continue
+		}
+		imgData, err := readAll(f)
+		f.Close()
+		if err != nil {
+			continue
+		}
+		b64 := base64.StdEncoding.EncodeToString(imgData)
+		sections.WriteString(fmt.Sprintf(
+			`<figure style="margin:0 0 18px;display:flex;justify-content:center"><img src="data:image/png;base64,%s" alt="Slide %d" style="width:min(100%%,1440px);height:auto;display:block;border-radius:18px;box-shadow:0 28px 80px rgba(2,6,23,0.35);background:#000" loading="lazy"/></figure>`,
+			b64, i+1,
+		))
+	}
+	if sections.Len() == 0 {
+		return "", false
+	}
+	doc := `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Presentation preview</title><style>html,body{margin:0;padding:0;background:#07111f;min-height:100%;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:#f8fafc}main{max-width:1480px;margin:0 auto;padding:18px}</style></head><body><main>` + sections.String() + `</main></body></html>`
+	return doc, true
 }
 
 // previewPPTXAsPNGStack converts a .pptx to PNGs via LibreOffice + pdftoppm and

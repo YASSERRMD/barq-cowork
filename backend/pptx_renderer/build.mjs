@@ -15,6 +15,9 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node20",
-  loader: { ".svg": "text" },
+  loader: { ".svg": "text", ".css": "text", ".woff2": "dataurl", ".woff": "dataurl" },
+  // puppeteer-core has native internals — keep it external so Node.js
+  // resolves it from the pptx_renderer/node_modules at runtime.
+  external: ["puppeteer-core"],
   outfile: path.resolve(outDir, "pptx-renderer.cjs"),
 });
