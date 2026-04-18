@@ -53,33 +53,36 @@ type segmentedDocSection struct {
 // shouldUseSegmentedDocumentWorkflow reports whether the task should run
 // through the segmented HTML-document pipeline.
 func shouldUseSegmentedDocumentWorkflow(task *domain.Task) bool {
-	_, ok := requestedDocumentSectionCount(task)
+	_, _, ok := requestedDocumentPageBudget(task)
 	return ok
 }
 
-// requestedDocumentSectionCount returns the number of sections the LLM should
-// produce and whether a page hint was found in the task text. 1 page → 1
-// section; N pages → N sections (bounded to [3, 25]).
-func requestedDocumentSectionCount(task *domain.Task) (int, bool) {
+// requestedDocumentPageBudget parses the user's "N pages" ask and returns the
+// total page count (cover + body) and the number of body sections to plan.
+// The invariant is: total pages = 1 cover + sectionCount, so a "3 page" ask
+// produces 1 cover + 2 body sections. Page count is clamped to [3, 25];
+// sectionCount therefore lands in [2, 24]. Each body section is expected to
+// fit on exactly one A4 page (the plan/section prompts enforce this).
+func requestedDocumentPageBudget(task *domain.Task) (pages int, sectionCount int, ok bool) {
 	if requiredOutputTool(task) != "write_html_docx" {
-		return 0, false
+		return 0, 0, false
 	}
 	text := strings.TrimSpace(task.Title + " " + task.Description)
 	m := requestedDocumentPagePattern.FindStringSubmatch(text)
 	if len(m) < 2 {
-		return 0, false
+		return 0, 0, false
 	}
 	n, err := strconv.Atoi(m[1])
 	if err != nil || n < 1 {
-		return 0, false
-	}
-	if n > 25 {
-		n = 25
+		return 0, 0, false
 	}
 	if n < 3 {
 		n = 3
 	}
-	return n, true
+	if n > 25 {
+		n = 25
+	}
+	return n, n - 1, true
 }
 
 func (a *AgentLoop) runSegmentedDocumentWorkflow(
@@ -90,12 +93,15 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 	extraSystemPrompts []string,
 	runtimeProfile agentRuntimeProfile,
 ) ExecuteResult {
-	sectionCount, ok := requestedDocumentSectionCount(task)
+	pages, sectionCount, ok := requestedDocumentPageBudget(task)
 	if !ok {
+		pages = 7
 		sectionCount = 6
 	}
 	kind := categorizeDocTask(task)
-	a.logger.Info("segmented docx: categorized", "task_id", task.ID, "kind", string(kind))
+	a.logger.Info("segmented docx: categorized",
+		"task_id", task.ID, "kind", string(kind),
+		"pages", pages, "body_sections", sectionCount)
 
 	var result ExecuteResult
 	taskStart := time.Now()
@@ -127,7 +133,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 			"sections", sectionCount, "provider", a.prov.Name(), "model", a.cfg.Model)
 
 		var planErr error
-		plan, planErr = a.generateSegmentedDocPlan(ctx, task, sectionCount, kind, extraSystemPrompts, runtimeProfile)
+		plan, planErr = a.generateSegmentedDocPlan(ctx, task, pages, sectionCount, kind, extraSystemPrompts, runtimeProfile)
 		elapsed := time.Since(planCallStart).Round(time.Millisecond)
 		if planErr == nil && len(plan.Sections) > 0 {
 			normalizeSegmentedDocPlan(&plan, task, sectionCount)
@@ -196,7 +202,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 				"heading", brief.Heading, "attempt", attempt+1,
 				"elapsed_total", time.Since(taskStart).Round(time.Second))
 
-			raw, sErr := a.generateSegmentedDocSection(ctx, task, plan, brief, i, kind, runtimeProfile)
+			raw, sErr := a.generateSegmentedDocSection(ctx, task, plan, brief, i, pages, kind, runtimeProfile)
 			sElapsed := time.Since(callStart).Round(time.Millisecond)
 
 			if sErr == nil && strings.TrimSpace(raw.HTML) == "" {
@@ -284,6 +290,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 func (a *AgentLoop) generateSegmentedDocPlan(
 	ctx context.Context,
 	task *domain.Task,
+	pages int,
 	sectionCount int,
 	kind docKind,
 	extraSystemPrompts []string,
@@ -304,6 +311,8 @@ Task details: %s
 Additional context: %s
 
 Document kind (auto-classified from the task): %s — tune cover, layout, and graphical vocabulary to this kind.
+
+PAGE BUDGET: exactly %d pages total (1 cover page + %d body sections). Each body section MUST fit on EXACTLY ONE A4 page — no more, no less. Plan section scope so it fills one page with dense, substantive content and does not overflow. Do NOT pad with filler to hit the page count; do NOT leave pages half-empty.
 
 Required: exactly %d body sections in sections[].
 
@@ -342,7 +351,7 @@ Return ONLY compact valid JSON with this exact shape:
 Rules:
 - sections[] must contain exactly %d entries.
 - Each brief is 1-2 sentences describing what that section will cover. Be specific to the subject.
-- depth: "short" ≈ 1/2 page, "medium" ≈ 1 page, "long" ≈ 1.5-2 pages. Mix them.
+- depth: ALWAYS "medium" — every body section targets EXACTLY ONE A4 page of dense, substantive content. Do not use "short" (leaves whitespace) or "long" (overflows). The renderer enforces one-page-per-section sizing.
 %s
 - theme: design fonts and colors that SUIT THE SUBJECT. A legal briefing, a wedding lookbook, a cybersecurity report, and a food magazine should look visibly different. Hex values are 6-digit, no '#'. Do not reuse the same palette across unrelated subjects.
 %s
@@ -351,7 +360,7 @@ Rules:
 
 %s
 
-- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, string(kind), sectionCount, sectionCount, coverGuidance, layoutGuidance, graphicsGuidance, mathGuidance)
+- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, string(kind), pages, sectionCount, sectionCount, sectionCount, coverGuidance, layoutGuidance, graphicsGuidance, mathGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3600, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
@@ -366,6 +375,7 @@ func (a *AgentLoop) generateSegmentedDocSection(
 	plan segmentedDocPlan,
 	brief segmentedDocBrief,
 	index int,
+	pages int,
 	kind docKind,
 	runtimeProfile agentRuntimeProfile,
 ) (segmentedDocSection, error) {
@@ -385,6 +395,7 @@ func (a *AgentLoop) generateSegmentedDocSection(
 Document kind: %s
 Document title: %s
 Document subtitle: %s
+Document page budget: %d pages total (1 cover + %d body sections).
 Section position: %d of %d
 Section brief JSON:
 %s
@@ -395,19 +406,24 @@ Return ONLY compact valid JSON:
   "html":"<h1>…</h1><p>…</p>…"
 }
 
+ONE-PAGE RULE: This section MUST fill EXACTLY ONE A4 page — no more, no less.
+- Target: ~380–480 words of body prose (roughly 4–6 paragraphs of 3–5 sentences).
+- Always include ONE styled component from the graphics catalog (pullquote / callout / keyidea / definition / statbox / factbox / sidebar) near the middle or end — it absorbs vertical space and balances the page visually.
+- If the content is light, add a compact <table> (3-5 rows) or a short <ul>/<ol>. Do NOT leave the page half-empty.
+- If the content is heavy, trim paragraphs — do NOT overflow to a second page. Tight, dense writing over verbose.
+- Do NOT emit <hr class="pagebreak"/>; the composer inserts page breaks between sections.
+
 HTML requirements:
 - Open with <h1>%s</h1> (use the section heading verbatim) and then body content.
 - Use <h2> for sub-sections if helpful, <p> for prose, <ul>/<ol> for lists,
   <table><thead>…</thead><tbody>…</tbody></table> for tabular data, <blockquote> for pull quotes.
-- For "short" depth: 2-3 paragraphs. For "medium": 4-6 paragraphs, possibly a list or small table.
-  For "long": 6-10 paragraphs with at least one <ul>/<ol> or <table>.
 - Write specific, domain-accurate content. No filler like "this section will discuss…". No TODO markers.
 - No emoji, no <style>, no <script>, no <html>/<body>/<head> tags.
 %s
 
 %s
 
-%s`, string(kind), firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance, graphicsGuidance, mathGuidance)
+%s`, string(kind), firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, pages, len(plan.Sections), index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance, graphicsGuidance, mathGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3200, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
