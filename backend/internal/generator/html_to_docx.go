@@ -53,7 +53,8 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
             xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
+            xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">
   <w:body>
 %s
     <w:sectPr>%s
@@ -215,6 +216,10 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		w.writeParagraph(c, "Heading4", "", "")
 
 	case atom.P:
+		if tex, ok := displayMathInParagraph(c); ok {
+			w.body.WriteString(displayMathParagraph(tex))
+			return
+		}
 		w.writeParagraph(c, "Normal", "", paragraphAlignment(c))
 
 	case atom.Blockquote:
@@ -371,7 +376,7 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 				out.WriteString(fmt.Sprintf(`<w:hyperlink r:id="%s">%s</w:hyperlink>`,
 					st.hyperlink, runXML(text, linkStyle)))
 			} else {
-				out.WriteString(runXML(text, st))
+				out.WriteString(emitRunsWithInlineMath(text, st))
 			}
 
 		case html.ElementNode:
@@ -409,6 +414,111 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 			w.collectInlines(c, ns, out)
 		}
 	}
+}
+
+// displayMathInParagraph checks whether a <p> contains only a `$$…$$` block
+// (or a leading `\[…\]`) and returns the inner LaTeX so the renderer can emit
+// an <m:oMathPara> centered display paragraph.
+func displayMathInParagraph(n *html.Node) (string, bool) {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			switch c.Type {
+			case html.TextNode:
+				b.WriteString(c.Data)
+			case html.ElementNode:
+				walk(c)
+			}
+		}
+	}
+	walk(n)
+	text := strings.TrimSpace(b.String())
+	if strings.HasPrefix(text, "$$") && strings.HasSuffix(text, "$$") && len(text) > 4 {
+		return strings.TrimSpace(text[2 : len(text)-2]), true
+	}
+	if strings.HasPrefix(text, `\[`) && strings.HasSuffix(text, `\]`) && len(text) > 4 {
+		return strings.TrimSpace(text[2 : len(text)-2]), true
+	}
+	return "", false
+}
+
+// displayMathParagraph wraps the LaTeX in an <m:oMathPara> inside a centered
+// <w:p> so Word renders the block math on its own line.
+func displayMathParagraph(tex string) string {
+	para := latexToOMMLPara(tex)
+	if para == "" {
+		return ""
+	}
+	return fmt.Sprintf(`    <w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="120"/></w:pPr>%s</w:p>`+"\n", para)
+}
+
+// emitRunsWithInlineMath splits text at `$…$` / `$$…$$` delimiters and emits
+// plain runs for non-math spans and <m:oMath> for LaTeX spans. Escaped `\$`
+// is a literal dollar sign. Unbalanced delimiters fall through as literal.
+func emitRunsWithInlineMath(text string, st runStyle) string {
+	if !strings.Contains(text, "$") {
+		return runXML(text, st)
+	}
+	var out strings.Builder
+	var buf strings.Builder
+	flush := func() {
+		if buf.Len() > 0 {
+			out.WriteString(runXML(buf.String(), st))
+			buf.Reset()
+		}
+	}
+	i := 0
+	for i < len(text) {
+		c := text[i]
+		if c == '\\' && i+1 < len(text) && text[i+1] == '$' {
+			buf.WriteByte('$')
+			i += 2
+			continue
+		}
+		if c == '$' {
+			// detect `$$` vs `$`
+			isDisplay := i+1 < len(text) && text[i+1] == '$'
+			delim := "$"
+			if isDisplay {
+				delim = "$$"
+			}
+			start := i + len(delim)
+			end := indexUnescapedDelim(text, start, delim)
+			if end < 0 {
+				buf.WriteByte(c)
+				i++
+				continue
+			}
+			flush()
+			omml := latexToOMML(text[start:end])
+			if omml != "" {
+				out.WriteString(omml)
+			}
+			i = end + len(delim)
+			continue
+		}
+		buf.WriteByte(c)
+		i++
+	}
+	flush()
+	return out.String()
+}
+
+// indexUnescapedDelim finds the next occurrence of delim in text starting at
+// pos, skipping delimiters preceded by a backslash. Returns -1 if not found.
+func indexUnescapedDelim(text string, pos int, delim string) int {
+	for pos < len(text) {
+		if text[pos] == '\\' && pos+1 < len(text) {
+			pos += 2
+			continue
+		}
+		if pos+len(delim) <= len(text) && text[pos:pos+len(delim)] == delim {
+			return pos
+		}
+		pos++
+	}
+	return -1
 }
 
 func runXML(text string, st runStyle) string {
