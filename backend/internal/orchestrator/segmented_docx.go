@@ -295,6 +295,7 @@ func (a *AgentLoop) generateSegmentedDocPlan(
 	coverGuidance := docKindCoverGuidance(kind)
 	layoutGuidance := docKindLayoutGuidance(kind)
 	graphicsGuidance := docKindGraphicsGuidance(kind)
+	mathGuidance := docKindMathGuidance(kind)
 
 	user := fmt.Sprintf(`Plan a Word document that will be rendered through write_html_docx.
 
@@ -348,7 +349,9 @@ Rules:
 
 %s
 
-- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, string(kind), sectionCount, sectionCount, coverGuidance, layoutGuidance, graphicsGuidance)
+%s
+
+- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, string(kind), sectionCount, sectionCount, coverGuidance, layoutGuidance, graphicsGuidance, mathGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3600, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
@@ -375,6 +378,7 @@ func (a *AgentLoop) generateSegmentedDocSection(
 	}
 	layoutGuidance := sectionLayoutGuidance(kind, layoutKind)
 	graphicsGuidance := docKindGraphicsGuidance(kind)
+	mathGuidance := docKindMathGuidance(kind)
 
 	user := fmt.Sprintf(`Write one section of a Word document.
 
@@ -401,7 +405,9 @@ HTML requirements:
 - No emoji, no <style>, no <script>, no <html>/<body>/<head> tags.
 %s
 
-%s`, string(kind), firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance, graphicsGuidance)
+%s
+
+%s`, string(kind), firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance, graphicsGuidance, mathGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3200, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},

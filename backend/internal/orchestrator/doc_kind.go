@@ -135,6 +135,45 @@ func docKindWantsChrome(kind docKind) bool {
 	return kind != docKindMagazine
 }
 
+// docKindMathGuidance returns the LaTeX math-notation instruction block. The
+// renderer converts LaTeX inside $…$ (inline) and $$…$$ (display) into native
+// OOXML math (OMML), so Word renders equations with proper typography instead
+// of garbled Unicode runs. Applies to every kind — any section with a variable,
+// fraction, root, sum, integral, matrix, or Greek letter must use this.
+func docKindMathGuidance(kind docKind) string {
+	base := `Mathematical notation — ALWAYS use LaTeX, never raw Unicode math glyphs or prose-like "x squared":
+  • Inline math: wrap in single dollars — "the slope $m$ equals $\frac{dy}{dx}$".
+  • Display math: wrap in double dollars on its own line — "$$ \int_{0}^{1} x^{2}\,dx = \tfrac{1}{3} $$".
+  • Variables: every single variable reference gets its own $…$ (e.g. $v$, $\theta$, $x_i$) so it renders italic and correctly spaced.
+  • Fractions: \frac{num}{den}.  Roots: \sqrt{x}, \sqrt[3]{x}.
+  • Sub/superscripts: x_{i}, e^{i\pi}, x_{i}^{2}.
+  • Sums/products/integrals: \sum_{i=1}^{n} a_i, \prod_{k=1}^{n} k, \int_{a}^{b} f(x)\,dx, \oint, \iint.
+  • Greek letters: \alpha, \beta, \gamma, \theta, \lambda, \mu, \pi, \sigma, \phi, \omega, \Delta, \Omega, etc.
+  • Operators/relations: \times, \cdot, \pm, \leq, \geq, \neq, \approx, \equiv, \in, \subset, \to, \Rightarrow, \infty, \partial, \nabla.
+  • Functions (rendered upright): \sin, \cos, \tan, \log, \ln, \exp, \lim, \max, \min.
+  • Matrices: \begin{pmatrix} a & b \\ c & d \end{pmatrix}; also bmatrix, vmatrix, Vmatrix, cases.
+  • Grouped delimiters: \left( \frac{a}{b} \right), \left[ … \right], \left\{ … \right\}.
+NEVER write math as "x^2" in plain text, or use Unicode "α", "∑", "∫", "√" directly — always wrap in LaTeX delimiters. Escape a literal dollar sign in prose as "\$".`
+	switch kind {
+	case docKindTextbook:
+		return base + `
+
+Textbook preference: every definition, formula, worked example, and review question that references a symbol MUST use LaTeX. Worked examples should interleave prose paragraphs with display-math $$…$$ blocks showing each derivation step.`
+	case docKindReport:
+		return base + `
+
+Report preference: use LaTeX for any quantitative formula, statistical notation, or model equation the report cites.`
+	case docKindArticle:
+		return base + `
+
+Article preference: only reach for math when the subject genuinely needs it — but when it does, use LaTeX, never ad-hoc notation.`
+	default: // magazine
+		return base + `
+
+Magazine preference: math is rare here, but if a feature includes a formula (science/data magazine), wrap it in LaTeX.`
+	}
+}
+
 // sectionLayoutGuidance returns the per-kind section instructions — how to
 // structure the HTML for a given layout_kind label from the plan.
 func sectionLayoutGuidance(kind docKind, layoutKind string) string {
