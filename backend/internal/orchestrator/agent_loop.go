@@ -938,7 +938,11 @@ func requiredOutputTool(task *domain.Task) string {
 	switch {
 	case containsTaskKeyword(text, "presentation", "slide", "slides", "deck", "slideshow", "pptx", "powerpoint"):
 		return "write_pptx"
-	case containsTaskKeyword(text, "document", "report", "doc", "word", "brief", "proposal", "writeup", "paper"):
+	case containsTaskKeyword(text,
+		"document", "report", "doc", "word", "brief", "proposal", "writeup", "paper",
+		"magazine", "zine", "editorial", "newsletter", "lookbook", "photo essay",
+		"textbook", "chapter", "lesson", "workbook", "curriculum", "coursebook",
+		"article", "essay", "op-ed", "blog post", "column", "whitepaper", "white paper"):
 		return "write_html_docx"
 	case containsTaskKeyword(text, "summary", "notes", "markdown"):
 		return "write_markdown_report"
