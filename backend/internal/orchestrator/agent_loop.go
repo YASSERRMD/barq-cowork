@@ -314,6 +314,11 @@ func (a *AgentLoop) Run(
 		return a.runSegmentedPresentationWorkflow(ctx, task, workspaceRoot, planID, extraSystemPrompts, runtimeProfile)
 	}
 
+	if shouldUseSegmentedDocumentWorkflow(task) {
+		a.logger.Info("agent loop: using segmented document workflow", "task_id", task.ID)
+		return a.runSegmentedDocumentWorkflow(ctx, task, workspaceRoot, planID, extraSystemPrompts, runtimeProfile)
+	}
+
 	for iter := 0; iter < runtimeProfile.MaxIterations; iter++ {
 		if ctx.Err() != nil {
 			break
