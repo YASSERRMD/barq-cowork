@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/barq-cowork/barq-cowork/internal/domain"
+	"github.com/barq-cowork/barq-cowork/internal/generator"
 	"github.com/barq-cowork/barq-cowork/internal/provider"
 	"github.com/google/uuid"
 )
@@ -27,6 +28,9 @@ const segmentedSectionInterCallDelay = 3 * time.Second
 // "at least 8 pages".
 var requestedDocumentPagePattern = regexp.MustCompile(`(?i)\b(\d+)\s*[- ]?\s*pages?\b`)
 
+// magazineModePattern catches requests that imply per-page visual variation.
+var magazineModePattern = regexp.MustCompile(`(?i)\b(magazine|zine|editorial spread|photo essay|look ?book|mood ?board|visual essay|newsletter)\b`)
+
 type segmentedDocPlan struct {
 	Filename      string              `json:"filename"`
 	Title         string              `json:"title"`
@@ -34,13 +38,15 @@ type segmentedDocPlan struct {
 	Author        string              `json:"author"`
 	CoverHTML     string              `json:"cover_html"`
 	CoverSubtitle string              `json:"cover_subtitle"`
+	Theme         *generator.DocxTheme `json:"theme"`
 	Sections      []segmentedDocBrief `json:"sections"`
 }
 
 type segmentedDocBrief struct {
-	Heading string `json:"heading"`
-	Brief   string `json:"brief"`
-	Depth   string `json:"depth"` // "short" | "medium" | "long"
+	Heading    string `json:"heading"`
+	Brief      string `json:"brief"`
+	Depth      string `json:"depth"`       // "short" | "medium" | "long"
+	LayoutKind string `json:"layout_kind"` // magazine mode: distinct per section
 }
 
 type segmentedDocSection struct {
@@ -53,6 +59,15 @@ type segmentedDocSection struct {
 func shouldUseSegmentedDocumentWorkflow(task *domain.Task) bool {
 	_, ok := requestedDocumentSectionCount(task)
 	return ok
+}
+
+// isMagazineModeTask returns true when the task text asks for a document with
+// visibly distinct per-page layouts (magazine / zine / editorial spread / …).
+func isMagazineModeTask(task *domain.Task) bool {
+	if task == nil {
+		return false
+	}
+	return magazineModePattern.MatchString(task.Title + " " + task.Description)
 }
 
 // requestedDocumentSectionCount returns the number of sections the LLM should
@@ -92,6 +107,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 	if !ok {
 		sectionCount = 6
 	}
+	magazineMode := isMagazineModeTask(task)
 
 	var result ExecuteResult
 	taskStart := time.Now()
@@ -123,7 +139,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 			"sections", sectionCount, "provider", a.prov.Name(), "model", a.cfg.Model)
 
 		var planErr error
-		plan, planErr = a.generateSegmentedDocPlan(ctx, task, sectionCount, extraSystemPrompts, runtimeProfile)
+		plan, planErr = a.generateSegmentedDocPlan(ctx, task, sectionCount, magazineMode, extraSystemPrompts, runtimeProfile)
 		elapsed := time.Since(planCallStart).Round(time.Millisecond)
 		if planErr == nil && len(plan.Sections) > 0 {
 			normalizeSegmentedDocPlan(&plan, task, sectionCount)
@@ -192,7 +208,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 				"heading", brief.Heading, "attempt", attempt+1,
 				"elapsed_total", time.Since(taskStart).Round(time.Second))
 
-			raw, sErr := a.generateSegmentedDocSection(ctx, task, plan, brief, i, runtimeProfile)
+			raw, sErr := a.generateSegmentedDocSection(ctx, task, plan, brief, i, magazineMode, runtimeProfile)
 			sElapsed := time.Since(callStart).Round(time.Millisecond)
 
 			if sErr == nil && strings.TrimSpace(raw.HTML) == "" {
@@ -229,12 +245,16 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 
 	// ── COMPOSE + RENDER ────────────────────────────────────────────────────
 	composed := composeSegmentedDocHTML(plan, sections)
-	argsBytes, _ := json.Marshal(map[string]any{
+	renderArgs := map[string]any{
 		"filename": firstNonEmptyString(plan.Filename, slugifySegmentedFilename(task.Title)),
 		"title":    firstNonEmptyString(plan.Title, task.Title, "Document"),
 		"author":   plan.Author,
 		"html":     composed,
-	})
+	}
+	if plan.Theme != nil {
+		renderArgs["theme"] = plan.Theme
+	}
+	argsBytes, _ := json.Marshal(renderArgs)
 	tc := provider.ToolCall{ID: "segmented-write-html-docx", Name: "write_html_docx", Arguments: string(argsBytes)}
 	renderStep := createToolPlanStep(planID, stepOrder+1, tc)
 	renderStep.Title = "Render Word document"
@@ -270,12 +290,19 @@ func (a *AgentLoop) generateSegmentedDocPlan(
 	ctx context.Context,
 	task *domain.Task,
 	sectionCount int,
+	magazineMode bool,
 	extraSystemPrompts []string,
 	runtimeProfile agentRuntimeProfile,
 ) (segmentedDocPlan, error) {
 	var out segmentedDocPlan
 	contextText := compactSegmentedExtraContext(extraSystemPrompts)
-	user := fmt.Sprintf(`Plan a long-form Word document that will be rendered through write_html_docx.
+
+	layoutGuidance := `- "layout_kind" is a short kebab-case label that describes the HTML layout of that section (e.g. "prose", "two-column", "stat-grid", "timeline", "checklist-table", "callout-heavy"). Keep consistent when depth is uniform.`
+	if magazineMode {
+		layoutGuidance = `- "layout_kind" MUST be a distinct editorial layout for each section — EVERY section uses a different one. Pick from: "hero-spread", "pull-quote-banner", "two-column-feature", "stat-grid", "sidebar-note", "timeline", "photo-essay-block", "checklist-grid", "caption-gallery", "cover-story", "callout-stack", "fact-box", "interview-qa", "index-list". The layout should match the section's content, not just cycle through options.`
+	}
+
+	user := fmt.Sprintf(`Plan a Word document that will be rendered through write_html_docx.
 
 Task title: %s
 Task details: %s
@@ -291,21 +318,41 @@ Return ONLY compact valid JSON with this exact shape:
   "author":"Barq Cowork",
   "cover_subtitle":"one-sentence positioning line",
   "cover_html":"<div class=\"cover-page\">…cover content…</div>",
+  "theme":{
+    "name":"short theme name",
+    "heading_font":"Georgia | Inter | Playfair Display | Source Serif Pro | Merriweather | ... pick one that fits the subject",
+    "body_font":"Inter | Source Sans Pro | Lora | Georgia | ... readable body font",
+    "mono_font":"Consolas | JetBrains Mono | Fira Code",
+    "body_color":"0F172A",
+    "heading1_color":"HEX",
+    "heading2_color":"HEX",
+    "heading3_color":"HEX",
+    "heading4_color":"HEX",
+    "accent_color":"HEX",
+    "secondary_color":"HEX",
+    "link_color":"HEX",
+    "quote_color":"HEX",
+    "muted_color":"HEX",
+    "code_bg_color":"HEX",
+    "title_color":"HEX"
+  },
   "sections":[
-    {"heading":"Executive Summary","brief":"specific scope of this section — what will be covered","depth":"short"},
-    {"heading":"Introduction","brief":"specific scope — include concrete topics to touch","depth":"medium"},
-    {"heading":"…","brief":"…","depth":"long"}
+    {"heading":"…","brief":"specific scope","depth":"short","layout_kind":"…"},
+    {"heading":"…","brief":"…","depth":"medium","layout_kind":"…"},
+    {"heading":"…","brief":"…","depth":"long","layout_kind":"…"}
   ]
 }
 
 Rules:
-- sections[] must contain exactly %d entries. Do NOT include a conclusion + executive summary on top of that — count them inside the %d.
+- sections[] must contain exactly %d entries.
 - Each brief is 1-2 sentences describing what that section will cover. Be specific to the subject.
 - depth: "short" ≈ 1/2 page, "medium" ≈ 1 page, "long" ≈ 1.5-2 pages. Mix them.
 - cover_html should be a <div class="cover-page"> containing <h1 class="cover-title"> and a short meta line.
-- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, sectionCount, sectionCount, sectionCount)
+- theme: design fonts and colors that SUIT THE SUBJECT. A legal briefing, a wedding lookbook, a cybersecurity report, and a food magazine should look visibly different. Hex values are 6-digit, no '#'. Do not reuse the same palette across unrelated subjects.
+%s
+- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, sectionCount, sectionCount, layoutGuidance)
 
-	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3200, []provider.ChatMessage{
+	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3600, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
 		{Role: "user", Content: user},
 	}, &out)
@@ -318,11 +365,38 @@ func (a *AgentLoop) generateSegmentedDocSection(
 	plan segmentedDocPlan,
 	brief segmentedDocBrief,
 	index int,
+	magazineMode bool,
 	runtimeProfile agentRuntimeProfile,
 ) (segmentedDocSection, error) {
 	var out segmentedDocSection
 	briefBytes, _ := json.Marshal(brief)
-	user := fmt.Sprintf(`Write one section of a long Word document.
+
+	layoutKind := strings.TrimSpace(brief.LayoutKind)
+	if layoutKind == "" {
+		layoutKind = "prose"
+	}
+	layoutGuidance := fmt.Sprintf(`Layout kind for this section: "%s". Choose HTML structure that reflects that layout.`, layoutKind)
+	if magazineMode {
+		layoutGuidance = fmt.Sprintf(`Layout kind for this section: "%s".
+Render it as a distinctive editorial spread — NOT the same structure as a typical prose section:
+  - "hero-spread":         oversized <h1>, short bold deck, 2-3 big paragraphs, one pulled subheading.
+  - "pull-quote-banner":   a <blockquote> near the top in a large voice, then 2-3 supporting paragraphs.
+  - "two-column-feature":  <h1>, then an intro paragraph, then a <table> with two cells acting as left/right columns of prose.
+  - "stat-grid":           <h1>, short lede, then a <table> of 3-6 stat cards (label + big number + 1-line description).
+  - "sidebar-note":        <h1>, main prose, then a <table> acting as a sidebar box with a label and a highlighted note.
+  - "timeline":            <h1>, short lede, then an <ol> of dated / numbered milestones, each with date + headline + 1-line detail.
+  - "photo-essay-block":   <h1>, a short stanza-like paragraph, a <blockquote> caption, another short paragraph.
+  - "checklist-grid":      <h1>, short intro, a <table> of action items with columns like "Action | Owner | Status".
+  - "caption-gallery":     <h1>, 3-4 short captioned blocks (each caption in <blockquote>, each body in <p>).
+  - "cover-story":         <h1>, a bold lede paragraph, then a <table> with two columns (summary | key facts).
+  - "callout-stack":       <h1>, 3 stacked callout <blockquote> blocks, each followed by one supporting paragraph.
+  - "fact-box":            <h1>, short intro, then a <table> of label → value pairs of concrete facts.
+  - "interview-qa":        <h1>, 3-5 Q&A pairs where Q is a <strong>-wrapped paragraph and A is a regular paragraph.
+  - "index-list":          <h1>, short intro, then an <ol> that acts as an annotated index (term → 1-sentence gloss).
+Pick exactly the structure for the given layout_kind. Do NOT fall back to a generic 3-paragraph pattern.`, layoutKind)
+	}
+
+	user := fmt.Sprintf(`Write one section of a Word document.
 
 Document title: %s
 Document subtitle: %s
@@ -343,7 +417,8 @@ HTML requirements:
 - For "short" depth: 2-3 paragraphs. For "medium": 4-6 paragraphs, possibly a list or small table.
   For "long": 6-10 paragraphs with at least one <ul>/<ol> or <table>.
 - Write specific, domain-accurate content. No filler like "this section will discuss…". No TODO markers.
-- No emoji, no <style>, no <script>, no <html>/<body>/<head> tags.`, firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"))
+- No emoji, no <style>, no <script>, no <html>/<body>/<head> tags.
+%s`, firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3200, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
@@ -414,5 +489,6 @@ func normalizeSegmentedDocPlan(plan *segmentedDocPlan, task *domain.Task, target
 		if plan.Sections[i].Depth == "" {
 			plan.Sections[i].Depth = "medium"
 		}
+		plan.Sections[i].LayoutKind = strings.TrimSpace(plan.Sections[i].LayoutKind)
 	}
 }

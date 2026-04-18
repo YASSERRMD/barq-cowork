@@ -215,15 +215,23 @@ PICKING THE RIGHT SLIDE TYPE
 WRITE_HTML_DOCX — WORD DOCUMENT (HTML-driven)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Required: "filename", "title", "html".
-Optional: "author", "css" (leave empty for UAE AI Safety print profile).
+Optional: "author", "css", "theme".
+
+THEME (strongly encouraged — design it for THIS subject, don't reuse a template):
+- Pass a "theme" object alongside "html". All fields optional, missing values fall back to a neutral palette.
+- Fields: name, heading_font, body_font, mono_font, body_color, heading1_color, heading2_color,
+  heading3_color, heading4_color, accent_color, secondary_color, link_color, quote_color, muted_color,
+  code_bg_color, title_color.
+- Colors are 6-digit hex WITHOUT the '#'. Fonts are family names (e.g. "Inter", "Playfair Display",
+  "Source Serif Pro", "Georgia", "Merriweather", "Source Sans Pro", "Lora").
+- A legal brief, a wedding lookbook, a cybersecurity report, and a food magazine should look visibly different.
 
 AUTHORING RULES:
 - Ship a complete HTML body fragment — <h1> for major sections, <h2> for sub-sections, <p> for prose,
   <ul>/<ol> for lists, <table><thead>…</thead><tbody>…</tbody></table> for tables, <blockquote> for pull quotes.
 - Wrap the opening page in <div class="cover-page">…</div> — it renders as a full cover and forces a page break.
-- Use <div class="info-box"> and <div class="warning-box"> for styled callouts.
-- Links: <a href="https://…">.
-- Include an executive summary, 4–6 body sections, and a conclusion for document tasks.
+- If the request mentions magazine, zine, editorial spread, or lookbook: make every section visibly different —
+  e.g. hero spread, pull-quote banner, two-column feature, stat grid, sidebar note, timeline, photo-essay block.
 - Do NOT include <html>, <head>, <body>, or <style> tags — just the body fragment.`
 
 // AgentLoop implements a ReAct-style agent that iterates LLM → tool → LLM until done.

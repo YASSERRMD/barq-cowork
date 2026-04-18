@@ -26,6 +26,11 @@ type Request struct {
 
 	// Author is stored in DOCX document properties (optional).
 	Author string
+
+	// Theme drives fonts and colors in styles.xml / theme1.xml / numbering.xml.
+	// Nil means "use neutral defaults" — nothing about the visual identity is
+	// baked into the OOXML package itself.
+	Theme *DocxTheme
 }
 
 // Generator converts HTML requests to DOCX and PDF outputs.
