@@ -28,9 +28,6 @@ const segmentedSectionInterCallDelay = 3 * time.Second
 // "at least 8 pages".
 var requestedDocumentPagePattern = regexp.MustCompile(`(?i)\b(\d+)\s*[- ]?\s*pages?\b`)
 
-// magazineModePattern catches requests that imply per-page visual variation.
-var magazineModePattern = regexp.MustCompile(`(?i)\b(magazine|zine|editorial spread|photo essay|look ?book|mood ?board|visual essay|newsletter)\b`)
-
 type segmentedDocPlan struct {
 	Filename  string               `json:"filename"`
 	Title     string               `json:"title"`
@@ -58,15 +55,6 @@ type segmentedDocSection struct {
 func shouldUseSegmentedDocumentWorkflow(task *domain.Task) bool {
 	_, ok := requestedDocumentSectionCount(task)
 	return ok
-}
-
-// isMagazineModeTask returns true when the task text asks for a document with
-// visibly distinct per-page layouts (magazine / zine / editorial spread / …).
-func isMagazineModeTask(task *domain.Task) bool {
-	if task == nil {
-		return false
-	}
-	return magazineModePattern.MatchString(task.Title + " " + task.Description)
 }
 
 // requestedDocumentSectionCount returns the number of sections the LLM should
@@ -106,7 +94,8 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 	if !ok {
 		sectionCount = 6
 	}
-	magazineMode := isMagazineModeTask(task)
+	kind := categorizeDocTask(task)
+	a.logger.Info("segmented docx: categorized", "task_id", task.ID, "kind", string(kind))
 
 	var result ExecuteResult
 	taskStart := time.Now()
@@ -138,7 +127,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 			"sections", sectionCount, "provider", a.prov.Name(), "model", a.cfg.Model)
 
 		var planErr error
-		plan, planErr = a.generateSegmentedDocPlan(ctx, task, sectionCount, magazineMode, extraSystemPrompts, runtimeProfile)
+		plan, planErr = a.generateSegmentedDocPlan(ctx, task, sectionCount, kind, extraSystemPrompts, runtimeProfile)
 		elapsed := time.Since(planCallStart).Round(time.Millisecond)
 		if planErr == nil && len(plan.Sections) > 0 {
 			normalizeSegmentedDocPlan(&plan, task, sectionCount)
@@ -207,7 +196,7 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 				"heading", brief.Heading, "attempt", attempt+1,
 				"elapsed_total", time.Since(taskStart).Round(time.Second))
 
-			raw, sErr := a.generateSegmentedDocSection(ctx, task, plan, brief, i, magazineMode, runtimeProfile)
+			raw, sErr := a.generateSegmentedDocSection(ctx, task, plan, brief, i, kind, runtimeProfile)
 			sElapsed := time.Since(callStart).Round(time.Millisecond)
 
 			if sErr == nil && strings.TrimSpace(raw.HTML) == "" {
@@ -289,25 +278,24 @@ func (a *AgentLoop) generateSegmentedDocPlan(
 	ctx context.Context,
 	task *domain.Task,
 	sectionCount int,
-	magazineMode bool,
+	kind docKind,
 	extraSystemPrompts []string,
 	runtimeProfile agentRuntimeProfile,
 ) (segmentedDocPlan, error) {
 	var out segmentedDocPlan
 	contextText := compactSegmentedExtraContext(extraSystemPrompts)
 
-	layoutGuidance := `- "layout_kind" is a short kebab-case label that describes the HTML layout of that section (e.g. "prose", "two-column", "stat-grid", "timeline", "checklist-table", "callout-heavy"). Keep consistent when depth is uniform.`
-	coverGuidance := `- cover_html: design the opening page around the subject. You pick the HTML — it can be a bold headline + deck, a hero statement with a masthead line, a fact strip, a stacked poster-style intro, a manifesto paragraph, a typographic cover, etc. Do NOT default to <div class="cover-page"> with a title and a subtitle every time. Compose the first page the way a designer would, using <h1>, <h2>, <p>, <blockquote>, <table>, <hr> as needed. End the cover with <hr class="pagebreak"/> so it occupies its own page.`
-	if magazineMode {
-		layoutGuidance = `- "layout_kind" MUST be a distinct editorial layout for each section — EVERY section uses a different one. Pick from: "hero-spread", "pull-quote-banner", "two-column-feature", "stat-grid", "sidebar-note", "timeline", "photo-essay-block", "checklist-grid", "caption-gallery", "cover-story", "callout-stack", "fact-box", "interview-qa", "index-list". The layout should match the section's content, not just cycle through options.`
-		coverGuidance = `- cover_html: design a STRIKING editorial opener that doubles as the magazine's cover. Examples (pick whichever fits — don't just cycle): a giant kicker line + massive title + one-sentence deck; a volume/issue masthead line + three-word title + quoted tagline; a <table> with two columns acting as a bold two-panel cover; a large <blockquote> as the only visible text; a typographic "index" of the section titles as a contents page. NEVER reuse the generic <div class="cover-page"><h1 class="cover-title">…</h1></div> template. End with <hr class="pagebreak"/> so the cover is its own page.`
-	}
+	coverGuidance := docKindCoverGuidance(kind)
+	layoutGuidance := docKindLayoutGuidance(kind)
+	graphicsGuidance := docKindGraphicsGuidance(kind)
 
 	user := fmt.Sprintf(`Plan a Word document that will be rendered through write_html_docx.
 
 Task title: %s
 Task details: %s
 Additional context: %s
+
+Document kind (auto-classified from the task): %s — tune cover, layout, and graphical vocabulary to this kind.
 
 Required: exactly %d body sections in sections[].
 
@@ -350,7 +338,10 @@ Rules:
 %s
 - theme: design fonts and colors that SUIT THE SUBJECT. A legal briefing, a wedding lookbook, a cybersecurity report, and a food magazine should look visibly different. Hex values are 6-digit, no '#'. Do not reuse the same palette across unrelated subjects.
 %s
-- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, sectionCount, sectionCount, coverGuidance, layoutGuidance)
+
+%s
+
+- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, string(kind), sectionCount, sectionCount, coverGuidance, layoutGuidance, graphicsGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3600, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
@@ -365,7 +356,7 @@ func (a *AgentLoop) generateSegmentedDocSection(
 	plan segmentedDocPlan,
 	brief segmentedDocBrief,
 	index int,
-	magazineMode bool,
+	kind docKind,
 	runtimeProfile agentRuntimeProfile,
 ) (segmentedDocSection, error) {
 	var out segmentedDocSection
@@ -375,29 +366,12 @@ func (a *AgentLoop) generateSegmentedDocSection(
 	if layoutKind == "" {
 		layoutKind = "prose"
 	}
-	layoutGuidance := fmt.Sprintf(`Layout kind for this section: "%s". Choose HTML structure that reflects that layout.`, layoutKind)
-	if magazineMode {
-		layoutGuidance = fmt.Sprintf(`Layout kind for this section: "%s".
-Render it as a distinctive editorial spread — NOT the same structure as a typical prose section:
-  - "hero-spread":         oversized <h1>, short bold deck, 2-3 big paragraphs, one pulled subheading.
-  - "pull-quote-banner":   a <blockquote> near the top in a large voice, then 2-3 supporting paragraphs.
-  - "two-column-feature":  <h1>, then an intro paragraph, then a <table> with two cells acting as left/right columns of prose.
-  - "stat-grid":           <h1>, short lede, then a <table> of 3-6 stat cards (label + big number + 1-line description).
-  - "sidebar-note":        <h1>, main prose, then a <table> acting as a sidebar box with a label and a highlighted note.
-  - "timeline":            <h1>, short lede, then an <ol> of dated / numbered milestones, each with date + headline + 1-line detail.
-  - "photo-essay-block":   <h1>, a short stanza-like paragraph, a <blockquote> caption, another short paragraph.
-  - "checklist-grid":      <h1>, short intro, a <table> of action items with columns like "Action | Owner | Status".
-  - "caption-gallery":     <h1>, 3-4 short captioned blocks (each caption in <blockquote>, each body in <p>).
-  - "cover-story":         <h1>, a bold lede paragraph, then a <table> with two columns (summary | key facts).
-  - "callout-stack":       <h1>, 3 stacked callout <blockquote> blocks, each followed by one supporting paragraph.
-  - "fact-box":            <h1>, short intro, then a <table> of label → value pairs of concrete facts.
-  - "interview-qa":        <h1>, 3-5 Q&A pairs where Q is a <strong>-wrapped paragraph and A is a regular paragraph.
-  - "index-list":          <h1>, short intro, then an <ol> that acts as an annotated index (term → 1-sentence gloss).
-Pick exactly the structure for the given layout_kind. Do NOT fall back to a generic 3-paragraph pattern.`, layoutKind)
-	}
+	layoutGuidance := sectionLayoutGuidance(kind, layoutKind)
+	graphicsGuidance := docKindGraphicsGuidance(kind)
 
 	user := fmt.Sprintf(`Write one section of a Word document.
 
+Document kind: %s
 Document title: %s
 Document subtitle: %s
 Section position: %d of %d
@@ -418,7 +392,9 @@ HTML requirements:
   For "long": 6-10 paragraphs with at least one <ul>/<ol> or <table>.
 - Write specific, domain-accurate content. No filler like "this section will discuss…". No TODO markers.
 - No emoji, no <style>, no <script>, no <html>/<body>/<head> tags.
-%s`, firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance)
+%s
+
+%s`, string(kind), firstNonEmptyString(plan.Title, task.Title), plan.Subtitle, index+1, len(plan.Sections), string(briefBytes), firstNonEmptyString(brief.Heading, "Section"), layoutGuidance, graphicsGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3200, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},

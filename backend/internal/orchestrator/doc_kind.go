@@ -134,3 +134,75 @@ Report preference: <div class="callout-info"> for key observations, <div class="
 func docKindWantsChrome(kind docKind) bool {
 	return kind != docKindMagazine
 }
+
+// sectionLayoutGuidance returns the per-kind section instructions — how to
+// structure the HTML for a given layout_kind label from the plan.
+func sectionLayoutGuidance(kind docKind, layoutKind string) string {
+	switch kind {
+	case docKindMagazine:
+		return magazineSectionLayoutGuidance(layoutKind)
+	case docKindTextbook:
+		return textbookSectionLayoutGuidance(layoutKind)
+	case docKindArticle:
+		return articleSectionLayoutGuidance(layoutKind)
+	default:
+		return reportSectionLayoutGuidance(layoutKind)
+	}
+}
+
+func magazineSectionLayoutGuidance(layoutKind string) string {
+	return "Layout kind for this section: \"" + layoutKind + "\".\n" +
+		"Render it as a distinctive editorial spread — NOT the same structure as a typical prose section:\n" +
+		"  - \"hero-spread\":       oversized <h1>, short bold deck, 2-3 big paragraphs, one pulled subheading.\n" +
+		"  - \"pull-quote-banner\": <div class=\"pullquote\">…</div> near the top, then 2-3 supporting paragraphs.\n" +
+		"  - \"two-column-feature\":<h1>, intro paragraph, then a <table> with two cells acting as left/right columns of prose.\n" +
+		"  - \"stat-grid\":         <h1>, short lede, then a <table> of 3-6 cells each containing <div class=\"statbox\"><span class=\"stat-value\">N</span><span class=\"stat-label\">label</span></div>.\n" +
+		"  - \"sidebar-note\":      <h1>, main prose, then a <div class=\"sidebar\"> with label + highlighted note.\n" +
+		"  - \"timeline\":          <h1>, short lede, then an <ol> of milestones (date + headline + 1-line detail).\n" +
+		"  - \"photo-essay-block\": <h1>, short stanza-like paragraph, <div class=\"pullquote\"> caption, another paragraph.\n" +
+		"  - \"checklist-grid\":    <h1>, short intro, a <table> of action items (Action | Owner | Status).\n" +
+		"  - \"caption-gallery\":   <h1>, 3-4 captioned blocks (each caption in <div class=\"pullquote\">, each body in <p>).\n" +
+		"  - \"cover-story\":       <h1>, bold lede paragraph, then a <table> with two columns (summary | key facts).\n" +
+		"  - \"callout-stack\":     <h1>, 3 stacked <div class=\"callout\"> blocks, each followed by one paragraph.\n" +
+		"  - \"fact-box\":          <h1>, short intro, then a <div class=\"factbox\"> containing a <table> of label → value facts.\n" +
+		"  - \"interview-qa\":      <h1>, 3-5 Q&A pairs (Q in <strong>, A in paragraph).\n" +
+		"  - \"index-list\":        <h1>, short intro, then an <ol> that acts as an annotated index.\n" +
+		"Pick exactly the structure for the given layout_kind. Do NOT fall back to a generic 3-paragraph pattern."
+}
+
+func textbookSectionLayoutGuidance(layoutKind string) string {
+	return "Layout kind for this section: \"" + layoutKind + "\".\n" +
+		"Render it with textbook conventions — consistent across chapters:\n" +
+		"  - \"chapter-opening\":    <h1>, a <div class=\"callout-info\"><strong>Learning objectives.</strong> …</div>, then 2-3 paragraphs introducing the topic.\n" +
+		"  - \"worked-example\":     <h1>, problem setup paragraph, numbered <ol> of solution steps, then a <div class=\"keyidea\"><strong>Takeaway.</strong> …</div>.\n" +
+		"  - \"definition-list\":    <h1>, short intro, then a sequence of <div class=\"definition\"><strong>Term.</strong> definition.</div> blocks (3-6).\n" +
+		"  - \"key-idea-callout\":   <h1>, 2-3 paragraphs, then a <div class=\"keyidea\"> summarizing the point.\n" +
+		"  - \"concept-map\":        <h1>, short lede, then a <div class=\"factbox\"> containing a <table> relating concepts to definitions or relationships.\n" +
+		"  - \"diagram-plus-prose\": <h1>, 2-3 paragraphs, then a <div class=\"sidebar\"> with a figure caption / diagram description.\n" +
+		"  - \"chapter-summary\":    <h1>, 2-3 summary paragraphs, then a <div class=\"keyidea\"> restating the chapter's takeaways, then an <ol> of review points.\n" +
+		"  - \"review-questions\":   <h1>, short intro, then an <ol> of 5-10 review/practice questions.\n" +
+		"Include at least one <div class=\"definition\"> or <div class=\"keyidea\"> in every section."
+}
+
+func reportSectionLayoutGuidance(layoutKind string) string {
+	return "Layout kind for this section: \"" + layoutKind + "\".\n" +
+		"Render it with report/whitepaper conventions — consistent and authoritative:\n" +
+		"  - \"executive-summary\": <h1>, a <div class=\"callout-info\"><strong>Summary.</strong> 3-5 sentences.</div>, then 2-3 paragraphs expanding the key findings.\n" +
+		"  - \"findings-prose\":    <h1>, 3-5 paragraphs of analysis, with one <div class=\"keyidea\"> highlighting the main finding.\n" +
+		"  - \"stat-grid\":         <h1>, short lede, then a <table> of 3-6 stat cards using <div class=\"statbox\"><span class=\"stat-value\">N</span><span class=\"stat-label\">label</span></div>.\n" +
+		"  - \"fact-box\":          <h1>, short intro, then a <div class=\"factbox\"> with a <table> of label → value reference facts.\n" +
+		"  - \"callout-info\":      <h1>, 2-3 paragraphs, then a <div class=\"callout-info\"><strong>Recommendation.</strong> …</div>.\n" +
+		"  - \"callout-warn\":      <h1>, 2-3 paragraphs, then a <div class=\"callout-warn\"><strong>Risk / limitation.</strong> …</div>.\n" +
+		"  - \"methodology\":       <h1>, a paragraph of scope, then an <ol> of methodology steps, then a <div class=\"sidebar\"> with data caveats.\n" +
+		"  - \"appendix-table\":    <h1>, short preamble, then a <table> of reference data.\n" +
+		"Include at least one styled box (callout / keyidea / statbox / factbox) per section."
+}
+
+func articleSectionLayoutGuidance(layoutKind string) string {
+	return "Layout kind for this section: \"" + layoutKind + "\".\n" +
+		"Articles are prose-first — use styled boxes sparingly:\n" +
+		"  - \"prose\":             <h1>, 4-6 paragraphs of well-crafted prose.\n" +
+		"  - \"pull-quote-banner\": <h1>, intro paragraph, a <div class=\"pullquote\"> with the piece's sharpest line, then 2-3 closing paragraphs.\n" +
+		"  - \"sidebar-note\":      <h1>, main prose, then a <div class=\"sidebar\"> with supporting context.\n" +
+		"Use at most one <div class=\"pullquote\"> per section. Prefer prose over chrome."
+}
