@@ -73,7 +73,7 @@ type docxHyperlink struct {
 
 type docxWriter struct {
 	ctx        context.Context
-	body       strings.Builder
+	body       *strings.Builder
 	images     []docxImage
 	hyperlinks []docxHyperlink
 	nextRelID  int
@@ -82,7 +82,19 @@ type docxWriter struct {
 }
 
 func newDocxWriter(ctx context.Context) *docxWriter {
-	return &docxWriter{ctx: ctx, nextRelID: 100, drawingID: 1}
+	return &docxWriter{ctx: ctx, body: &strings.Builder{}, nextRelID: 100, drawingID: 1}
+}
+
+// captureBlocks walks n's block children into a temporary buffer and returns
+// the resulting OOXML. Used by styled-box renderers so they can wrap inner
+// content in tables/borders/shading without polluting the main body stream.
+func (w *docxWriter) captureBlocks(walk func()) string {
+	saved := w.body
+	local := &strings.Builder{}
+	w.body = local
+	walk()
+	w.body = saved
+	return local.String()
 }
 
 func (w *docxWriter) relID() string {
@@ -197,9 +209,12 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 
 	case atom.Hr:
 		cls := getAttr(c, "class")
-		if strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break") {
+		switch {
+		case strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break"):
 			w.body.WriteString(pageBreakParagraph())
-		} else {
+		case strings.Contains(cls, "divider-dots") || strings.Contains(cls, "dots"):
+			w.body.WriteString(w.renderDividerDots())
+		default:
 			w.body.WriteString(w.hrParagraph())
 		}
 
@@ -224,13 +239,18 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		case strings.Contains(class, "cover-page"):
 			w.walkBlocks(c)
 			w.body.WriteString(pageBreakParagraph())
-		case strings.Contains(class, "info-box") || strings.Contains(class, "warning-box"):
-			w.walkBlocksAs(c, "BlockText")
 		case strings.Contains(class, "page-header") ||
 			strings.Contains(class, "page-footer") ||
 			strings.Contains(class, "watermark"):
 			// Decorative elements from the PDF print shell — skip in DOCX.
 		default:
+			if w.emitStyledBlockIfClass(c) {
+				return
+			}
+			if strings.Contains(class, "info-box") || strings.Contains(class, "warning-box") {
+				w.walkBlocksAs(c, "BlockText")
+				return
+			}
 			w.walkBlocks(c)
 		}
 
