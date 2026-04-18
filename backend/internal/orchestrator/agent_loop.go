@@ -936,13 +936,45 @@ func (a *AgentLoop) emitAgentEvent(ctx context.Context, taskID string, t domain.
 func requiredOutputTool(task *domain.Task) string {
 	text := strings.ToLower(strings.TrimSpace(task.Title + " " + task.Description))
 	switch {
-	case containsTaskKeyword(text, "presentation", "slide", "slides", "deck", "slideshow", "pptx", "powerpoint"):
+	case containsTaskKeyword(text,
+		"presentation", "slide", "slides", "deck", "slideshow", "pptx", "powerpoint",
+		"keynote", "pitch deck", "investor deck", "sales deck", "webinar deck",
+		"conference talk", "talk deck", "seminar deck"):
 		return "write_pptx"
-	case containsTaskKeyword(text, "document", "report", "doc", "word", "brief", "proposal", "writeup", "paper"):
+	case containsTaskKeyword(text,
+		// generic document asks
+		"document", "doc", "word document", "word file", "docx",
+		// reports & professional deliverables
+		"report", "whitepaper", "white paper", "brief", "briefing", "proposal",
+		"memo", "memorandum", "analysis", "case study", "policy paper",
+		"research paper", "rfc", "request for comment", "charter", "playbook",
+		"runbook", "handbook", "guidebook", "guide", "manual", "datasheet",
+		"product spec", "spec sheet", "specification", "technical specification",
+		"business plan", "market analysis", "executive summary", "status report",
+		"annual report", "impact report", "sustainability report",
+		// editorial / consumer
+		"magazine", "zine", "editorial", "newsletter", "lookbook", "mood board",
+		"moodboard", "photo essay", "visual essay", "catalog", "catalogue",
+		"brochure", "pamphlet", "flyer", "leaflet", "program", "programme",
+		// academic / pedagogical
+		"textbook", "chapter", "lesson", "lesson plan", "workbook",
+		"curriculum", "coursebook", "course material", "syllabus",
+		"study guide", "lecture notes", "worksheet", "module",
+		// journalism / commentary
+		"article", "feature article", "essay", "op-ed", "opinion piece",
+		"column", "blog post", "blog", "think piece", "long read", "longform",
+		// letters & creative
+		"cover letter", "letter", "statement", "manifesto", "white book",
+		"writeup", "write-up", "paper"):
 		return "write_html_docx"
-	case containsTaskKeyword(text, "summary", "notes", "markdown"):
+	case containsTaskKeyword(text,
+		"summary", "notes", "markdown", "readme", "changelog", "release notes",
+		"meeting notes", "post-mortem", "postmortem", "retrospective", "retro",
+		"standup notes", "tl;dr", "tldr", "cheat sheet", "cheatsheet"):
 		return "write_markdown_report"
-	case containsTaskKeyword(text, "data", "spreadsheet", "export", "json"):
+	case containsTaskKeyword(text,
+		"data", "spreadsheet", "export", "json", "csv", "tsv", "dataset",
+		"structured data", "table data", "record list", "records export"):
 		return "export_json"
 	case text != "":
 		return "write_file"

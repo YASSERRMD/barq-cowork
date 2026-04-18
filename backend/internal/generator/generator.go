@@ -31,6 +31,35 @@ type Request struct {
 	// Nil means "use neutral defaults" — nothing about the visual identity is
 	// baked into the OOXML package itself.
 	Theme *DocxTheme
+
+	// Chrome adds a running header/footer to every page after the cover.
+	// Nil means "no chrome" — magazine / zine kinds use this so each page can
+	// be visually unique.
+	Chrome *DocxChrome
+
+	// Background paints every page with a tinted full-page fill. Nil means
+	// "plain white pages". Only set this when the user explicitly asks for
+	// background graphics / tinted pages — otherwise the default white is the
+	// right choice for most documents.
+	Background *DocxBackground
+}
+
+// DocxBackground configures a full-page tinted background. Word renders this
+// via a single <w:background> element + <w:displayBackgroundShape/> in
+// settings.xml. The fill applies to every page including the cover.
+type DocxBackground struct {
+	Color string // 6-digit hex without '#', e.g. "F5F1E8" for warm cream
+}
+
+// DocxChrome configures the running header and footer.
+// Leave fields blank to omit that half of the chrome — an empty HeaderText
+// suppresses the header entirely; an empty FooterText with ShowPageNum=false
+// suppresses the footer entirely. The cover page is always suppressed via
+// <w:titlePg/>.
+type DocxChrome struct {
+	HeaderText  string // e.g. "Document Title — 2026 Report"
+	FooterText  string // e.g. "Barq Cowork · Confidential"
+	ShowPageNum bool   // right-aligned "Page N" in the footer
 }
 
 // Generator converts HTML requests to DOCX and PDF outputs.

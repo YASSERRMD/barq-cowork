@@ -35,22 +35,43 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
 
 	dw := newDocxWriter(ctx)
 	dw.theme = resolveDocxTheme(req.Theme)
+	dw.chrome = req.Chrome
+	dw.background = req.Background
 	dw.walkBlocks(start)
+
+	sectPrChrome := ""
+	if dw.chrome != nil {
+		sectPrChrome = `
+      <w:headerReference w:type="default" r:id="rId5"/>
+      <w:footerReference w:type="default" r:id="rId6"/>
+      <w:headerReference w:type="first" r:id="rId7"/>
+      <w:footerReference w:type="first" r:id="rId8"/>
+      <w:titlePg/>`
+	}
+
+	backgroundElement := ""
+	if bg := dw.background; bg != nil {
+		if color := pickHex(bg.Color, ""); color != "" {
+			backgroundElement = fmt.Sprintf(`  <w:background w:color="%s"/>
+`, color)
+		}
+	}
 
 	documentXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
             xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-  <w:body>
+            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
+            xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">
+%s  <w:body>
 %s
-    <w:sectPr>
+    <w:sectPr>%s
       <w:pgSz w:w="11906" w:h="16838"/>
       <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/>
     </w:sectPr>
   </w:body>
-</w:document>`, dw.body.String())
+</w:document>`, backgroundElement, dw.body.String(), sectPrChrome)
 
 	return dw.assemble(documentXML, req.Title)
 }
@@ -73,16 +94,30 @@ type docxHyperlink struct {
 
 type docxWriter struct {
 	ctx        context.Context
-	body       strings.Builder
+	body       *strings.Builder
 	images     []docxImage
 	hyperlinks []docxHyperlink
 	nextRelID  int
 	drawingID  int
 	theme      DocxTheme
+	chrome     *DocxChrome
+	background *DocxBackground
 }
 
 func newDocxWriter(ctx context.Context) *docxWriter {
-	return &docxWriter{ctx: ctx, nextRelID: 100, drawingID: 1}
+	return &docxWriter{ctx: ctx, body: &strings.Builder{}, nextRelID: 100, drawingID: 1}
+}
+
+// captureBlocks walks n's block children into a temporary buffer and returns
+// the resulting OOXML. Used by styled-box renderers so they can wrap inner
+// content in tables/borders/shading without polluting the main body stream.
+func (w *docxWriter) captureBlocks(walk func()) string {
+	saved := w.body
+	local := &strings.Builder{}
+	w.body = local
+	walk()
+	w.body = saved
+	return local.String()
 }
 
 func (w *docxWriter) relID() string {
@@ -106,17 +141,26 @@ func (w *docxWriter) assemble(documentXML, title string) ([]byte, error) {
 		return err
 	}
 
+	hasChrome := w.chrome != nil
 	parts := []struct{ name, content string }{
-		{"[Content_Types].xml", contentTypesXML(w.images)},
+		{"[Content_Types].xml", contentTypesXML(w.images, hasChrome)},
 		{"_rels/.rels", rootRelsXML()},
 		{"docProps/app.xml", appXML()},
 		{"docProps/core.xml", coreXML(title)},
 		{"word/document.xml", documentXML},
 		{"word/styles.xml", stylesXML(w.theme)},
-		{"word/settings.xml", settingsXML()},
+		{"word/settings.xml", settingsXML(w.background != nil && pickHex(w.background.Color, "") != "")},
 		{"word/numbering.xml", numberingXML(w.theme)},
 		{"word/theme/theme1.xml", themeXML(w.theme)},
-		{"word/_rels/document.xml.rels", documentRelsXML(w.images, w.hyperlinks)},
+		{"word/_rels/document.xml.rels", documentRelsXML(w.images, w.hyperlinks, hasChrome)},
+	}
+	if hasChrome {
+		parts = append(parts,
+			struct{ name, content string }{"word/header1.xml", headerXML(*w.chrome, w.theme)},
+			struct{ name, content string }{"word/footer1.xml", footerXML(*w.chrome, w.theme)},
+			struct{ name, content string }{"word/header2.xml", emptyHeaderXML()},
+			struct{ name, content string }{"word/footer2.xml", emptyFooterXML()},
+		)
 	}
 	for _, p := range parts {
 		if err := add(p.name, p.content); err != nil {
@@ -182,6 +226,10 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		w.writeParagraph(c, "Heading4", "", "")
 
 	case atom.P:
+		if tex, ok := displayMathInParagraph(c); ok {
+			w.body.WriteString(displayMathParagraph(tex))
+			return
+		}
 		w.writeParagraph(c, "Normal", "", paragraphAlignment(c))
 
 	case atom.Blockquote:
@@ -197,10 +245,13 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 
 	case atom.Hr:
 		cls := getAttr(c, "class")
-		if strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break") {
+		switch {
+		case strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break"):
 			w.body.WriteString(pageBreakParagraph())
-		} else {
-			w.body.WriteString(hrParagraph())
+		case strings.Contains(cls, "divider-dots") || strings.Contains(cls, "dots"):
+			w.body.WriteString(w.renderDividerDots())
+		default:
+			w.body.WriteString(w.hrParagraph())
 		}
 
 	case atom.Table:
@@ -224,13 +275,18 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		case strings.Contains(class, "cover-page"):
 			w.walkBlocks(c)
 			w.body.WriteString(pageBreakParagraph())
-		case strings.Contains(class, "info-box") || strings.Contains(class, "warning-box"):
-			w.walkBlocksAs(c, "BlockText")
 		case strings.Contains(class, "page-header") ||
 			strings.Contains(class, "page-footer") ||
 			strings.Contains(class, "watermark"):
 			// Decorative elements from the PDF print shell — skip in DOCX.
 		default:
+			if w.emitStyledBlockIfClass(c) {
+				return
+			}
+			if strings.Contains(class, "info-box") || strings.Contains(class, "warning-box") {
+				w.walkBlocksAs(c, "BlockText")
+				return
+			}
 			w.walkBlocks(c)
 		}
 
@@ -288,6 +344,7 @@ type runStyle struct {
 	code      bool
 	strike    bool
 	hyperlink string
+	linkColor string // hex without '#', set when hyperlink is active
 }
 
 func (w *docxWriter) writeParagraph(n *html.Node, styleID, extraPPr, align string) {
@@ -324,11 +381,12 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 				linkStyle := runStyle{
 					bold: st.bold, italic: st.italic, underline: true,
 					code: st.code, strike: st.strike, hyperlink: st.hyperlink,
+					linkColor: st.linkColor,
 				}
 				out.WriteString(fmt.Sprintf(`<w:hyperlink r:id="%s">%s</w:hyperlink>`,
 					st.hyperlink, runXML(text, linkStyle)))
 			} else {
-				out.WriteString(runXML(text, st))
+				out.WriteString(emitRunsWithInlineMath(text, st))
 			}
 
 		case html.ElementNode:
@@ -354,6 +412,7 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 					rid := w.relID()
 					w.hyperlinks = append(w.hyperlinks, docxHyperlink{id: rid, target: href})
 					ns.hyperlink = rid
+					ns.linkColor = w.theme.LinkColor
 				}
 
 			case atom.Img:
@@ -365,6 +424,111 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 			w.collectInlines(c, ns, out)
 		}
 	}
+}
+
+// displayMathInParagraph checks whether a <p> contains only a `$$…$$` block
+// (or a leading `\[…\]`) and returns the inner LaTeX so the renderer can emit
+// an <m:oMathPara> centered display paragraph.
+func displayMathInParagraph(n *html.Node) (string, bool) {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			switch c.Type {
+			case html.TextNode:
+				b.WriteString(c.Data)
+			case html.ElementNode:
+				walk(c)
+			}
+		}
+	}
+	walk(n)
+	text := strings.TrimSpace(b.String())
+	if strings.HasPrefix(text, "$$") && strings.HasSuffix(text, "$$") && len(text) > 4 {
+		return strings.TrimSpace(text[2 : len(text)-2]), true
+	}
+	if strings.HasPrefix(text, `\[`) && strings.HasSuffix(text, `\]`) && len(text) > 4 {
+		return strings.TrimSpace(text[2 : len(text)-2]), true
+	}
+	return "", false
+}
+
+// displayMathParagraph wraps the LaTeX in an <m:oMathPara> inside a centered
+// <w:p> so Word renders the block math on its own line.
+func displayMathParagraph(tex string) string {
+	para := latexToOMMLPara(tex)
+	if para == "" {
+		return ""
+	}
+	return fmt.Sprintf(`    <w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="120"/></w:pPr>%s</w:p>`+"\n", para)
+}
+
+// emitRunsWithInlineMath splits text at `$…$` / `$$…$$` delimiters and emits
+// plain runs for non-math spans and <m:oMath> for LaTeX spans. Escaped `\$`
+// is a literal dollar sign. Unbalanced delimiters fall through as literal.
+func emitRunsWithInlineMath(text string, st runStyle) string {
+	if !strings.Contains(text, "$") {
+		return runXML(text, st)
+	}
+	var out strings.Builder
+	var buf strings.Builder
+	flush := func() {
+		if buf.Len() > 0 {
+			out.WriteString(runXML(buf.String(), st))
+			buf.Reset()
+		}
+	}
+	i := 0
+	for i < len(text) {
+		c := text[i]
+		if c == '\\' && i+1 < len(text) && text[i+1] == '$' {
+			buf.WriteByte('$')
+			i += 2
+			continue
+		}
+		if c == '$' {
+			// detect `$$` vs `$`
+			isDisplay := i+1 < len(text) && text[i+1] == '$'
+			delim := "$"
+			if isDisplay {
+				delim = "$$"
+			}
+			start := i + len(delim)
+			end := indexUnescapedDelim(text, start, delim)
+			if end < 0 {
+				buf.WriteByte(c)
+				i++
+				continue
+			}
+			flush()
+			omml := latexToOMML(text[start:end])
+			if omml != "" {
+				out.WriteString(omml)
+			}
+			i = end + len(delim)
+			continue
+		}
+		buf.WriteByte(c)
+		i++
+	}
+	flush()
+	return out.String()
+}
+
+// indexUnescapedDelim finds the next occurrence of delim in text starting at
+// pos, skipping delimiters preceded by a backslash. Returns -1 if not found.
+func indexUnescapedDelim(text string, pos int, delim string) int {
+	for pos < len(text) {
+		if text[pos] == '\\' && pos+1 < len(text) {
+			pos += 2
+			continue
+		}
+		if pos+len(delim) <= len(text) && text[pos:pos+len(delim)] == delim {
+			return pos
+		}
+		pos++
+	}
+	return -1
 }
 
 func runXML(text string, st runStyle) string {
@@ -386,7 +550,11 @@ func runXML(text string, st runStyle) string {
 		rpr.WriteString(`<w:strike/>`)
 	}
 	if st.hyperlink != "" {
-		rpr.WriteString(`<w:color w:val="1D4ED8"/>`)
+		linkColor := st.linkColor
+		if linkColor == "" {
+			linkColor = "1D4ED8"
+		}
+		fmt.Fprintf(&rpr, `<w:color w:val="%s"/>`, linkColor)
 	}
 	rpr.WriteString("</w:rPr>")
 
@@ -530,14 +698,15 @@ func pageBreakParagraph() string {
 	return "    <w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>\n"
 }
 
-func hrParagraph() string {
-	return `    <w:p>
+func (w *docxWriter) hrParagraph() string {
+	color := lightenHex(w.theme.AccentColor, 0.7)
+	return fmt.Sprintf(`    <w:p>
       <w:pPr>
-        <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="E2E8F0"/></w:pBdr>
+        <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="%s"/></w:pBdr>
         <w:spacing w:before="120" w:after="120"/>
       </w:pPr>
     </w:p>
-`
+`, color)
 }
 
 func paragraphAlignment(n *html.Node) string {
@@ -586,21 +755,22 @@ func (w *docxWriter) tableFromHTML(tbl *html.Node) string {
 		rowsXML.WriteString(w.tableRowXML(r.cells, r.header, i, colWidth))
 	}
 
+	border := lightenHex(w.theme.AccentColor, 0.75)
 	return fmt.Sprintf(`    <w:tbl>
       <w:tblPr>
         <w:tblW w:w="9000" w:type="dxa"/>
         <w:tblBorders>
-          <w:top    w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:left   w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:bottom w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:right  w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
+          <w:top    w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:left   w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:bottom w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:right  w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
         </w:tblBorders>
       </w:tblPr>
-      <w:tblGrid>%s</w:tblGrid>
-%s    </w:tbl>
-`, grid.String(), rowsXML.String())
+      <w:tblGrid>%[1]s</w:tblGrid>
+%[3]s    </w:tbl>
+`, grid.String(), border, rowsXML.String())
 }
 
 type htmlRow struct {
@@ -647,12 +817,12 @@ func collectTableRows(tbl *html.Node) []htmlRow {
 
 func (w *docxWriter) tableRowXML(cells []*html.Node, header bool, rowIdx, colWidth int) string {
 	fill := "FFFFFF"
-	textColor := "1A1A2E"
+	textColor := w.theme.BodyColor
 	if header {
-		fill = "BE123C"
-		textColor = "FFFFFF"
+		fill = w.theme.AccentColor
+		textColor = readableTextOn(fill)
 	} else if rowIdx%2 == 1 {
-		fill = "F8FAFC"
+		fill = lightenHex(w.theme.AccentColor, 0.92)
 	}
 
 	var cellsXML strings.Builder
