@@ -181,6 +181,11 @@ func writeSheet(f *excelize.File, m *XlsxStyleMapper, sheet string, s XlsxSheet)
 		return err
 	}
 
+	// Charts render last so they can reference the final data region.
+	if err := applyCharts(f, sheet, s); err != nil {
+		return err
+	}
+
 	return nil
 }
 
