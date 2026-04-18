@@ -19,10 +19,10 @@ const (
 )
 
 var (
-	magazineKindPattern = regexp.MustCompile(`(?i)\b(magazine|zine|editorial spread|editorial feature|photo essay|look ?book|mood ?board|visual essay|newsletter)\b`)
-	textbookKindPattern = regexp.MustCompile(`(?i)\b(textbook|chapter|lesson|workbook|study guide|curriculum|course material|lecture notes|coursebook|module \d+)\b`)
-	reportKindPattern   = regexp.MustCompile(`(?i)\b(report|whitepaper|white paper|brief|proposal|memo|analysis|case study|policy paper|rfc|research paper)\b`)
-	articleKindPattern  = regexp.MustCompile(`(?i)\b(article|blog post|blog|op-?ed|essay|column)\b`)
+	magazineKindPattern = regexp.MustCompile(`(?i)\b(magazine|zine|editorial spread|editorial feature|photo essay|look ?book|mood ?board|visual essay|newsletter|catalog|catalogue|brochure|pamphlet|flyer|leaflet|programme|program booklet)\b`)
+	textbookKindPattern = regexp.MustCompile(`(?i)\b(textbook|chapter|lesson plan|lesson|workbook|study guide|curriculum|course material|coursebook|lecture notes|syllabus|worksheet|module \d+|handbook|guidebook|manual)\b`)
+	reportKindPattern   = regexp.MustCompile(`(?i)\b(report|whitepaper|white paper|briefing|brief|proposal|memorandum|memo|analysis|case study|policy paper|rfc|research paper|datasheet|spec sheet|specification|technical specification|product spec|business plan|market analysis|executive summary|status report|annual report|impact report|sustainability report|charter|playbook|runbook)\b`)
+	articleKindPattern  = regexp.MustCompile(`(?i)\b(article|feature article|blog post|blog|op-?ed|opinion piece|essay|column|think piece|long read|longform|cover letter|letter|statement|manifesto)\b`)
 )
 
 // categorizeDocTask picks the best docKind for a task based on keywords in the
