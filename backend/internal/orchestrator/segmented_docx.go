@@ -442,7 +442,11 @@ func composeSegmentedDocHTML(plan segmentedDocPlan, sections []segmentedDocSecti
 	}
 	b.WriteString(cover)
 	b.WriteString("\n")
-	for _, s := range sections {
+	for i, s := range sections {
+		if i > 0 {
+			b.WriteString(`<hr class="pagebreak"/>`)
+			b.WriteString("\n")
+		}
 		b.WriteString(strings.TrimSpace(s.HTML))
 		b.WriteString("\n")
 	}
