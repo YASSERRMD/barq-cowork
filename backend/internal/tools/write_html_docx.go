@@ -11,19 +11,19 @@ import (
 	"github.com/barq-cowork/barq-cowork/internal/generator"
 )
 
-// WriteHTMLDocxTool converts an HTML string (plus optional CSS override) to a
-// professional Word document (.docx) using the Pandoc pipeline with the UAE AI
-// Safety print profile. Pandoc must be installed on the host system.
+// WriteHTMLDocxTool converts an HTML body + LLM-designed theme to a Word
+// (.docx) file. The theme (fonts + colors) is supplied per call by the caller,
+// so the visual identity of every document is decided by the LLM rather than
+// baked into the renderer.
 type WriteHTMLDocxTool struct{}
 
 func (WriteHTMLDocxTool) Name() string { return "write_html_docx" }
 
 func (WriteHTMLDocxTool) Description() string {
-	return "Convert an HTML document (body fragment or full page) to a high-fidelity Word (.docx) file " +
-		"using the UAE AI Safety visual theme: Crimson Red headings, Dark Green sub-headings, " +
-		"Inter/Montserrat typography, and proper A4 page layout. " +
-		"Use this when the request explicitly involves HTML content, rich formatting, or brand-specific styling. " +
-		"Pandoc must be installed on the host."
+	return "Convert an HTML document (body fragment or full page) to a styled Word (.docx) file. " +
+		"The caller supplies a `theme` object that decides fonts and colors — headings, body, " +
+		"accent, link, etc. — so every document gets a visual design chosen for the subject. " +
+		"Use this tool for any HTML-backed Word document; omit theme to fall back to a neutral palette."
 }
 
 func (WriteHTMLDocxTool) InputSchema() map[string]any {
@@ -44,11 +44,33 @@ func (WriteHTMLDocxTool) InputSchema() map[string]any {
 			},
 			"html": map[string]any{
 				"type":        "string",
-				"description": "HTML body content. May be a fragment (<h1>…</h1><p>…</p>) or a full document. Use .cover-page, .info-box, .warning-box classes for styled callouts.",
+				"description": "HTML body content. May be a fragment (<h1>…</h1><p>…</p>) or a full document. Use inline styles or per-page <section class=\"page page-<kind>\">…</section> blocks for varied layouts.",
 			},
 			"css": map[string]any{
 				"type":        "string",
-				"description": "Custom CSS override. Leave empty to use the built-in UAE AI Safety print profile.",
+				"description": "Reserved for future inline stylesheet injection. Safe to leave empty.",
+			},
+			"theme": map[string]any{
+				"type":        "object",
+				"description": "Visual theme. All fields optional; missing values fall back to neutral defaults. Colors are 6-digit hex without '#'. heading_font / body_font / mono_font are font family names. Design the theme around the document's subject — don't reuse a template.",
+				"properties": map[string]any{
+					"name":            map[string]any{"type": "string"},
+					"heading_font":    map[string]any{"type": "string"},
+					"body_font":       map[string]any{"type": "string"},
+					"mono_font":       map[string]any{"type": "string"},
+					"body_color":      map[string]any{"type": "string"},
+					"heading1_color":  map[string]any{"type": "string"},
+					"heading2_color":  map[string]any{"type": "string"},
+					"heading3_color":  map[string]any{"type": "string"},
+					"heading4_color":  map[string]any{"type": "string"},
+					"accent_color":    map[string]any{"type": "string"},
+					"secondary_color": map[string]any{"type": "string"},
+					"link_color":      map[string]any{"type": "string"},
+					"quote_color":     map[string]any{"type": "string"},
+					"muted_color":     map[string]any{"type": "string"},
+					"code_bg_color":   map[string]any{"type": "string"},
+					"title_color":     map[string]any{"type": "string"},
+				},
 			},
 		},
 		"required": []string{"filename", "title", "html"},
@@ -56,11 +78,12 @@ func (WriteHTMLDocxTool) InputSchema() map[string]any {
 }
 
 type writeHTMLDocxArgs struct {
-	Filename string `json:"filename"`
-	Title    string `json:"title"`
-	Author   string `json:"author"`
-	HTML     string `json:"html"`
-	CSS      string `json:"css"`
+	Filename string              `json:"filename"`
+	Title    string              `json:"title"`
+	Author   string              `json:"author"`
+	HTML     string              `json:"html"`
+	CSS      string              `json:"css"`
+	Theme    *generator.DocxTheme `json:"theme"`
 }
 
 func (t WriteHTMLDocxTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON string) Result {
@@ -94,6 +117,7 @@ func (t WriteHTMLDocxTool) Execute(ctx context.Context, ictx InvocationContext, 
 		CSS:    args.CSS,
 		Title:  args.Title,
 		Author: args.Author,
+		Theme:  args.Theme,
 	})
 	if err != nil {
 		return Err("docx generation failed: %v", err)

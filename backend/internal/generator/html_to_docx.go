@@ -34,6 +34,7 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
 	}
 
 	dw := newDocxWriter(ctx)
+	dw.theme = resolveDocxTheme(req.Theme)
 	dw.walkBlocks(start)
 
 	documentXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -77,6 +78,7 @@ type docxWriter struct {
 	hyperlinks []docxHyperlink
 	nextRelID  int
 	drawingID  int
+	theme      DocxTheme
 }
 
 func newDocxWriter(ctx context.Context) *docxWriter {
@@ -110,10 +112,10 @@ func (w *docxWriter) assemble(documentXML, title string) ([]byte, error) {
 		{"docProps/app.xml", appXML()},
 		{"docProps/core.xml", coreXML(title)},
 		{"word/document.xml", documentXML},
-		{"word/styles.xml", stylesXML()},
+		{"word/styles.xml", stylesXML(w.theme)},
 		{"word/settings.xml", settingsXML()},
-		{"word/numbering.xml", numberingXML()},
-		{"word/theme/theme1.xml", themeXML()},
+		{"word/numbering.xml", numberingXML(w.theme)},
+		{"word/theme/theme1.xml", themeXML(w.theme)},
 		{"word/_rels/document.xml.rels", documentRelsXML(w.images, w.hyperlinks)},
 	}
 	for _, p := range parts {
@@ -194,7 +196,12 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		w.writeParagraph(c, "SourceCode", "", "")
 
 	case atom.Hr:
-		w.body.WriteString(hrParagraph())
+		cls := getAttr(c, "class")
+		if strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break") {
+			w.body.WriteString(pageBreakParagraph())
+		} else {
+			w.body.WriteString(hrParagraph())
+		}
 
 	case atom.Table:
 		w.body.WriteString(w.tableFromHTML(c))
