@@ -242,6 +242,13 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 	if plan.Theme != nil {
 		renderArgs["theme"] = plan.Theme
 	}
+	if docKindWantsChrome(kind) {
+		renderArgs["chrome"] = map[string]any{
+			"header_text":   firstNonEmptyString(plan.Title, task.Title, "Document"),
+			"footer_text":   firstNonEmptyString(plan.Author, "Barq Cowork"),
+			"show_page_num": true,
+		}
+	}
 	argsBytes, _ := json.Marshal(renderArgs)
 	tc := provider.ToolCall{ID: "segmented-write-html-docx", Name: "write_html_docx", Arguments: string(argsBytes)}
 	renderStep := createToolPlanStep(planID, stepOrder+1, tc)
