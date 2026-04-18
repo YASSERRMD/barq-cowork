@@ -28,6 +28,20 @@ const segmentedSectionInterCallDelay = 3 * time.Second
 // "at least 8 pages".
 var requestedDocumentPagePattern = regexp.MustCompile(`(?i)\b(\d+)\s*[- ]?\s*pages?\b`)
 
+// backgroundRequestPattern matches explicit asks for a tinted / decorative
+// page background. When present, the orchestrator passes a soft tint to the
+// renderer so every page carries a subtle full-page fill.
+var backgroundRequestPattern = regexp.MustCompile(`(?i)\b(background (graphics|graphic|pattern|color|colour|tint|fill)|page background|decorative background|tinted page|tinted background|watermark background|colored page|coloured page)\b`)
+
+// wantsBackgroundGraphics reports whether the task explicitly asks for a
+// tinted / decorative page background.
+func wantsBackgroundGraphics(task *domain.Task) bool {
+	if task == nil {
+		return false
+	}
+	return backgroundRequestPattern.MatchString(task.Title + " " + task.Description)
+}
+
 type segmentedDocPlan struct {
 	Filename  string               `json:"filename"`
 	Title     string               `json:"title"`
@@ -255,6 +269,11 @@ func (a *AgentLoop) runSegmentedDocumentWorkflow(
 			"show_page_num": true,
 		}
 	}
+	if wantsBackgroundGraphics(task) {
+		renderArgs["background"] = map[string]any{
+			"color": backgroundTintForPlan(plan),
+		}
+	}
 	argsBytes, _ := json.Marshal(renderArgs)
 	tc := provider.ToolCall{ID: "segmented-write-html-docx", Name: "write_html_docx", Arguments: string(argsBytes)}
 	renderStep := createToolPlanStep(planID, stepOrder+1, tc)
@@ -349,6 +368,7 @@ Return ONLY compact valid JSON with this exact shape:
 }
 
 Rules:
+- cover_html MUST fill the ENTIRE first A4 page — use oversized typography (huge <h1>), a short <h2> or <p> deck, a small meta line (date/author/issue), and at LEAST one extra element (a <blockquote>, a <div class="callout">, a two-cell <table>, or a <div class="statbox">) so the page does not look empty. End with <hr class="pagebreak"/>. Do not produce a minimal "<h1>title</h1><p>subtitle</p><hr/>" cover.
 - sections[] must contain exactly %d entries.
 - Each brief is 1-2 sentences describing what that section will cover. Be specific to the subject.
 - depth: ALWAYS "medium" — every body section targets EXACTLY ONE A4 page of dense, substantive content. Do not use "short" (leaves whitespace) or "long" (overflows). The renderer enforces one-page-per-section sizing.
@@ -469,6 +489,22 @@ func defaultSegmentedDocCoverHTML(plan segmentedDocPlan) string {
 		sub = fmt.Sprintf(`<p>%s</p>`, escapeHTMLText(s))
 	}
 	return fmt.Sprintf(`<h1>%s</h1>%s<hr class="pagebreak"/>`, title, sub)
+}
+
+// backgroundTintForPlan returns a very-light hex tint suitable for a full-page
+// background fill. Prefers the theme's muted_color / code_bg_color (already
+// tuned to be light), otherwise falls back to a neutral cream so body text
+// remains readable.
+func backgroundTintForPlan(plan segmentedDocPlan) string {
+	if plan.Theme != nil {
+		for _, c := range []string{plan.Theme.CodeBgColor, plan.Theme.MutedColor} {
+			c = strings.TrimSpace(strings.TrimPrefix(c, "#"))
+			if len(c) == 6 {
+				return strings.ToUpper(c)
+			}
+		}
+	}
+	return "F7F5EF"
 }
 
 func escapeHTMLText(s string) string {

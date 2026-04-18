@@ -92,12 +92,17 @@ func coreXML(title string) string {
 </cp:coreProperties>`, xmlEscape(title), now, now)
 }
 
-func settingsXML() string {
+func settingsXML(showBackground bool) string {
+	bg := ""
+	if showBackground {
+		bg = `
+  <w:displayBackgroundShape/>`
+	}
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:zoom w:percent="100"/>
   <w:defaultTabStop w:val="708"/>
-  <w:characterSpacingControl w:val="doNotCompress"/>
+  <w:characterSpacingControl w:val="doNotCompress"/>` + bg + `
   <w:compat>
     <w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
   </w:compat>

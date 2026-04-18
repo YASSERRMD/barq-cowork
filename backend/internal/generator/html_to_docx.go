@@ -36,6 +36,7 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
 	dw := newDocxWriter(ctx)
 	dw.theme = resolveDocxTheme(req.Theme)
 	dw.chrome = req.Chrome
+	dw.background = req.Background
 	dw.walkBlocks(start)
 
 	sectPrChrome := ""
@@ -48,6 +49,14 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
       <w:titlePg/>`
 	}
 
+	backgroundElement := ""
+	if bg := dw.background; bg != nil {
+		if color := pickHex(bg.Color, ""); color != "" {
+			backgroundElement = fmt.Sprintf(`  <w:background w:color="%s"/>
+`, color)
+		}
+	}
+
 	documentXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -55,14 +64,14 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
             xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
             xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">
-  <w:body>
+%s  <w:body>
 %s
     <w:sectPr>%s
       <w:pgSz w:w="11906" w:h="16838"/>
       <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/>
     </w:sectPr>
   </w:body>
-</w:document>`, dw.body.String(), sectPrChrome)
+</w:document>`, backgroundElement, dw.body.String(), sectPrChrome)
 
 	return dw.assemble(documentXML, req.Title)
 }
@@ -92,6 +101,7 @@ type docxWriter struct {
 	drawingID  int
 	theme      DocxTheme
 	chrome     *DocxChrome
+	background *DocxBackground
 }
 
 func newDocxWriter(ctx context.Context) *docxWriter {
@@ -139,7 +149,7 @@ func (w *docxWriter) assemble(documentXML, title string) ([]byte, error) {
 		{"docProps/core.xml", coreXML(title)},
 		{"word/document.xml", documentXML},
 		{"word/styles.xml", stylesXML(w.theme)},
-		{"word/settings.xml", settingsXML()},
+		{"word/settings.xml", settingsXML(w.background != nil && pickHex(w.background.Color, "") != "")},
 		{"word/numbering.xml", numberingXML(w.theme)},
 		{"word/theme/theme1.xml", themeXML(w.theme)},
 		{"word/_rels/document.xml.rels", documentRelsXML(w.images, w.hyperlinks, hasChrome)},

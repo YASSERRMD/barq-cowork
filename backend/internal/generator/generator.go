@@ -36,6 +36,19 @@ type Request struct {
 	// Nil means "no chrome" — magazine / zine kinds use this so each page can
 	// be visually unique.
 	Chrome *DocxChrome
+
+	// Background paints every page with a tinted full-page fill. Nil means
+	// "plain white pages". Only set this when the user explicitly asks for
+	// background graphics / tinted pages — otherwise the default white is the
+	// right choice for most documents.
+	Background *DocxBackground
+}
+
+// DocxBackground configures a full-page tinted background. Word renders this
+// via a single <w:background> element + <w:displayBackgroundShape/> in
+// settings.xml. The fill applies to every page including the cover.
+type DocxBackground struct {
+	Color string // 6-digit hex without '#', e.g. "F5F1E8" for warm cream
 }
 
 // DocxChrome configures the running header and footer.
