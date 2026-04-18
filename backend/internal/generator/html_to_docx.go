@@ -196,7 +196,12 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		w.writeParagraph(c, "SourceCode", "", "")
 
 	case atom.Hr:
-		w.body.WriteString(hrParagraph())
+		cls := getAttr(c, "class")
+		if strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break") {
+			w.body.WriteString(pageBreakParagraph())
+		} else {
+			w.body.WriteString(hrParagraph())
+		}
 
 	case atom.Table:
 		w.body.WriteString(w.tableFromHTML(c))

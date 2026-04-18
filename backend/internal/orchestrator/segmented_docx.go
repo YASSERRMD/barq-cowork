@@ -32,14 +32,13 @@ var requestedDocumentPagePattern = regexp.MustCompile(`(?i)\b(\d+)\s*[- ]?\s*pag
 var magazineModePattern = regexp.MustCompile(`(?i)\b(magazine|zine|editorial spread|photo essay|look ?book|mood ?board|visual essay|newsletter)\b`)
 
 type segmentedDocPlan struct {
-	Filename      string              `json:"filename"`
-	Title         string              `json:"title"`
-	Subtitle      string              `json:"subtitle"`
-	Author        string              `json:"author"`
-	CoverHTML     string              `json:"cover_html"`
-	CoverSubtitle string              `json:"cover_subtitle"`
-	Theme         *generator.DocxTheme `json:"theme"`
-	Sections      []segmentedDocBrief `json:"sections"`
+	Filename  string               `json:"filename"`
+	Title     string               `json:"title"`
+	Subtitle  string               `json:"subtitle"`
+	Author    string               `json:"author"`
+	CoverHTML string               `json:"cover_html"`
+	Theme     *generator.DocxTheme `json:"theme"`
+	Sections  []segmentedDocBrief  `json:"sections"`
 }
 
 type segmentedDocBrief struct {
@@ -298,8 +297,10 @@ func (a *AgentLoop) generateSegmentedDocPlan(
 	contextText := compactSegmentedExtraContext(extraSystemPrompts)
 
 	layoutGuidance := `- "layout_kind" is a short kebab-case label that describes the HTML layout of that section (e.g. "prose", "two-column", "stat-grid", "timeline", "checklist-table", "callout-heavy"). Keep consistent when depth is uniform.`
+	coverGuidance := `- cover_html: design the opening page around the subject. You pick the HTML — it can be a bold headline + deck, a hero statement with a masthead line, a fact strip, a stacked poster-style intro, a manifesto paragraph, a typographic cover, etc. Do NOT default to <div class="cover-page"> with a title and a subtitle every time. Compose the first page the way a designer would, using <h1>, <h2>, <p>, <blockquote>, <table>, <hr> as needed. End the cover with <hr class="pagebreak"/> so it occupies its own page.`
 	if magazineMode {
 		layoutGuidance = `- "layout_kind" MUST be a distinct editorial layout for each section — EVERY section uses a different one. Pick from: "hero-spread", "pull-quote-banner", "two-column-feature", "stat-grid", "sidebar-note", "timeline", "photo-essay-block", "checklist-grid", "caption-gallery", "cover-story", "callout-stack", "fact-box", "interview-qa", "index-list". The layout should match the section's content, not just cycle through options.`
+		coverGuidance = `- cover_html: design a STRIKING editorial opener that doubles as the magazine's cover. Examples (pick whichever fits — don't just cycle): a giant kicker line + massive title + one-sentence deck; a volume/issue masthead line + three-word title + quoted tagline; a <table> with two columns acting as a bold two-panel cover; a large <blockquote> as the only visible text; a typographic "index" of the section titles as a contents page. NEVER reuse the generic <div class="cover-page"><h1 class="cover-title">…</h1></div> template. End with <hr class="pagebreak"/> so the cover is its own page.`
 	}
 
 	user := fmt.Sprintf(`Plan a Word document that will be rendered through write_html_docx.
@@ -316,8 +317,7 @@ Return ONLY compact valid JSON with this exact shape:
   "title":"document title",
   "subtitle":"short deck-line subtitle",
   "author":"Barq Cowork",
-  "cover_subtitle":"one-sentence positioning line",
-  "cover_html":"<div class=\"cover-page\">…cover content…</div>",
+  "cover_html":"<HTML you design for the first page — free-form, subject-driven>",
   "theme":{
     "name":"short theme name",
     "heading_font":"Georgia | Inter | Playfair Display | Source Serif Pro | Merriweather | ... pick one that fits the subject",
@@ -347,10 +347,10 @@ Rules:
 - sections[] must contain exactly %d entries.
 - Each brief is 1-2 sentences describing what that section will cover. Be specific to the subject.
 - depth: "short" ≈ 1/2 page, "medium" ≈ 1 page, "long" ≈ 1.5-2 pages. Mix them.
-- cover_html should be a <div class="cover-page"> containing <h1 class="cover-title"> and a short meta line.
+%s
 - theme: design fonts and colors that SUIT THE SUBJECT. A legal briefing, a wedding lookbook, a cybersecurity report, and a food magazine should look visibly different. Hex values are 6-digit, no '#'. Do not reuse the same palette across unrelated subjects.
 %s
-- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, sectionCount, sectionCount, layoutGuidance)
+- No emoji, no markdown, no fenced code. Return compact JSON only.`, task.Title, task.Description, contextText, sectionCount, sectionCount, coverGuidance, layoutGuidance)
 
 	err := a.chatSegmentedJSON(ctx, runtimeProfile, 3600, []provider.ChatMessage{
 		{Role: "system", Content: segmentedDocSystemPrompt()},
@@ -449,18 +449,17 @@ func composeSegmentedDocHTML(plan segmentedDocPlan, sections []segmentedDocSecti
 	return b.String()
 }
 
+// defaultSegmentedDocCoverHTML is the bare-minimum fallback when the LLM
+// returns no cover_html. It intentionally emits nothing beyond the title +
+// subtitle + page break so there is no "templated" look to inherit — a real
+// cover is expected to come from the plan call.
 func defaultSegmentedDocCoverHTML(plan segmentedDocPlan) string {
-	subtitle := firstNonEmptyString(plan.CoverSubtitle, plan.Subtitle)
-	var meta string
-	if plan.Author != "" {
-		meta = fmt.Sprintf(`<div class="cover-meta"><span><strong>Prepared by:</strong> %s</span></div>`, escapeHTMLText(plan.Author))
+	title := escapeHTMLText(firstNonEmptyString(plan.Title, "Document"))
+	var sub string
+	if s := strings.TrimSpace(plan.Subtitle); s != "" {
+		sub = fmt.Sprintf(`<p>%s</p>`, escapeHTMLText(s))
 	}
-	subtitleHTML := ""
-	if subtitle != "" {
-		subtitleHTML = fmt.Sprintf(`<p class="cover-subtitle">%s</p>`, escapeHTMLText(subtitle))
-	}
-	return fmt.Sprintf(`<div class="cover-page"><div class="cover-accent"></div><h1 class="cover-title">%s</h1>%s%s</div>`,
-		escapeHTMLText(firstNonEmptyString(plan.Title, "Document")), subtitleHTML, meta)
+	return fmt.Sprintf(`<h1>%s</h1>%s<hr class="pagebreak"/>`, title, sub)
 }
 
 func escapeHTMLText(s string) string {
