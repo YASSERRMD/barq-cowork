@@ -96,6 +96,28 @@ func (WriteXlsxTool) InputSchema() map[string]any {
 							"description":          "Optional: cell-address -> formula map for arbitrary spreadsheet math. Example: {\"D2\": \"=B2*C2\", \"E10\": \"=AVERAGE(E2:E9)\"}. Evaluated by Excel when the workbook opens; leading '=' optional. Use for derived columns, cross-sheet refs, IF/VLOOKUP, etc.",
 							"additionalProperties": map[string]any{"type": "string"},
 						},
+						"conditional_rules": map[string]any{
+							"type":        "array",
+							"description": "Optional conditional-format rules applied after data layout. Each rule targets a sheet-relative range (e.g. 'B2:B20'). Rule types: greater_than, less_than, equal_to, not_equal_to, greater_or_equal, less_or_equal, between, not_between (value/value2 numeric); top_n, bottom_n (value=count, percent=true for %); above_average, below_average; duplicate, unique; blanks, no_blanks, errors, no_errors; text_contains, text_not_contains, text_begins_with, text_ends_with (value=needle); color_scale_2, color_scale_3 (min_color/mid_color/max_color hex); data_bar (bar_color hex). fill_color / text_color / bold style matched cells on the cell/text/top/average/duplicate/unique/blank/error families.",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"range":      map[string]any{"type": "string", "description": "Cell range like 'B2:B20'"},
+									"type":       map[string]any{"type": "string"},
+									"value":      map[string]any{"type": "string"},
+									"value2":     map[string]any{"type": "string"},
+									"fill_color": map[string]any{"type": "string"},
+									"text_color": map[string]any{"type": "string"},
+									"bold":       map[string]any{"type": "boolean"},
+									"min_color":  map[string]any{"type": "string"},
+									"mid_color":  map[string]any{"type": "string"},
+									"max_color":  map[string]any{"type": "string"},
+									"bar_color":  map[string]any{"type": "string"},
+									"percent":    map[string]any{"type": "boolean"},
+								},
+								"required": []string{"range", "type"},
+							},
+						},
 						"charts": map[string]any{
 							"type":        "array",
 							"description": "Optional chart descriptors; rendered after data is laid out.",

@@ -40,6 +40,7 @@ type XlsxSheet struct {
 	TotalsFormulas  []string          `json:"totals_formulas,omitempty"`
 	Formulas        map[string]string `json:"formulas,omitempty"`
 	Charts          []XlsxChart       `json:"charts,omitempty"` // populated in phase 3
+	ConditionalRules []ConditionalRule `json:"conditional_rules,omitempty"`
 }
 
 // BuildWorkbook renders a workbook in-memory and returns the bytes. It is the
@@ -210,6 +211,12 @@ func writeSheet(f *excelize.File, m *XlsxStyleMapper, sheet string, s XlsxSheet)
 	// Auto-filter across the full header range.
 	lastCell, _ := excelize.CoordinatesToCellName(len(s.Headers), 1)
 	if err := f.AutoFilter(sheet, "A1:"+lastCell, nil); err != nil {
+		return err
+	}
+
+	// Conditional formats attach to the data region; must run after values +
+	// formulas are in place so ranges like B2:B5 resolve to real cells.
+	if err := applyConditionalRules(f, sheet, s, m); err != nil {
 		return err
 	}
 
