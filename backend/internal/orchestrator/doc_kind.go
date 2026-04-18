@@ -108,7 +108,9 @@ func docKindGraphicsGuidance(kind docKind) string {
   • <div class="factbox"><strong>Facts.</strong> 3-5 compact label → value rows as a <table>.</div>
   • <hr class="divider-dots"/>    decorative centered-dots divider between subsections.
   • <hr class="pagebreak"/>       page break.
-All classes are RECOGNIZED by the renderer — use them freely.`
+All classes are RECOGNIZED by the renderer — use them freely.
+
+NEVER emit an empty styled component. Every <div class="pullquote">, <div class="callout…">, <div class="keyidea">, <div class="definition">, <div class="statbox">, <div class="sidebar">, <div class="factbox"> MUST contain real text content. An empty <div class="callout"></div> or a callout with only whitespace renders as a blank highlighted rectangle and looks like broken layout. If you don't have content for a styled box, don't emit the div at all.`
 	switch kind {
 	case docKindMagazine:
 		return base + `

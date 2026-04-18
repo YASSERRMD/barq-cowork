@@ -57,6 +57,17 @@ func matchedClass(n *html.Node, candidates ...string) string {
 // Returns false when no class matches and the caller should fall back to
 // default block handling.
 func (w *docxWriter) emitStyledBlockIfClass(n *html.Node) bool {
+	// Guard against the LLM emitting empty styled divs like
+	// <div class="callout"></div> — rendering the frame around nothing
+	// produces a visible empty highlighted block, which looks like broken
+	// layout. Skip the whole node silently when it carries no text.
+	if matchedClass(n,
+		"pullquote", "callout-info", "callout-tip", "callout-warn", "callout",
+		"keyidea", "key-idea", "definition", "statbox", "stat-box",
+		"sidebar", "factbox", "fact-box",
+	) != "" && !nodeHasVisibleText(n) {
+		return true
+	}
 	// Order matters: check the most specific variants first so callout-info
 	// doesn't get swallowed by a plain callout match.
 	switch matchedClass(n,
@@ -322,6 +333,29 @@ func extractStatContent(n *html.Node) (value, label string) {
 	}
 	walk(n)
 	return value, label
+}
+
+// nodeHasVisibleText reports whether n contains at least one non-whitespace
+// text-node descendant. Used to skip rendering styled-box frames around empty
+// <div class="callout"></div> markers that would otherwise show as blank
+// highlighted rectangles.
+func nodeHasVisibleText(n *html.Node) bool {
+	if n == nil {
+		return false
+	}
+	var walk func(*html.Node) bool
+	walk = func(node *html.Node) bool {
+		if node.Type == html.TextNode && strings.TrimSpace(node.Data) != "" {
+			return true
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(n)
 }
 
 func collectText(n *html.Node) string {
