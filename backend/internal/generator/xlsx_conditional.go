@@ -118,26 +118,26 @@ func buildConditionalOpts(f *excelize.File, r ConditionalRule, m *XlsxStyleMappe
 		}}, nil
 	case "top_n":
 		return []excelize.ConditionalFormatOptions{{
-			Type: "top", Criteria: "top", Value: r.Value,
+			Type: "top", Criteria: "=", Value: r.Value,
 			Percent: r.Percent, Format: &fmtID,
 		}}, nil
 	case "bottom_n":
 		return []excelize.ConditionalFormatOptions{{
-			Type: "bottom", Criteria: "bottom", Value: r.Value,
+			Type: "bottom", Criteria: "=", Value: r.Value,
 			Percent: r.Percent, Format: &fmtID,
 		}}, nil
 	case "above_average":
 		return []excelize.ConditionalFormatOptions{{
-			Type: "average", AboveAverage: true, Format: &fmtID,
+			Type: "average", Criteria: "=", AboveAverage: true, Format: &fmtID,
 		}}, nil
 	case "below_average":
 		return []excelize.ConditionalFormatOptions{{
-			Type: "average", AboveAverage: false, Format: &fmtID,
+			Type: "average", Criteria: "=", AboveAverage: false, Format: &fmtID,
 		}}, nil
 	case "duplicate":
-		return []excelize.ConditionalFormatOptions{{Type: "duplicate", Format: &fmtID}}, nil
+		return []excelize.ConditionalFormatOptions{{Type: "duplicate", Criteria: "=", Format: &fmtID}}, nil
 	case "unique":
-		return []excelize.ConditionalFormatOptions{{Type: "unique", Format: &fmtID}}, nil
+		return []excelize.ConditionalFormatOptions{{Type: "unique", Criteria: "=", Format: &fmtID}}, nil
 	case "blanks":
 		return []excelize.ConditionalFormatOptions{{Type: "blanks", Format: &fmtID}}, nil
 	case "no_blanks":
@@ -158,8 +158,8 @@ func buildConditionalOpts(f *excelize.File, r ConditionalRule, m *XlsxStyleMappe
 	case "color_scale_2":
 		minC, maxC := orDefault(r.MinColor, "F8696B"), orDefault(r.MaxColor, "63BE7B")
 		return []excelize.ConditionalFormatOptions{{
-			Type:     "2_color_scale",
-			MinType:  "min", MinColor: hashHex(minC),
+			Type: "2_color_scale", Criteria: "=",
+			MinType: "min", MinColor: hashHex(minC),
 			MaxType: "max", MaxColor: hashHex(maxC),
 		}}, nil
 	case "color_scale_3":
@@ -167,15 +167,15 @@ func buildConditionalOpts(f *excelize.File, r ConditionalRule, m *XlsxStyleMappe
 		midC := orDefault(r.MidColor, "FFEB84")
 		maxC := orDefault(r.MaxColor, "63BE7B")
 		return []excelize.ConditionalFormatOptions{{
-			Type:     "3_color_scale",
-			MinType:  "min", MinColor: hashHex(minC),
+			Type: "3_color_scale", Criteria: "=",
+			MinType: "min", MinColor: hashHex(minC),
 			MidType: "percentile", MidValue: "50", MidColor: hashHex(midC),
 			MaxType: "max", MaxColor: hashHex(maxC),
 		}}, nil
 	case "data_bar":
 		bar := orDefault(r.BarColor, "638EC6")
 		return []excelize.ConditionalFormatOptions{{
-			Type:     "data_bar",
+			Type: "data_bar", Criteria: "=",
 			MinType:  "min",
 			MaxType:  "max",
 			BarColor: hashHex(bar),
