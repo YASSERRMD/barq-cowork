@@ -110,7 +110,9 @@ func docKindGraphicsGuidance(kind docKind) string {
   • <hr class="pagebreak"/>       page break.
 All classes are RECOGNIZED by the renderer — use them freely.
 
-NEVER emit an empty styled component. Every <div class="pullquote">, <div class="callout…">, <div class="keyidea">, <div class="definition">, <div class="statbox">, <div class="sidebar">, <div class="factbox"> MUST contain real text content. An empty <div class="callout"></div> or a callout with only whitespace renders as a blank highlighted rectangle and looks like broken layout. If you don't have content for a styled box, don't emit the div at all.`
+NEVER emit an empty styled component. Every <div class="pullquote">, <div class="callout…">, <div class="keyidea">, <div class="definition">, <div class="statbox">, <div class="sidebar">, <div class="factbox"> MUST contain real text content. An empty <div class="callout"></div> or a callout with only whitespace renders as a blank highlighted rectangle and looks like broken layout. If you don't have content for a styled box, don't emit the div at all.
+
+NEVER emit code expressions in the rendered text. Do NOT write JavaScript template literals like ${new Date().getFullYear()}, ${year}, {{year}}, <?=date?>, %Y, or any other placeholder / interpolation syntax — the renderer does not evaluate them and they will appear verbatim as broken garbage on the page. If you need a year, write the concrete number (e.g. "2026"). If you need today's date, write a literal date string (e.g. "April 2026"). Emit only finished, human-readable text.`
 	switch kind {
 	case docKindMagazine:
 		return base + `
