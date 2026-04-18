@@ -72,18 +72,34 @@ func (WriteHTMLDocxTool) InputSchema() map[string]any {
 					"title_color":     map[string]any{"type": "string"},
 				},
 			},
+			"chrome": map[string]any{
+				"type":        "object",
+				"description": "Running header/footer applied to every page after the cover. Omit for documents where each page should look unique (e.g. magazines, zines). When present, the cover page is automatically rendered without chrome.",
+				"properties": map[string]any{
+					"header_text":    map[string]any{"type": "string", "description": "Left-aligned header text, e.g. 'Document Title — 2026'"},
+					"footer_text":    map[string]any{"type": "string", "description": "Left-aligned footer text, e.g. 'Barq Cowork · Confidential'"},
+					"show_page_num":  map[string]any{"type": "boolean", "description": "When true, a right-aligned 'Page N' renders in the footer"},
+				},
+			},
 		},
 		"required": []string{"filename", "title", "html"},
 	}
 }
 
 type writeHTMLDocxArgs struct {
-	Filename string              `json:"filename"`
-	Title    string              `json:"title"`
-	Author   string              `json:"author"`
-	HTML     string              `json:"html"`
-	CSS      string              `json:"css"`
+	Filename string               `json:"filename"`
+	Title    string               `json:"title"`
+	Author   string               `json:"author"`
+	HTML     string               `json:"html"`
+	CSS      string               `json:"css"`
 	Theme    *generator.DocxTheme `json:"theme"`
+	Chrome   *chromeArgs          `json:"chrome"`
+}
+
+type chromeArgs struct {
+	HeaderText  string `json:"header_text"`
+	FooterText  string `json:"footer_text"`
+	ShowPageNum bool   `json:"show_page_num"`
 }
 
 func (t WriteHTMLDocxTool) Execute(ctx context.Context, ictx InvocationContext, argsJSON string) Result {
@@ -111,6 +127,15 @@ func (t WriteHTMLDocxTool) Execute(ctx context.Context, ictx InvocationContext, 
 		return Err("create documents directory: %v", err)
 	}
 
+	var chrome *generator.DocxChrome
+	if args.Chrome != nil {
+		chrome = &generator.DocxChrome{
+			HeaderText:  args.Chrome.HeaderText,
+			FooterText:  args.Chrome.FooterText,
+			ShowPageNum: args.Chrome.ShowPageNum,
+		}
+	}
+
 	gen := generator.New()
 	data, err := gen.ToDocx(ctx, generator.Request{
 		HTML:   args.HTML,
@@ -118,6 +143,7 @@ func (t WriteHTMLDocxTool) Execute(ctx context.Context, ictx InvocationContext, 
 		Title:  args.Title,
 		Author: args.Author,
 		Theme:  args.Theme,
+		Chrome: chrome,
 	})
 	if err != nil {
 		return Err("docx generation failed: %v", err)
