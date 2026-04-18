@@ -200,7 +200,7 @@ func (w *docxWriter) emitBlock(c *html.Node) {
 		if strings.Contains(cls, "pagebreak") || strings.Contains(cls, "page-break") {
 			w.body.WriteString(pageBreakParagraph())
 		} else {
-			w.body.WriteString(hrParagraph())
+			w.body.WriteString(w.hrParagraph())
 		}
 
 	case atom.Table:
@@ -288,6 +288,7 @@ type runStyle struct {
 	code      bool
 	strike    bool
 	hyperlink string
+	linkColor string // hex without '#', set when hyperlink is active
 }
 
 func (w *docxWriter) writeParagraph(n *html.Node, styleID, extraPPr, align string) {
@@ -324,6 +325,7 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 				linkStyle := runStyle{
 					bold: st.bold, italic: st.italic, underline: true,
 					code: st.code, strike: st.strike, hyperlink: st.hyperlink,
+					linkColor: st.linkColor,
 				}
 				out.WriteString(fmt.Sprintf(`<w:hyperlink r:id="%s">%s</w:hyperlink>`,
 					st.hyperlink, runXML(text, linkStyle)))
@@ -354,6 +356,7 @@ func (w *docxWriter) collectInlines(n *html.Node, st runStyle, out *strings.Buil
 					rid := w.relID()
 					w.hyperlinks = append(w.hyperlinks, docxHyperlink{id: rid, target: href})
 					ns.hyperlink = rid
+					ns.linkColor = w.theme.LinkColor
 				}
 
 			case atom.Img:
@@ -386,7 +389,11 @@ func runXML(text string, st runStyle) string {
 		rpr.WriteString(`<w:strike/>`)
 	}
 	if st.hyperlink != "" {
-		rpr.WriteString(`<w:color w:val="1D4ED8"/>`)
+		linkColor := st.linkColor
+		if linkColor == "" {
+			linkColor = "1D4ED8"
+		}
+		fmt.Fprintf(&rpr, `<w:color w:val="%s"/>`, linkColor)
 	}
 	rpr.WriteString("</w:rPr>")
 
@@ -530,14 +537,15 @@ func pageBreakParagraph() string {
 	return "    <w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>\n"
 }
 
-func hrParagraph() string {
-	return `    <w:p>
+func (w *docxWriter) hrParagraph() string {
+	color := lightenHex(w.theme.AccentColor, 0.7)
+	return fmt.Sprintf(`    <w:p>
       <w:pPr>
-        <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="E2E8F0"/></w:pBdr>
+        <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="%s"/></w:pBdr>
         <w:spacing w:before="120" w:after="120"/>
       </w:pPr>
     </w:p>
-`
+`, color)
 }
 
 func paragraphAlignment(n *html.Node) string {
@@ -586,21 +594,22 @@ func (w *docxWriter) tableFromHTML(tbl *html.Node) string {
 		rowsXML.WriteString(w.tableRowXML(r.cells, r.header, i, colWidth))
 	}
 
+	border := lightenHex(w.theme.AccentColor, 0.75)
 	return fmt.Sprintf(`    <w:tbl>
       <w:tblPr>
         <w:tblW w:w="9000" w:type="dxa"/>
         <w:tblBorders>
-          <w:top    w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:left   w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:bottom w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:right  w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
-          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
+          <w:top    w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:left   w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:bottom w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:right  w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
+          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="%[2]s"/>
         </w:tblBorders>
       </w:tblPr>
-      <w:tblGrid>%s</w:tblGrid>
-%s    </w:tbl>
-`, grid.String(), rowsXML.String())
+      <w:tblGrid>%[1]s</w:tblGrid>
+%[3]s    </w:tbl>
+`, grid.String(), border, rowsXML.String())
 }
 
 type htmlRow struct {
@@ -647,12 +656,12 @@ func collectTableRows(tbl *html.Node) []htmlRow {
 
 func (w *docxWriter) tableRowXML(cells []*html.Node, header bool, rowIdx, colWidth int) string {
 	fill := "FFFFFF"
-	textColor := "1A1A2E"
+	textColor := w.theme.BodyColor
 	if header {
-		fill = "BE123C"
-		textColor = "FFFFFF"
+		fill = w.theme.AccentColor
+		textColor = readableTextOn(fill)
 	} else if rowIdx%2 == 1 {
-		fill = "F8FAFC"
+		fill = lightenHex(w.theme.AccentColor, 0.92)
 	}
 
 	var cellsXML strings.Builder
