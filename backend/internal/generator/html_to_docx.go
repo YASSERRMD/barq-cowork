@@ -35,7 +35,18 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
 
 	dw := newDocxWriter(ctx)
 	dw.theme = resolveDocxTheme(req.Theme)
+	dw.chrome = req.Chrome
 	dw.walkBlocks(start)
+
+	sectPrChrome := ""
+	if dw.chrome != nil {
+		sectPrChrome = `
+      <w:headerReference w:type="default" r:id="rId5"/>
+      <w:footerReference w:type="default" r:id="rId6"/>
+      <w:headerReference w:type="first" r:id="rId7"/>
+      <w:footerReference w:type="first" r:id="rId8"/>
+      <w:titlePg/>`
+	}
 
 	documentXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -45,12 +56,12 @@ func htmlToDocx(ctx context.Context, req Request) ([]byte, error) {
             xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>
 %s
-    <w:sectPr>
+    <w:sectPr>%s
       <w:pgSz w:w="11906" w:h="16838"/>
       <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/>
     </w:sectPr>
   </w:body>
-</w:document>`, dw.body.String())
+</w:document>`, dw.body.String(), sectPrChrome)
 
 	return dw.assemble(documentXML, req.Title)
 }
@@ -79,6 +90,7 @@ type docxWriter struct {
 	nextRelID  int
 	drawingID  int
 	theme      DocxTheme
+	chrome     *DocxChrome
 }
 
 func newDocxWriter(ctx context.Context) *docxWriter {
@@ -118,8 +130,9 @@ func (w *docxWriter) assemble(documentXML, title string) ([]byte, error) {
 		return err
 	}
 
+	hasChrome := w.chrome != nil
 	parts := []struct{ name, content string }{
-		{"[Content_Types].xml", contentTypesXML(w.images)},
+		{"[Content_Types].xml", contentTypesXML(w.images, hasChrome)},
 		{"_rels/.rels", rootRelsXML()},
 		{"docProps/app.xml", appXML()},
 		{"docProps/core.xml", coreXML(title)},
@@ -128,7 +141,15 @@ func (w *docxWriter) assemble(documentXML, title string) ([]byte, error) {
 		{"word/settings.xml", settingsXML()},
 		{"word/numbering.xml", numberingXML(w.theme)},
 		{"word/theme/theme1.xml", themeXML(w.theme)},
-		{"word/_rels/document.xml.rels", documentRelsXML(w.images, w.hyperlinks)},
+		{"word/_rels/document.xml.rels", documentRelsXML(w.images, w.hyperlinks, hasChrome)},
+	}
+	if hasChrome {
+		parts = append(parts,
+			struct{ name, content string }{"word/header1.xml", headerXML(*w.chrome, w.theme)},
+			struct{ name, content string }{"word/footer1.xml", footerXML(*w.chrome, w.theme)},
+			struct{ name, content string }{"word/header2.xml", emptyHeaderXML()},
+			struct{ name, content string }{"word/footer2.xml", emptyFooterXML()},
+		)
 	}
 	for _, p := range parts {
 		if err := add(p.name, p.content); err != nil {

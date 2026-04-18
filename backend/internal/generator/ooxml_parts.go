@@ -12,8 +12,9 @@ import (
 // DocxTheme.normalize().
 
 // contentTypesXML emits [Content_Types].xml with image overrides registered
-// for each embedded picture.
-func contentTypesXML(images []docxImage) string {
+// for each embedded picture. When hasChrome is true, header/footer parts are
+// also registered.
+func contentTypesXML(images []docxImage, hasChrome bool) string {
 	var overrides strings.Builder
 	seen := map[string]bool{}
 	for _, img := range images {
@@ -30,6 +31,15 @@ func contentTypesXML(images []docxImage) string {
 			`<Default Extension="%s" ContentType="%s"/>`, ext, ct)
 	}
 
+	chromeOverrides := ""
+	if hasChrome {
+		chromeOverrides = `
+  <Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+  <Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+  <Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+  <Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`
+	}
+
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="xml" ContentType="application/xml"/>
@@ -43,7 +53,7 @@ func contentTypesXML(images []docxImage) string {
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
   <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
   <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
-  <Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+  <Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>` + chromeOverrides + `
   <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
 </Types>`
@@ -415,7 +425,7 @@ func themeXML(theme DocxTheme) string {
 	)
 }
 
-func documentRelsXML(images []docxImage, hyperlinks []docxHyperlink) string {
+func documentRelsXML(images []docxImage, hyperlinks []docxHyperlink, hasChrome bool) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -424,6 +434,13 @@ func documentRelsXML(images []docxImage, hyperlinks []docxHyperlink) string {
   <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
   <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
 `)
+	if hasChrome {
+		b.WriteString(`  <Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+  <Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+  <Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>
+  <Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>
+`)
+	}
 	for _, img := range images {
 		fmt.Fprintf(&b,
 			`  <Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="%s"/>`+"\n",
@@ -436,4 +453,88 @@ func documentRelsXML(images []docxImage, hyperlinks []docxHyperlink) string {
 	}
 	b.WriteString(`</Relationships>`)
 	return b.String()
+}
+
+// headerXML emits the running header used on every page after the cover.
+// The text is left-aligned and sits above a thin accent-colored rule so it
+// reads as a chrome band rather than body content.
+func headerXML(chrome DocxChrome, theme DocxTheme) string {
+	border := lightenHex(theme.AccentColor, 0.55)
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr>
+      <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="%[1]s"/></w:pBdr>
+      <w:spacing w:before="0" w:after="60"/>
+    </w:pPr>
+    <w:r>
+      <w:rPr>
+        <w:rFonts w:ascii="%[2]s" w:hAnsi="%[2]s"/>
+        <w:sz w:val="18"/><w:color w:val="%[3]s"/>
+      </w:rPr>
+      <w:t xml:space="preserve">%[4]s</w:t>
+    </w:r>
+  </w:p>
+</w:hdr>`, border, theme.HeadingFont, theme.MutedColor, xmlEscape(chrome.HeaderText))
+}
+
+// footerXML emits the running footer. FooterText is left-aligned; when
+// ShowPageNum is set, a tab-aligned "Page N" renders on the right via the
+// OOXML PAGE field.
+func footerXML(chrome DocxChrome, theme DocxTheme) string {
+	border := lightenHex(theme.AccentColor, 0.55)
+	var right string
+	if chrome.ShowPageNum {
+		right = fmt.Sprintf(`<w:r>
+      <w:rPr><w:rFonts w:ascii="%[1]s" w:hAnsi="%[1]s"/><w:sz w:val="18"/><w:color w:val="%[2]s"/></w:rPr>
+      <w:tab/>
+      <w:t xml:space="preserve">Page </w:t>
+    </w:r>
+    <w:r>
+      <w:rPr><w:rFonts w:ascii="%[1]s" w:hAnsi="%[1]s"/><w:sz w:val="18"/><w:color w:val="%[2]s"/></w:rPr>
+      <w:fldChar w:fldCharType="begin"/>
+    </w:r>
+    <w:r>
+      <w:rPr><w:rFonts w:ascii="%[1]s" w:hAnsi="%[1]s"/><w:sz w:val="18"/><w:color w:val="%[2]s"/></w:rPr>
+      <w:instrText xml:space="preserve"> PAGE </w:instrText>
+    </w:r>
+    <w:r>
+      <w:rPr><w:rFonts w:ascii="%[1]s" w:hAnsi="%[1]s"/><w:sz w:val="18"/><w:color w:val="%[2]s"/></w:rPr>
+      <w:fldChar w:fldCharType="end"/>
+    </w:r>`, theme.HeadingFont, theme.MutedColor)
+	}
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr>
+      <w:pBdr><w:top w:val="single" w:sz="6" w:space="2" w:color="%[1]s"/></w:pBdr>
+      <w:tabs><w:tab w:val="right" w:pos="9072"/></w:tabs>
+      <w:spacing w:before="60" w:after="0"/>
+    </w:pPr>
+    <w:r>
+      <w:rPr>
+        <w:rFonts w:ascii="%[2]s" w:hAnsi="%[2]s"/>
+        <w:sz w:val="18"/><w:color w:val="%[3]s"/>
+      </w:rPr>
+      <w:t xml:space="preserve">%[4]s</w:t>
+    </w:r>
+    %[5]s
+  </w:p>
+</w:ftr>`, border, theme.HeadingFont, theme.MutedColor, xmlEscape(chrome.FooterText), right)
+}
+
+// emptyHeaderXML / emptyFooterXML are referenced as the "first" header/footer
+// so the cover page renders without chrome (via <w:titlePg/> in sectPr).
+func emptyHeaderXML() string {
+	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>
+</w:hdr>`
+}
+
+func emptyFooterXML() string {
+	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>
+</w:ftr>`
 }
