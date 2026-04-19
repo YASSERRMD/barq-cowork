@@ -26,7 +26,8 @@ TOOL ROUTING
 - presentation, slides, deck, slideshow, pptx, powerpoint → write_pptx
 - document, report, doc, word, brief, proposal, writeup, paper → write_html_docx
 - summary, notes, markdown → write_markdown_report
-- data, spreadsheet, export → export_json
+- spreadsheet, excel, xlsx → write_xlsx
+- json, csv, tsv, dataset, raw export → export_json
 - everything else → write_file
 
 LOOP RULES
@@ -406,6 +407,9 @@ func (a *AgentLoop) Run(
 				)
 				if requiredTool == "write_pptx" {
 					nudge += " For presentation tasks, include the full deck object plus deck.theme_css, deck.cover_html, and HTML markup or structured content for every content slide. Compose slides with Bootstrap-style rows, columns, cards, list groups, badges, and Bootstrap Icons placeholders. For decks with 8+ total slides, keep each slide concise and complete rather than writing long prose. Do not fall back to prose planning."
+				}
+				if requiredTool == "write_xlsx" {
+					nudge += " For spreadsheet tasks, include filename plus at least one sheet with name, headers, and rows. Use totals, formulas, charts, and theme only when they materially improve the workbook. Do not fall back to CSV or JSON export."
 				}
 				if strings.TrimSpace(runtimeProfile.CompatibilityPrompt) != "" {
 					nudge += " If this model cannot emit native tool calls, respond with ONLY the JSON arguments object for the required tool."
@@ -942,6 +946,9 @@ func requiredOutputTool(task *domain.Task) string {
 		"conference talk", "talk deck", "seminar deck"):
 		return "write_pptx"
 	case containsTaskKeyword(text,
+		"spreadsheet", "excel", "xlsx", "google sheet", "google sheets"):
+		return "write_xlsx"
+	case containsTaskKeyword(text,
 		// generic document asks
 		"document", "doc", "word document", "word file", "docx",
 		// reports & professional deliverables
@@ -973,8 +980,8 @@ func requiredOutputTool(task *domain.Task) string {
 		"standup notes", "tl;dr", "tldr", "cheat sheet", "cheatsheet"):
 		return "write_markdown_report"
 	case containsTaskKeyword(text,
-		"data", "spreadsheet", "export", "json", "csv", "tsv", "dataset",
-		"structured data", "table data", "record list", "records export"):
+		"json", "csv", "tsv", "dataset", "structured data", "table data",
+		"record list", "records export", "data export", "raw export"):
 		return "export_json"
 	case text != "":
 		return "write_file"

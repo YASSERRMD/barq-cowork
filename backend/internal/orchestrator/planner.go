@@ -28,6 +28,7 @@ Available tools:
 - search_files : search file contents for a pattern
 - http_fetch   : fetch a URL (GET free; POST requires approval)
 - write_markdown_report: write a formatted .md report to reports/
+- write_xlsx   : write a structured Excel workbook as .xlsx to spreadsheets/
 - export_json  : write structured data as .json to exports/
 
 Rules:

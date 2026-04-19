@@ -118,6 +118,44 @@ func (fakeWritePPTXTool) Execute(context.Context, tools.InvocationContext, strin
 	return tools.OKData("ok", map[string]any{"path": "slides/forced-presentation.pptx", "size": int64(1234)})
 }
 
+type fakeWriteXlsxTool struct{}
+
+func (fakeWriteXlsxTool) Name() string { return "write_xlsx" }
+
+func (fakeWriteXlsxTool) Description() string { return "fake write_xlsx" }
+
+func (fakeWriteXlsxTool) InputSchema() map[string]any { return map[string]any{"type": "object"} }
+
+func (fakeWriteXlsxTool) Execute(context.Context, tools.InvocationContext, string) tools.Result {
+	return tools.OKData("ok", map[string]any{"path": "spreadsheets/monthly-revenue.xlsx", "size": int64(2048)})
+}
+
+type fakeSheetProvider struct {
+	requests []provider.ChatCompletionRequest
+}
+
+func (f *fakeSheetProvider) Name() string { return "fake-sheet" }
+
+func (f *fakeSheetProvider) ValidateConfig(provider.ProviderConfig) error { return nil }
+
+func (f *fakeSheetProvider) Chat(_ context.Context, _ provider.ProviderConfig, req provider.ChatCompletionRequest) (<-chan provider.ChatCompletionChunk, error) {
+	f.requests = append(f.requests, req)
+	ch := make(chan provider.ChatCompletionChunk, 2)
+	switch len(f.requests) {
+	case 1:
+		ch <- provider.ChatCompletionChunk{ToolCalls: []provider.ToolCall{{
+			ID:        "call-xlsx-1",
+			Name:      "write_xlsx",
+			Arguments: `{"filename":"monthly-revenue","sheets":[{"name":"Revenue","headers":["Month","Revenue"],"rows":[["Jan",100],["Feb",120]]}]}`,
+		}}}
+	default:
+		ch <- provider.ChatCompletionChunk{ContentDelta: "Workbook written."}
+	}
+	ch <- provider.ChatCompletionChunk{Done: true}
+	close(ch)
+	return ch, nil
+}
+
 type fakeSegmentedProvider struct {
 	requests []provider.ChatCompletionRequest
 }
@@ -308,6 +346,49 @@ func TestAgentLoop_NudgesPresentationTaskToCallWritePPTX(t *testing.T) {
 	}
 }
 
+func TestAgentLoop_RoutesSpreadsheetTasksToWriteXlsx(t *testing.T) {
+	prov := &fakeSheetProvider{}
+	registry := tools.NewRegistry()
+	registry.Register(fakeWriteXlsxTool{})
+	artifacts := &fakeArtifactStore{}
+	plans := &fakePlanStore{}
+	loop := NewAgentLoop(
+		prov,
+		provider.ProviderConfig{Model: "fake"},
+		registry,
+		plans,
+		artifacts,
+		fakeEventEmitter{},
+		slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	)
+
+	task := &domain.Task{
+		ID:          "task-xlsx-1",
+		Title:       "Create an Excel spreadsheet of monthly revenue",
+		Description: "Need an XLSX workbook with totals.",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	taskWorkspace := t.TempDir()
+	result := loop.Run(context.Background(), task, taskWorkspace)
+	if result.Completed != 1 || result.Failed != 0 {
+		t.Fatalf("expected one completed xlsx tool call, got %+v", result)
+	}
+	if len(artifacts.artifacts) != 1 {
+		t.Fatalf("expected one recorded xlsx artifact, got %d", len(artifacts.artifacts))
+	}
+	if got := artifacts.artifacts[0].ContentPath; got != filepath.Join(taskWorkspace, "spreadsheets", "monthly-revenue.xlsx") {
+		t.Fatalf("expected absolute xlsx artifact path, got %q", got)
+	}
+	if len(prov.requests) == 0 {
+		t.Fatal("expected provider request")
+	}
+	if prov.requests[0].ForceToolName != "write_xlsx" || len(prov.requests[0].Tools) != 1 || prov.requests[0].Tools[0].Name != "write_xlsx" {
+		t.Fatalf("expected spreadsheet request to force only write_xlsx, got force=%q tools=%+v", prov.requests[0].ForceToolName, prov.requests[0].Tools)
+	}
+}
+
 type fakeNoToolProvider struct {
 	requests []provider.ChatCompletionRequest
 }
@@ -475,7 +556,7 @@ func TestSegmentedPresentationWorkflow_RoutesSingularSlideRequests(t *testing.T)
 
 func TestSegmentedPresentationHTML_DoesNotExposeDesignMetadata(t *testing.T) {
 	task := &domain.Task{Title: "3 slides about India"}
-	plan := fallbackSegmentedPPTXPlan(task, 2, 3)
+	plan := segmentedPPTXPlan{}
 	normalizeSegmentedPPTXPlan(&plan, task, 2)
 	htmlParts := []string{plan.Deck.CoverHTML}
 	for _, slide := range plannedSegmentedSlides(plan) {

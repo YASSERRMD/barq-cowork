@@ -199,7 +199,7 @@ func (o *Orchestrator) skillPromptForTask(ctx context.Context, task *domain.Task
 		return o.skills.PromptForKind(ctx, domain.SkillKindDeck)
 	case "write_docx", "write_html_docx":
 		return o.skills.PromptForKind(ctx, domain.SkillKindDoc)
-	case "export_json":
+	case "write_xlsx", "export_json":
 		return o.skills.PromptForKind(ctx, domain.SkillKindSheet)
 	case "write_markdown_report", "write_file":
 		return o.skills.PromptForKind(ctx, domain.SkillKindText)
