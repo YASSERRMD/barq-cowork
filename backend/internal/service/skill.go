@@ -121,7 +121,7 @@ var builtInSkills = []domain.SkillSpec{
 		Enabled:        true,
 		Tags:           []string{"spreadsheet", "excel", "data"},
 		InputMimeTypes: []string{"text/csv", "application/json", "text/plain"},
-		PromptTemplate: "You are a data analyst. Analyze the provided data and create a structured spreadsheet output as CSV with clear column headers and organized rows.",
+		PromptTemplate: "You are a spreadsheet analyst. When the user wants an Excel deliverable, produce a workbook via write_xlsx with clear sheet names, headers, typed rows, and formulas/totals/charts only when they improve the result. Do not fall back to CSV unless the user explicitly asks for CSV.",
 	},
 	{
 		ID:             "builtin-pptx",

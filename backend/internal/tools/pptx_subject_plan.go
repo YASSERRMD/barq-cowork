@@ -92,7 +92,7 @@ func validatePPTXPresentation(planned plannedPPTXPresentation) error {
 		problems = append(problems, fmt.Sprintf("%s: %s", label, note))
 	}
 	if len(problems) > 0 {
-		return fmt.Errorf(strings.Join(problems, " | "))
+		return fmt.Errorf("%s", strings.Join(problems, " | "))
 	}
 	return nil
 }
