@@ -2,6 +2,7 @@ package generator
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -83,6 +84,49 @@ func TestNormaliseFormula(t *testing.T) {
 		if got := normaliseFormula(in); got != want {
 			t.Errorf("normaliseFormula(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestBuildWorkbook_TotalsFormulaLabelsStayLiteral(t *testing.T) {
+	wb := XlsxWorkbook{
+		Sheets: []XlsxSheet{{
+			Name:    "Budget",
+			Headers: []string{"Line", "Amount"},
+			Rows: [][]any{
+				{"Rent", 1000},
+				{"Food", 250},
+			},
+			TotalsFormulas: []string{"GRAND TOTAL", "=SUM(B2:B3)"},
+		}},
+	}
+	data, err := BuildWorkbook(wb)
+	if err != nil {
+		t.Fatalf("BuildWorkbook: %v", err)
+	}
+
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer f.Close()
+
+	got, err := f.GetCellValue("Budget", "A4")
+	if err != nil {
+		t.Fatalf("GetCellValue A4: %v", err)
+	}
+	if got != "GRAND TOTAL" {
+		t.Fatalf("A4: got %q, want GRAND TOTAL", got)
+	}
+	if formula, err := f.GetCellFormula("Budget", "A4"); err != nil || formula != "" {
+		t.Fatalf("A4 should not contain a formula, got formula=%q err=%v", formula, err)
+	}
+	if formula, err := f.GetCellFormula("Budget", "B4"); err != nil || formula != "SUM(B2:B3)" {
+		t.Fatalf("B4 formula: got %q err=%v", formula, err)
+	}
+
+	raw := readSheetXML(t, data, "xl/worksheets/sheet1.xml")
+	if strings.Contains(raw, "<f>GRAND TOTAL</f>") {
+		t.Fatal("literal totals label was written as a formula")
 	}
 }
 

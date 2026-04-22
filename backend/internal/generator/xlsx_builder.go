@@ -12,9 +12,9 @@ import (
 // thin tool wrapper) produces this struct; the builder does the rest —
 // styling, widths, freeze pane, zebra stripes, charts.
 type XlsxWorkbook struct {
-	Title  string     `json:"title,omitempty"`
-	Author string     `json:"author,omitempty"`
-	Theme  XlsxTheme  `json:"theme,omitempty"`
+	Title  string      `json:"title,omitempty"`
+	Author string      `json:"author,omitempty"`
+	Theme  XlsxTheme   `json:"theme,omitempty"`
 	Sheets []XlsxSheet `json:"sheets"`
 }
 
@@ -32,14 +32,14 @@ type XlsxWorkbook struct {
 // rendered as formulas in the totals row instead of the literal values from
 // Totals — so "=SUM(B2:B4)" in slot 1 becomes a real, recalculating total.
 type XlsxSheet struct {
-	Name            string            `json:"name"`
-	Headers         []string          `json:"headers"`
-	Rows            [][]any           `json:"rows"`
-	ColumnOverrides []ColumnKind      `json:"column_overrides,omitempty"`
-	Totals          []any             `json:"totals,omitempty"`
-	TotalsFormulas  []string          `json:"totals_formulas,omitempty"`
-	Formulas        map[string]string `json:"formulas,omitempty"`
-	Charts          []XlsxChart       `json:"charts,omitempty"` // populated in phase 3
+	Name             string            `json:"name"`
+	Headers          []string          `json:"headers"`
+	Rows             [][]any           `json:"rows"`
+	ColumnOverrides  []ColumnKind      `json:"column_overrides,omitempty"`
+	Totals           []any             `json:"totals,omitempty"`
+	TotalsFormulas   []string          `json:"totals_formulas,omitempty"`
+	Formulas         map[string]string `json:"formulas,omitempty"`
+	Charts           []XlsxChart       `json:"charts,omitempty"` // populated in phase 3
 	ConditionalRules []ConditionalRule `json:"conditional_rules,omitempty"`
 }
 
@@ -161,8 +161,12 @@ func writeSheet(f *excelize.File, m *XlsxStyleMapper, sheet string, s XlsxSheet)
 		for c := 0; c < len(s.Headers); c++ {
 			cell, _ := excelize.CoordinatesToCellName(c+1, totalsRow)
 			if c < len(s.TotalsFormulas) && s.TotalsFormulas[c] != "" {
-				if err := f.SetCellFormula(sheet, cell, normaliseFormula(s.TotalsFormulas[c])); err != nil {
-					return fmt.Errorf("totals formula %s: %w", cell, err)
+				if looksLikeFormula(s.TotalsFormulas[c]) {
+					if err := f.SetCellFormula(sheet, cell, normaliseFormula(s.TotalsFormulas[c])); err != nil {
+						return fmt.Errorf("totals formula %s: %w", cell, err)
+					}
+				} else if err := f.SetCellValue(sheet, cell, s.TotalsFormulas[c]); err != nil {
+					return err
 				}
 			} else if c < len(s.Totals) && s.Totals[c] != nil {
 				if err := f.SetCellValue(sheet, cell, coerceValue(s.Totals[c], kinds[c])); err != nil {
@@ -315,6 +319,19 @@ func stripCurrencyChrome(s string) string {
 func normaliseFormula(f string) string {
 	f = strings.TrimSpace(f)
 	return strings.TrimPrefix(f, "=")
+}
+
+func looksLikeFormula(f string) bool {
+	trimmed := strings.TrimSpace(f)
+	if trimmed == "" {
+		return false
+	}
+	if strings.HasPrefix(trimmed, "=") {
+		return strings.TrimSpace(strings.TrimPrefix(trimmed, "=")) != ""
+	}
+	// Literal labels such as "TOTAL" and "GRAND TOTAL" are common in LLM output.
+	// Only route strings through SetCellFormula when they contain formula syntax.
+	return strings.ContainsAny(trimmed, "()+-*/^&=<>!:,$")
 }
 
 // sanitizeSheetName enforces Excel's sheet-name constraints: non-empty, at
