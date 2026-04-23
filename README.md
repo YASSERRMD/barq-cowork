@@ -31,7 +31,7 @@ The application generates professional PowerPoint presentations, Word documents,
 - Full-width conversation view with real-time task progress indicators
 - Slide-out panel displaying step-by-step execution details and generated file output
 - PowerPoint generation from prompts or uploaded documents, with multiple professional theme presets
-- Pure Go PPTX engine — no Python or external dependencies required
+- Pure Go PPTX engine, no Python or external dependencies required
 - Word document (DOCX) generation for reports, summaries, and structured analysis
 - PDF document processing and generation
 - HTML-to-PPTX conversion with themed slide layouts
